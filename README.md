@@ -117,7 +117,7 @@ If the target process is a container, copy the binary into its filesystem at thi
 Back in the other terminal window, run the *fg* command. Python may segfault, but...
 
 ```
- cat /tmp/bishopfox.txt 
+# cat /tmp/bishopfox.txt 
 root:!:18704:0:99999:7:::
 daemon:*:18704:0:99999:7:::
 bin:*:18704:0:99999:7:::

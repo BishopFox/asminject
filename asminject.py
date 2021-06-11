@@ -24,6 +24,7 @@ import inspect
 import os
 import re
 import signal
+import struct
 import sys
 import tempfile
 import time
@@ -123,10 +124,10 @@ def assemble(source, library_bases, relative_offsets, replacements = {}, ansi=Tr
     with open(out_path, "rb") as assembled_code:
         result_code = assembled_code.read()
     
-    try:
-       os.remove(out_path)
-    except Exception as e:
-       log_error(f"Couldn't delete termporary binary file '{out_path}': {e}")
+    # try:
+       # os.remove(out_path)
+    # except Exception as e:
+       # log_error(f"Couldn't delete termporary binary file '{out_path}': {e}")
     return result_code
 
 def get_library_base_addresses(pid):
@@ -261,14 +262,43 @@ def asminject(base_script_path, pid, asm_path, offsets_path, architecture, stage
         stage2_replacements['[VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(rsp-STACK_BACKUP_SIZE)}"
         with open(asm_path, "r") as asm_code:
             stage2 = assemble(asm_code.read(), library_bases, relative_offsets, replacements=stage2_replacements)
-    with open(stage2_write_path, "wb") as stage2_file:
-        os.chmod(stage2_write_path, 0o666)
-        stage2_file.write(stage2)
+    
+    if stage_mode == "mem":
+        done_waiting = False
+        with open(f"/proc/{pid}/mem", "wb+") as mem:
+            while not done_waiting:
+                # check to see if stage 1 has given the OK to proceed
+                mem.seek(rip)
+                rip_value = struct.unpack('Q', mem.read(8))[0]
+                mem.seek(rip) + 8
+                mmap_block = struct.unpack('Q', mem.read(8))[0]
+                log(f"RIP is 0x{rip_value:016x}")
+                log(f"MMAP'd block is is 0x{mmap_block:016x}")
+                
+                if rip_value == 0:
+                    # write stage 2
+                    mem.seek(mmap_block)
+                    mem.write(stage2)
+                    
+                    # Give stage 1 the OK to proceed
+                    mem.seek(rip)
+                    ok_val = struct.pack('I', 1)
+                    mem.write(ok_val)
+                    done_waiting = True
+                
+                else:
+                    log("Waiting for stage 1 to allocate memory")
+                    time.sleep(1.0)
 
-    if pause:
+    else:
+        with open(stage2_write_path, "wb") as stage2_file:
+            os.chmod(stage2_write_path, 0o666)
+            stage2_file.write(stage2)
         log(f"Wrote stage 2 to {repr(stage2_write_path)}", ansi=ansi)
-        log(f"If the target process is operating with a different filesystem root, copy the stage 2 binary to {repr(stage2_read_path)} in the target container before proceeding", ansi=ansi)
-        input("Press Enter to continue...")
+
+        if pause:
+            log(f"If the target process is operating with a different filesystem root, copy the stage 2 binary to {repr(stage2_read_path)} in the target container before proceeding", ansi=ansi)
+            input("Press Enter to continue...")
 
     if stopmethod == "sigstop":
         log("Continuing process...", ansi=ansi)
@@ -317,10 +347,14 @@ if __name__ == "__main__":
         help="Path to the list of relative offsets referenced in the assembly code. Generate on a per-binary basis using the following command, e.g. for libc-2.31: # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d\" \" -f3,9")
 
     parser.add_argument("--stop-method",
-        choices=["sigstop", "cgroup_freeze", "none"],
+        choices=["sigstop", "cgroup_freeze", "slow", "none"],
         help="How to stop the target process prior to shellcode injection. \
-              SIGSTOP (default) can have side-effects. cgroup freeze requires root.\
-              'none' is likely to cause race conditions.")
+              'sigstop' (default) uses the built-in Linux process suspension mechanism, and can have side-effects. \
+              'cgroup_freeze' requires root, and only operates in environments with cgroups.\
+              'slow' attempts to avoid forensic detection and side-effects of suspending a process by \
+              temporarily setting the priority of the target process to the lowest possible value, \
+              and the priority of asminject.py to the highest possible value. \
+              'none' leaves the target process running as-is and is likely to cause race conditions.")
     
     parser.add_argument("--arch",
         choices=["x86-32", "x86-64", "arm32", "arm64"], default="x86-64",

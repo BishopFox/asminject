@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.1
-Ben Lincoln, Bishop Fox, 2021-06-07
+v0.2
+Ben Lincoln, Bishop Fox, 2021-08-30
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -22,6 +22,7 @@ dlinject source: https://github.com/DavidBuchanan314/dlinject
 import argparse
 import inspect
 import os
+import psutil
 import re
 import signal
 import struct
@@ -32,6 +33,10 @@ import subprocess
 
 STACK_BACKUP_SIZE = 8 * 16
 STAGE2_SIZE = 0x8000
+
+# For "slow" mode
+HIGH_PRIORITY_NICE = -20
+LOW_PRIORITY_NICE = 20
 
 def ansi_color(name):
     color_codes = {
@@ -53,6 +58,8 @@ def log(msg, color="blue", symbol="*", ansi=True):
 def log_success(msg, ansi=True):
     log(msg, "green", "+", ansi)
 
+def log_warning(msg, ansi=True):
+    log(msg, "orange", "*", ansi)
 
 def log_error(msg, ansi=True):
     log(msg, "red", "!", ansi)
@@ -124,20 +131,29 @@ def assemble(source, library_bases, relative_offsets, replacements = {}, ansi=Tr
     with open(out_path, "rb") as assembled_code:
         result_code = assembled_code.read()
     
-    # try:
-       # os.remove(out_path)
-    # except Exception as e:
-       # log_error(f"Couldn't delete termporary binary file '{out_path}': {e}")
+    try:
+        os.remove(out_path)
+    except Exception as e:
+        log_error(f"Couldn't delete termporary binary file '{out_path}': {e}")
     return result_code
 
-def get_library_base_addresses(pid):
+def get_library_base_addresses(pid, pic_binaries, ansi=True):
     result = {}
     with open(f"/proc/{pid}/maps") as maps_file:
         for line in maps_file.readlines():
             ld_path = line.split()[-1]
             ld_base = int(line.split("-")[0], 16)
             if ld_path not in result.keys():
-                result[ld_path] = ld_base
+                is_pic_binary = False
+                for pb_pattern in pic_binaries:
+                    if re.search(pb_pattern, ld_path):
+                        is_pic_binary = True
+                        break
+                if is_pic_binary:
+                    result[ld_path] = 0
+                    log(f"Handling '{ld_path}' as non-PIC binary", ansi=ansi)
+                else:
+                    result[ld_path] = ld_base
     return result
 
 def get_temp_file_name():
@@ -145,7 +161,13 @@ def get_temp_file_name():
     os.close(tf)
     return result
 
-def asminject(base_script_path, pid, asm_path, offsets_path, architecture, stage_mode, stopmethod="sigstop", stage_2_write_location="", stage_2_read_location="", ansi=True, pause=False, precompiled=False, custom_replacements = {}):
+def asminject(base_script_path, pid, asm_path, relative_offsets, pic_binaries, architecture, stage_mode, stopmethod="sigstop", stage_2_write_location="", stage_2_read_location="", ansi=True, pause=False, precompiled=False, custom_replacements = {}):
+    asminject_pid = None
+    asminject_priority = None
+    target_priority = None
+    asminject_affinity = None
+    target_affinity = None
+    target_process = None
     if stopmethod == "sigstop":
         log("Sending SIGSTOP", ansi=ansi)
         os.kill(pid, signal.SIGSTOP)
@@ -171,6 +193,42 @@ def asminject(base_script_path, pid, asm_path, offsets_path, architecture, stage
             log("Waiting for process to freeze...", ansi=ansi)
             time.sleep(0.1)
         log("Process is frozen", ansi=ansi)
+    elif stopmethod == "slow":
+        log("Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...", ansi=ansi)
+        try:
+            target_process = psutil.Process(pid)
+            asminject_pid = os.getpid()
+            asminject_process = psutil.Process(asminject_pid)
+            asminject_priority = asminject_process.nice()
+            target_priority = target_process.nice()
+            asminject_affinity = asminject_process.cpu_affinity()
+            target_affinity = target_process.cpu_affinity()
+            
+            log(f"Current process priority for asminject.py (PID: {asminject_pid}) is {asminject_priority}", ansi=ansi)
+            log(f"Current CPU affinity for asminject.py (PID: {asminject_pid}) is {asminject_affinity}", ansi=ansi)
+            log(f"Current process priority for target process (PID: {pid}) is {target_priority}", ansi=ansi)
+            log(f"Current CPU affinity for target process (PID: {pid}) is {target_affinity}", ansi=ansi)
+        except Exception as e:
+            log_error(f"Couldn't get process information for slowing: {e}")
+            sys.exit(1)  
+        try:
+            target_process = psutil.Process(pid)
+            asminject_pid = os.getpid()
+            asminject_process = psutil.Process(asminject_pid)
+            asminject_priority = target_process.nice()
+            target_priority = target_process.nice()
+            asminject_affinity = asminject_process.cpu_affinity()
+            target_affinity = target_process.cpu_affinity()
+            
+            log(f"Setting process priority for asminject.py (PID: {asminject_pid}) to {HIGH_PRIORITY_NICE}", ansi=ansi)
+            asminject_process.nice(HIGH_PRIORITY_NICE)
+            log(f"Setting process priority for target process (PID: {pid}) to {LOW_PRIORITY_NICE}", ansi=ansi)
+            target_process.nice(LOW_PRIORITY_NICE)
+            log(f"Setting CPU affinity for target process (PID: {pid}) to {asminject_affinity}", ansi=ansi)
+            target_process.cpu_affinity(asminject_affinity)
+        except Exception as e:
+            log_error(f"Couldn't set process information for 'slow' mode: {e}")
+            sys.exit(1)
     else:
         log.warn("We're not going to stop the process first!", ansi=ansi)
 
@@ -182,7 +240,7 @@ def asminject(base_script_path, pid, asm_path, offsets_path, architecture, stage
     log(f"RIP: {hex(rip)}", ansi=ansi)
     log(f"RSP: {hex(rsp)}", ansi=ansi)
 
-    library_bases = get_library_base_addresses(pid)
+    library_bases = get_library_base_addresses(pid, pic_binaries, ansi=ansi)
     library_names = []
     for lname in library_bases.keys():
         library_names.append(lname)
@@ -190,15 +248,6 @@ def asminject(base_script_path, pid, asm_path, offsets_path, architecture, stage
     for lname in library_names:
         log(f"{lname}: 0x{library_bases[lname]:016x}", ansi=ansi)
     
-    # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d" " -f3,9 
-    relative_offsets = {}
-    if offsets_path != "":
-        with open(offsets_path) as offsets_file:
-            for line in offsets_file.readlines():
-                line_array = line.strip().split(" ")
-                relative_offsets[line_array[1].strip()] = int(line_array[0], 16)
-
-    #stage2_path = f"/tmp/stage2_{os.urandom(8).hex()}.bin"
     stage2_write_path = ""
     if stage_2_write_location == "":
         stage2_write_path = get_temp_file_name()
@@ -268,12 +317,13 @@ def asminject(base_script_path, pid, asm_path, offsets_path, architecture, stage
         with open(f"/proc/{pid}/mem", "wb+") as mem:
             while not done_waiting:
                 # check to see if stage 1 has given the OK to proceed
+                log(f"RIP is 0x{rip:016x}")
                 mem.seek(rip)
                 rip_value = struct.unpack('Q', mem.read(8))[0]
                 mem.seek(rip) + 8
                 mmap_block = struct.unpack('Q', mem.read(8))[0]
-                log(f"RIP is 0x{rip_value:016x}")
-                log(f"MMAP'd block is is 0x{mmap_block:016x}")
+                log(f"Value at RIP is 0x{rip_value:016x}")
+                log(f"MMAP'd block ([RIP + 8]) is is 0x{mmap_block:016x}")
                 
                 if rip_value == 0:
                     # write stage 2
@@ -314,7 +364,19 @@ def asminject(base_script_path, pid, asm_path, offsets_path, architecture, stage
 
         # cleanup
         os.rmdir(freeze_dir)
-
+    elif stopmethod == "slow":
+        log("Returning to normal time...", ansi=ansi)
+        try:
+            log(f"Setting process priority for asminject.py (PID: {asminject_pid}) to {asminject_priority}", ansi=ansi)
+            asminject_process.nice(asminject_priority)
+            log(f"Setting process priority for target process (PID: {pid}) to {target_priority}", ansi=ansi)
+            target_process.nice(target_priority)
+            log(f"Setting CPU affinity for target process (PID: {pid}) to {target_affinity}", ansi=ansi)
+            target_process.cpu_affinity(target_affinity)
+        except Exception as e:
+            log_error(f"Couldn't set process information for 'slow' mode: {e}")
+            sys.exit(1)
+            
     log_success("Done!", ansi=ansi)
 
 
@@ -343,8 +405,11 @@ if __name__ == "__main__":
     parser.add_argument("asm_path", metavar="payload_path", type=str,
         help="Path to the assembly code that should be injected")
 
-    parser.add_argument("--relative-offsets", type=str, default="", required=False,
-        help="Path to the list of relative offsets referenced in the assembly code. Generate on a per-binary basis using the following command, e.g. for libc-2.31: # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d\" \" -f3,9")
+    parser.add_argument("--relative-offsets", action='append', nargs='*', required=False,
+        help="Path to the list of relative offsets referenced in the assembly code. May be specified multiple times to reference several files. Generate on a per-binary basis using the following command, e.g. for libc-2.31: # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d\" \" -f3,9")
+    
+    parser.add_argument("--pic-binary", action='append', nargs='*', required=False,
+        help="Regular expression identifying one or more executables/libraries that do *not* use position-independent code, such as Python 3.x")
 
     parser.add_argument("--stop-method",
         choices=["sigstop", "cgroup_freeze", "slow", "none"],
@@ -399,13 +464,41 @@ if __name__ == "__main__":
 
     asm_abs_path = os.path.abspath(args.asm_path)
     
-    reloff_abs_path = ""
-    if args.relative_offsets == "":
+    # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d" " -f3,9 > offsets-libc-2.31.so.txt
+    # important:
+    # if you are writing code against an executable or library that is NOT position independent, those offsets need to be specified using the --absolute-offsets option instead
+    relative_offsets = {}
+    if args.relative_offsets:
+        if len(args.relative_offsets) > 0:
+            for elem in args.relative_offsets:
+                for offsets_path in elem:
+                    if offsets_path.strip() != "":
+                        reloff_abs_path = os.path.abspath(offsets_path)
+                        with open(reloff_abs_path) as offsets_file:
+                            for line in offsets_file.readlines():
+                                line_array = line.strip().split(" ")
+                                offset_name = line_array[1].strip()
+                                if offset_name in relative_offsets.keys():
+                                    log_warning(f"The offset '{offset_name}' is redefined in '{reloff_abs_path}'", ansi=args.plaintext)
+                                offset_value = int(line_array[0], 16)
+                                if offset_value > 0:
+                                    relative_offsets[offset_name] = offset_value
+                                #else:
+                                #    log_warning(f"Ignoring offset '{offset_name}' in '{reloff_abs_path}' because it has a value of zero", ansi=args.plaintext)
+    
+    if len(relative_offsets) < 1:
         if not args.precompiled:
             log_error("A list of relative offsets was not specified. If the injection fails, check your payload to make sure you're including the offsets of any exported functions it calls.", ansi=args.plaintext)
-    else:
-        reloff_abs_path = os.path.abspath(args.relative_offsets)
+    
+    pic_binaries = []
+    if args.pic_binary:
+        if len(args.pic_binary) > 0:
+            for elem in args.pic_binary:
+                for pb in elem:
+                    if pb.strip() != "":
+                        if pb not in pic_binaries:
+                            pic_binaries.append(pb)
     
     base_script_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 
-    asminject(base_script_path, args.pid, asm_abs_path, reloff_abs_path, args.arch, args.stage_mode, args.stop_method or "sigstop", stage_2_write_location=args.stage2_write_path, ansi=args.plaintext, pause=args.pause, precompiled=args.precompiled, custom_replacements=custom_replacements)
+    asminject(base_script_path, args.pid, asm_abs_path, relative_offsets, pic_binaries, args.arch, args.stage_mode, args.stop_method or "sigstop", stage_2_write_location=args.stage2_write_path, ansi=args.plaintext, pause=args.pause, precompiled=args.precompiled, custom_replacements=custom_replacements)

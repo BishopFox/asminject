@@ -286,7 +286,7 @@ dlinject source: https://github.com/DavidBuchanan314/dlinject
 
 ```
 
-## Example 3: Specifying non-PIC code
+## Example 4: Specifying non-PIC code
 
 Some binaries are compiled without the position-independent code build option (including, strangely enough, Python 3.x, even though 2.x had it enabled). This means that the offsets in the corresponding ELF are absolute instead of relative to the base address. If *asminject.py* detects a low base address (typically indicative of this condition), it will include a warning:
 
@@ -354,7 +354,7 @@ dlinject source: https://github.com/DavidBuchanan314/dlinject
 
 ```
 
-## Example 4: Using memory-only staging
+## Example 5: Using memory-only staging
 
 asminject.py currently defaults to a file-based second stage (based on the one in dlinject.py), but supports memory-only staging as well:
 

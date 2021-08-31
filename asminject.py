@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.3
-Ben Lincoln, Bishop Fox, 2021-08-30
+v0.4
+Ben Lincoln, Bishop Fox, 2021-08-31
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -330,7 +330,7 @@ def asminject(base_script_path, pid, asm_path, relative_offsets, non_pic_binarie
         mem.seek(rip)
         mem.write(stage1)
 
-    log(f"Wrote first stage shellcode at {rip:016x} in target  [rpcess ,e,pru", ansi=ansi)
+    log(f"Wrote first stage shellcode at {rip:016x} in target process {pid}", ansi=ansi)
 
     if not os.path.isfile(asm_path):
         log_error(f"Could not find the stage 2 file '{asm_path}'", ansi=ansi)

@@ -19,21 +19,11 @@ _start:
 	push r14
 	push r15
 
-	mov rax,1 # write to file
-	mov rdi,1 # stdout
-	mov rdx,1 # number of bytes
-	lea rsi, dmsg[rip] #from buffer
-	syscall
-	
-	# // BEGIN: call LIBC printf
-	# push rbx
-	# lea rsi, [rip]
-	# lea rdi, format_hex[rip]
-	# xor rax, rax
-	# mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
-	# call rbx
-	# pop rbx
-	# // END: call LIBC printf
+	# mov rax,1 # write to file
+	# mov rdi,1 # stdout
+	# mov rdx,1 # number of bytes
+	# lea rsi, dmsg[rip] #from buffer
+	# syscall
 	
 	// allocate a new block of memory using mmap
 	mov rax, 9              # SYS_MMAP
@@ -59,15 +49,6 @@ _start:
 	#mov rdx,1 # number of bytes
 	#lea rsi, dmsg[rip] + 1 #from buffer
 	#syscall
-	
-	# // BEGIN: call LIBC printf
-	# lea rsi, [rip]
-	# lea rdi, format_hex[rip]
-	# xor rax, rax
-	# mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
-	# call rbx
-	# pop rbx
-	# // END: call LIBC printf
 	
 	//mov varBackupData1[rip], [rip]
 	//mov varBackupData2[rip], [rip + 8]
@@ -122,7 +103,10 @@ wait_for_script:
 	#mov rdi, timespec_data[rip]
 	#mov rdi, rsp
 	#mov rdi, r13
-	lea rdi, varBackupData1[rip]
+	
+	#lea rdi, varBackupData1[rip]
+	mov rdi, r13
+
 	lea rsi, [rbp]
 	xor rsi, rsi
 	syscall
@@ -155,11 +139,11 @@ launch_stage2:
 	pop rcx
 	pop rbx
 	
-	mov rax,1 # write to file
-	mov rdi,1 # stdout
-	mov rdx,1 # number of bytes
-	lea rsi, dmsg[rip] + 4 #from buffer
-	syscall
+	# mov rax,1 # write to file
+	# mov rdi,1 # stdout
+	# mov rdx,1 # number of bytes
+	# lea rsi, dmsg[rip] + 4 #from buffer
+	# syscall
 	
 	// restored backed-up data
 	//mov [rip], varBackupData1[rip]
@@ -167,11 +151,11 @@ launch_stage2:
 	pop rax
 	pop rax
 	
-	mov rax,1 # write to file
-	mov rdi,1 # stdout
-	mov rdx,1 # number of bytes
-	lea rsi, dmsg[rip] + 5 #from buffer
-	syscall
+	# mov rax,1 # write to file
+	# mov rdi,1 # stdout
+	# mov rdx,1 # number of bytes
+	# lea rsi, dmsg[rip] + 5 #from buffer
+	# syscall
 	
 	// jump to stage2
 	jmp r15

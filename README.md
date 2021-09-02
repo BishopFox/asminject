@@ -7,7 +7,7 @@ This is a very early, alpha-quality version of this utility.
 * [Setup](#setup)
 * [Examples](#examples)
 * [Features](#features)
-* [Version History](#versionhistory)
+* [Version History](#version-history)
 
 ## Origins
 

@@ -1,11 +1,17 @@
-# asminject
-asminject is a heavily-modified fork of [David Buchanan's dlinject project](https://github.com/DavidBuchanan314/dlinject). Injects arbitrary assembly (or precompiled binary) payloads directly into Linux processes without the use of ptrace by accessing /proc/&lt;pid>/mem. Useful for certain post-exploitation scenarios, recovering content from process memory when ptrace is not available, and bypassing some security controls. Can inject into containerized processes from outside of the container, as long as you have root access on the host.
+# asminject.py
+*asminject.py* is a heavily-modified fork of [David Buchanan's dlinject project](https://github.com/DavidBuchanan314/dlinject). Injects arbitrary assembly (or precompiled binary) payloads directly into Linux processes without the use of ptrace by accessing /proc/&lt;pid>/mem. Useful for certain post-exploitation scenarios, recovering content from process memory when ptrace is not available, and bypassing some security controls. Can inject into containerized processes from outside of the container, as long as you have root access on the host.
 
 This is a very early, alpha-quality version of this utility.
 
+* [Origins](#origins)
+* [Setup](#setup)
+* [Examples](#examples)
+* [Features](#features)
+* [Version History](#versionhistory)
+
 ## Origins
 
-When the first version of *asminject* was written, *dlinject* was broken on modern Linux distributions because GNU had hidden the library-loading function in ld-x.y.so hidden. Regardless, the ability to inject arbitrary machine code is arguably stealthier.
+When the first version of *asminject.py* was written, *dlinject.py* was broken on modern Linux distributions because GNU had hidden the library-loading function in *ld-x.y.so* hidden. Regardless, the ability to inject arbitrary machine code is arguably stealthier.
 
 ## Setup
 
@@ -45,9 +51,9 @@ readelf -a --wide /usr/bin/python2.7 | grep DEFAULT | grep FUNC | sed 's/  / /g'
 
 If you are injecting code into a containerized process from outside the container, you'll need to use the copy of each binary *from inside the container*, or you'll get the wrong data.
 
-# Examples
+## Examples
 
-## Create a world-readable copy of a file using only Linux syscalls
+### Create a world-readable copy of a file using only Linux syscalls
 
 This code requires no relative offset information, because it's all done using Linux syscalls. It may also help avoid some methods of forensic detection versus using the *cp*, *cat*, or other commands.
 
@@ -98,7 +104,7 @@ sync:*:18704:0:99999:7:::
 ...omitted for brevity...
 ```
 
-## Execute arbitrary Python code inside an existing Python process
+### Execute arbitrary Python code inside an existing Python process
 
 Launch a harmless Python process that simulates one with access to super-secret, sensitive data. Note the use of *python2* specifically. For *python3* target  processes, you'll most likely need to use the *--non-pic-binary* option discussed later in this document.
 
@@ -146,7 +152,7 @@ bin:*:18704:0:99999:7:::
 sys:*:18704:0:99999:7:::
 ```
 
-## Execute arbitrary Ruby code inside an existing Ruby process
+### Execute arbitrary Ruby code inside an existing Ruby process
 
 Ruby has a similar "compile and execute this sequence of Ruby source code" method. The current code for it in *asminject.py* has a few limitations, but it does work:
 
@@ -194,7 +200,7 @@ sync:x:4:65534:sync:/bin:/bin/sync
 ```
 
 
-## Inject Meterpreter into an existing process
+### Inject Meterpreter into an existing process
 
 Launch a harmless process that simulates one with access to super-secret, sensitive data:
 
@@ -269,7 +275,7 @@ Meterpreter  : x64/linux
 
 ```
 
-## Create a copy of a file using buffered read/write libc calls
+### Create a copy of a file using buffered read/write libc calls
 
 If you don't mind making library calls, writing custom code is much easier. This example uses code that (like the first example) creates a copy of a file, but by using libc's fopen(), fread(), fwrite(), and fclose() instead of syscalls, can easily use a buffered approach that's more efficient.
 
@@ -303,9 +309,9 @@ sync:x:4:65534:sync:/bin:/bin/sync
 ```
 
 
-# Features
+## Features
 
-## Using "slow" mode to help avoid triggering alerts related to process suspension
+### Using "slow" mode to help avoid triggering alerts related to process suspension
 
 *asminject.py* supports four methods for pre/post-injection handling of the target process. Three of those methods are borrowed from the original [dlinject.py](https://github.com/DavidBuchanan314/dlinject):
 
@@ -340,7 +346,7 @@ sync:x:4:65534:sync:/bin:/bin/sync
 
 ```
 
-## Specifying non-PIC code
+### Specifying non-PIC code
 
 Some binaries are compiled without the position-independent code build option (including, strangely enough, Python 3.x, even though 2.x had it enabled). This means that the offsets in the corresponding ELF are absolute instead of relative to the base address. If *asminject.py* detects a low base address (typically indicative of this condition), it will include a warning:
 
@@ -361,7 +367,7 @@ As the message indicates, this type of binary can be manually flagged using one 
 
 ```
 
-## Using memory-only staging
+### Using memory-only staging
 
 *asminject.py* currently defaults to a file-based second stage (based on the one in *dlinject.py*), but supports memory-only staging as well:
 
@@ -411,34 +417,41 @@ As the message indicates, this type of binary can be manually flagged using one 
 
 ```
 
-### Version history
+### But what about Yama's ptrace_scope restrictions?
 
-#### 0.6 (2021-09-01)
+If you are an authorized administrator of a Linux system where someone has accidentally set */proc/sys/kernel/yama/ptrace_scope* to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
-- Added Ruby injection code
-- Improved reliability
-- A few other bug fixes
+## Version history
 
-#### 0.5 (2021-08-31)
+### 0.6 (2021-09-01)
 
-- Added copy-file-using-libc code
+* Still an internal development build
+* Added Ruby injection code
+* Improved reliability
+* A few other bug fixes
 
-#### 0.4 (2021-08-31)
+### 0.5 (2021-08-31)
 
-- Added copy-file-using-syscalls code
+* Still an internal development build
+* Added copy-file-using-libc code
 
-#### 0.3 (2021-08-30)
+### 0.4 (2021-08-31)
 
-- Still an internal development build
-- Implemented "mem" staging method
+* Still an internal development build
+* Added copy-file-using-syscalls code
 
-#### 0.2 (2021-08-30)
+### 0.3 (2021-08-30)
 
-- Still an internal development build
-- Implemented "slow" stop method
-- Implemented support for non-PIC binaries, like Python 3.x
-- Various bug fixes
+* Still an internal development build
+* Implemented "mem" staging method
 
-#### 0.1 (2021-06-07)
+### 0.2 (2021-08-30)
 
-Internal development build
+* Still an internal development build
+* Implemented "slow" stop method
+* Implemented support for non-PIC binaries, like Python 3.x
+* Various bug fixes
+
+### 0.1 (2021-06-07)
+
+* Internal development build

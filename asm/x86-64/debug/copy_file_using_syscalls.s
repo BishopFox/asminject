@@ -5,7 +5,8 @@ _start:
 // Based on the stage 2 code included with dlinject.py
 // and in part on https://stackoverflow.com/questions/37940707/read-and-write-to-file-assembly
 // relative offsets for the following libraries required:
-//		libc-2.31.so
+//		libc
+//			Tested specifically with libc-[0-9\.]+.so
 cld
 
 	fxsave moar_regs[rip]
@@ -58,7 +59,7 @@ cld
 	lea rsi, sourcefile[rip]
 	lea rdi, format_string[rip]
 	xor rax, rax
-	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	pop r14
@@ -80,7 +81,7 @@ cld
 	lea rsi, destfile[rip]
 	lea rdi, format_string[rip]
 	xor rax, rax
-	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	pop r14
@@ -136,7 +137,7 @@ doneCopying:
 	lea rsi, sourcefile[rip]
 	lea rdi, format_string[rip]
 	xor rax, rax
-	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	pop r14
@@ -154,7 +155,7 @@ doneCopying:
 	lea rsi, destfile[rip]
 	lea rdi, format_string[rip]
 	xor rax, rax
-	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	pop r14

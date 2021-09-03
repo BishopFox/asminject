@@ -5,8 +5,9 @@ _start:
 // Based on the stage 2 code included with dlinject.py
 // and in part on https://github.com/lmacken/pyrasite/blob/d0c90ab38a8986527c9c1f24e222323494ab17a2/pyrasite/injector.py
 // relative offsets for the following libraries required:
-//		/usr/bin/pythonN.N (same version as target process)
-//		libc-2.31.so
+//		libruby (same version as target process)
+//		libc
+//			Tested specifically with libc-[0-9\.]+.so
 cld
 
 	fxsave moar_regs[rip]
@@ -57,8 +58,8 @@ cld
 	lea rsi, [rip]
 	lea rdi, format_hex[rip]
 	xor rax, rax
-	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
-	//movabsq rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//movabsq rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	// END: call LIBC printf
@@ -68,7 +69,7 @@ cld
 	lea rsi, [old_rip[rip]]
 	lea rdi, format_hex[rip]
 	xor rax, rax
-	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	// END: call LIBC printf
@@ -97,14 +98,14 @@ cld
 	// BEGIN: call LIBC printf
 	push rbx
 	push rcx
-	//mov rcx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//mov rcx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	//mov rsi, [rcx]
-	movabsq rsi, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
-	//mov rsi, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	movabsq rsi, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//mov rsi, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	lea rdi, format_hex[rip]
 	xor rax, rax
-	mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
-	//movabsq rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//movabsq rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rcx
 	pop rbx

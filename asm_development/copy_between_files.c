@@ -4,6 +4,8 @@
  Author      : Marko Martinovic
  Description : Copy input file into output file
  ============================================================================
+ 
+	 gcc -o copy_between_files-arm32-eabi -O0 -fPIC -pie copy_between_files.c
  */
  
 #include <stdio.h>

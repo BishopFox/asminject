@@ -5,7 +5,7 @@ _start:
 // Based on the stage 2 code included with dlinject.py
 // and in part on https://stackoverflow.com/questions/37940707/read-and-write-to-file-assembly
 // relative offsets for the following libraries required:
-//		libc-2.x.so
+//		libc
 //			tested specifically with libc-2.31.so
 cld
 
@@ -57,7 +57,7 @@ cld
 	lea rax, sourcefile[rip]
 	lea rdi, sourcefile[rip]
     lea rsi, read_only_string[rip]
-    mov rbx, [BASEADDRESS:.+/libc-2.[0-9]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
     mov r13, rax          # store file descriptor in r13 rather than a variable to avoid attempts to write to executable memory
 	pop rbx
@@ -69,7 +69,7 @@ cld
 	lea rax, destfile[rip]
 	lea rdi, destfile[rip]
     lea rsi, write_only_string[rip]
-    mov rbx, [BASEADDRESS:.+/libc-2.[0-9]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
     mov r14, rax          # store file descriptor in r14 rather than a variable to avoid attempts to write to executable memory
 	pop rbx
@@ -101,7 +101,7 @@ copyLoop:
 	mov esi, 1		# element size
 	mov rax, r15	# buffer
 	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-2.[0-9]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fread@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fread@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
     mov r12, rax    # result
 	pop rbx
@@ -124,7 +124,7 @@ copyLoop:
 	mov esi, 1		# element size
 	mov rax, r15	# buffer
 	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-2.[0-9]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fwrite@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fwrite@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
     mov r12, rax    # result
 	pop rbx
@@ -154,7 +154,7 @@ doneCopying:
 	push rbx
 	mov rax, r13	# file descriptor
 	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-2.[0-9]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	pop r14
@@ -164,7 +164,7 @@ doneCopying:
 	push rbx
 	mov rax, r14	# file descriptor
 	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-2.[0-9]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	// END: call LIBC fclose

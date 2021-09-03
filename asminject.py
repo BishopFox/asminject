@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.6
-Ben Lincoln, Bishop Fox, 2021-09-01
+v0.7
+Ben Lincoln, Bishop Fox, 2021-09-02
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -25,6 +25,7 @@ import os
 import psutil
 import re
 import signal
+import stat
 import struct
 import sys
 import tempfile
@@ -71,7 +72,7 @@ def log_error(msg, ansi=True):
     #raise Exception(msg)
 
 
-def assemble(source, library_bases, relative_offsets, replacements = {}, ansi=True):
+def assemble(source, arch, library_bases, relative_offsets, replacements = {}, ansi=True, delete_temp_files=True):
     formatted_source = source
     lname_placeholders = []
     lname_placeholders_matches = re.finditer(r'(\[BASEADDRESS:)(.*?)(:BASEADDRESS\])', formatted_source)
@@ -88,7 +89,7 @@ def assemble(source, library_bases, relative_offsets, replacements = {}, ansi=Tr
                 found_library_match = True
         if not found_library_match:
             log_error(f"Could not find a match for the regular expression '{lname_regex}' in the list of libraries loaded by the target process. Make sure you've targeted the correct process, and that it is compatible with the selected payload.")
-            sys.exit(1)
+            return None
     for fname in relative_offsets.keys():
         replacements[f"[RELATIVEOFFSET:{fname}:RELATIVEOFFSET]"] = f"0x{relative_offsets[fname]:016x}"
 
@@ -114,32 +115,88 @@ def assemble(source, library_bases, relative_offsets, replacements = {}, ansi=Tr
         log_error(f"The following placeholders in the assembly source code code not be found: {missing_values}")
         return None
 
-    (tf, out_path) = tempfile.mkstemp(suffix=".o", dir=None, text=False)
-    os.close(tf)
-    log(f"Writing assembled binary to {out_path}", ansi=ansi)
-    #out_path = f"/tmp/assembled_{os.urandom(8).hex()}.bin"
-    #cmd = "gcc -x assembler - -o {0} -nostdlib -Wl,--oformat=binary -m64 -fPIC".format()
-    argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-Wl,--oformat=binary", "-m64", "-fPIC"]
-    #prefix = b".intel_syntax noprefix\n.globl _start\n_start:\n"
+    result = None
 
-    program = formatted_source.encode()
-    pipe = subprocess.PIPE
-
-    result = subprocess.run(argv, stdout=pipe, stderr=pipe, input=program)
-    #log(f"Assembler command: {argv}", ansi=ansi)
-    
-    if result.returncode != 0:
-        emsg = result.stderr.decode().strip()
-        log_error("Assembler command failed:\n\t" + emsg.replace("\n", "\n\t"), ansi=ansi)
-
-    result_code = None
-    with open(out_path, "rb") as assembled_code:
-        result_code = assembled_code.read()
-    
     try:
-        os.remove(out_path)
+        (tf, out_path) = tempfile.mkstemp(suffix=".o", dir=None, text=False)
+        os.close(tf)
+        # output file is chmodded 0777 so that the target process' user account can delete it if necessary as well as reading it
+        try:
+            os.chmod(out_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+        except Exception as e:
+            log_warning(f"Couldn't set permissions on '{out_path}': {e}")
+        log(f"Writing assembled binary to {out_path}", ansi=ansi)
+        #out_path = f"/tmp/assembled_{os.urandom(8).hex()}.bin"
+        #cmd = "gcc -x assembler - -o {0} -nostdlib -Wl,--oformat=binary -m64 -fPIC".format()
+        argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-Wl,--oformat=binary", "-m64", "-fPIC"]
+        # ARM gcc doesn't support the raw binary output format, and it's necessary to pass -Wl,--build-id=none so 
+        # that the linker doesn't include metadata that objcopy will misinterpret later
+        # same for the -s option: including the debugging metadata causes objcopy to output a file with a huge
+        # amount of empty space in it
+        if arch == "arm32":
+            argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-fPIC", "-Wl,--build-id=none", "-s"]
+            #argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-fPIC", "-pie", "-Wl,--build-id=none", "-s"]
+
+        program = formatted_source.encode()
+        pipe = subprocess.PIPE
+
+        #log(f"Assembler command: {argv}", ansi=ansi)
+        result = subprocess.run(argv, stdout=pipe, stderr=pipe, input=program)
+        
+        if result.returncode != 0:
+            emsg = result.stderr.decode().strip()
+            log_error("Assembler command failed:\n\t" + emsg.replace("\n", "\n\t"), ansi=ansi)
+            return None
+        
+        # ld for ARM won't emit raw binaries like it will for x86-32
+        if arch == "arm32":
+            try:
+                (tf2, obj_out_path) = tempfile.mkstemp(suffix=".o", dir=None, text=False)
+                os.close(tf2)
+                try:
+                    os.chmod(obj_out_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                except Exception as e:
+                    log_warning(f"Couldn't set permissions on '{obj_out_path}': {e}")
+                log(f"Converting executable '{out_path}' to raw binary file {obj_out_path}", ansi=ansi)
+                argv = ["objcopy", "-O", "binary", out_path, obj_out_path]
+                #log(f"objdump command: {argv}", ansi=ansi)
+                result = subprocess.run(argv, stdout=pipe, stderr=pipe)
+                
+                if result.returncode != 0:
+                    emsg = result.stderr.decode().strip()
+                    log_error("objdump command failed:\n\t" + emsg.replace("\n", "\n\t"), ansi=ansi)
+                    return None
+                
+                if delete_temp_files:
+                    try:
+                        os.remove(out_path)
+                    except Exception as e:
+                        log_error(f"Couldn't delete termporary binary file '{out_path}': {e}")
+                
+                out_path = obj_out_path
+            except Exception as e:
+                log_error(f"Couldn't convert assembler output to raw binary using objdump: {e}")
+                return None
+        
     except Exception as e:
-        log_error(f"Couldn't delete termporary binary file '{out_path}': {e}")
+        log_error(f"Couldn't assemble code using gcc: {e}")
+        return None
+        
+    result_code = None
+    try:
+        if os.path.isfile(out_path):
+            with open(out_path, "rb") as assembled_code:
+                result_code = assembled_code.read()
+    except Exception as e:
+        log_error(f"Couldn't read assembled binary '{out_path}': {e}")
+        return None
+
+    if delete_temp_files:
+        try:
+            os.remove(out_path)
+        except Exception as e:
+            log_error(f"Couldn't delete termporary binary file '{out_path}': {e}")
+    
     return result_code
 
 def get_library_base_addresses(pid, non_pic_binaries, ansi=True):
@@ -189,7 +246,7 @@ def get_syscall_values(pid):
         log_error(f"Couldn't retrieve current syscall values: {e}")
     return result
 
-def asminject(base_script_path, pid, asm_path, relative_offsets, non_pic_binaries, architecture, stage_mode, stopmethod="sigstop", stage_2_write_location="", stage_2_read_location="", ansi=True, pause=False, precompiled=False, custom_replacements = {}):
+def asminject(base_script_path, pid, asm_path, relative_offsets, non_pic_binaries, architecture, stage_mode, stopmethod="sigstop", stage_2_write_location="", stage_2_read_location="", ansi=True, pause=False, precompiled=False, custom_replacements = {}, delete_temp_files=True):
     asminject_pid = None
     asminject_priority = None
     target_priority = None
@@ -313,7 +370,7 @@ def asminject(base_script_path, pid, asm_path, relative_offsets, non_pic_binarie
             stage1_replacements['[VARIABLE:STAGE2_SIZE:VARIABLE]'] = f"{STAGE2_SIZE}"
             stage1_replacements['[VARIABLE:STAGE2_PATH:VARIABLE]'] = stage2_read_path
             with open(stage1_path, "r") as stage1_code:
-                stage1 = assemble(stage1_code.read(), library_bases, relative_offsets, replacements=stage1_replacements, ansi=ansi)
+                stage1 = assemble(stage1_code.read(), architecture, library_bases, relative_offsets, replacements=stage1_replacements, ansi=ansi, delete_temp_files=delete_temp_files)
 
             if not stage1:
                 continue_executing = False
@@ -366,7 +423,7 @@ def asminject(base_script_path, pid, asm_path, relative_offsets, non_pic_binarie
                 stage2_replacements['[VARIABLE:STACK_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, stack_backup))
                 stage2_replacements['[VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(rsp-STACK_BACKUP_SIZE)}"
                 with open(asm_path, "r") as asm_code:
-                    stage2 = assemble(asm_code.read(), library_bases, relative_offsets, replacements=stage2_replacements)
+                    stage2 = assemble(asm_code.read(), architecture, library_bases, relative_offsets, replacements=stage2_replacements, delete_temp_files=delete_temp_files)
             
             if not stage2:
                 continue_executing = False
@@ -415,7 +472,7 @@ def asminject(base_script_path, pid, asm_path, relative_offsets, non_pic_binarie
                                 log_error(f"Couldn't get target process information: {e}, {syscall_data}")
                 else:
                     with open(stage2_write_path, "wb") as stage2_file:
-                        os.chmod(stage2_write_path, 0o666)
+                        os.chmod(stage2_write_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                         stage2_file.write(stage2)
                     log(f"Wrote stage 2 to {repr(stage2_write_path)}", ansi=ansi)
 
@@ -498,7 +555,8 @@ if __name__ == "__main__":
               'none' leaves the target process running as-is and is likely to cause race conditions.")
     
     parser.add_argument("--arch",
-        choices=["x86-32", "x86-64", "arm32", "arm64"], default="x86-64",
+        #choices=["x86-32", "x86-64", "arm32", "arm64"], default="x86-64",
+        choices=["x86-64", "arm32"], default="x86-64",
         help="Processor architecture for the injected code. \
               Default: x86-64.")
     
@@ -530,6 +588,10 @@ if __name__ == "__main__":
         const=True, default=False,
         help="Treat the stage 2 payload as a binary that has already been compiled (e.g. msfvenom output) and do not attempt to compile it from source code")
 
+    parser.add_argument("--preserve-temp-files", type=str2bool, nargs='?',
+        const=True, default=False,
+        help="Do not delete temporary files created during the assembling and linking process")
+        
     args = parser.parse_args()
 
     custom_replacements = {}
@@ -574,5 +636,9 @@ if __name__ == "__main__":
                             non_pic_binaries.append(pb)
     
     base_script_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+    
+    delete_temp_files = True
+    if args.preserve_temp_files:
+        delete_temp_files = False
 
-    asminject(base_script_path, args.pid, asm_abs_path, relative_offsets, non_pic_binaries, args.arch, args.stage_mode, args.stop_method or "sigstop", stage_2_write_location=args.stage2_write_path, ansi=args.plaintext, pause=args.pause, precompiled=args.precompiled, custom_replacements=custom_replacements)
+    asminject(base_script_path, args.pid, asm_abs_path, relative_offsets, non_pic_binaries, args.arch, args.stage_mode, args.stop_method or "sigstop", stage_2_write_location=args.stage2_write_path, ansi=args.plaintext, pause=args.pause, precompiled=args.precompiled, custom_replacements=custom_replacements, delete_temp_files=delete_temp_files)

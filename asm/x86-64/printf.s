@@ -5,8 +5,8 @@ _start:
 // Based on the stage 2 code included with dlinject.py
 // and in part on https://github.com/lmacken/pyrasite/blob/d0c90ab38a8986527c9c1f24e222323494ab17a2/pyrasite/injector.py
 // relative offsets for the following libraries required:
-//		/usr/bin/pythonN.N (same version as target process)
-//		libc-2.31.so
+//		libc
+//			Tested specifically with libc-[0-9\.]+.so
 cld
 
 	fxsave moar_regs[rip]
@@ -59,8 +59,8 @@ cld
 	lea rdi, format_string[rip]
 	xor rax, rax
 	xor eax, eax
-	//mov rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
-	movabsq rbx, [BASEADDRESS:.+/libc-2.31.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	movabsq rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	pop rax

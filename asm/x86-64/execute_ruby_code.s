@@ -5,8 +5,9 @@ _start:
 // Based on the stage 2 code included with dlinject.py
 // and in part on https://github.com/lmacken/pyrasite/blob/d0c90ab38a8986527c9c1f24e222323494ab17a2/pyrasite/injector.py
 // relative offsets for the following libraries required:
-//		/usr/bin/pythonN.N (same version as target process)
-//		libc-2.31.so
+//		libruby (same version as target process)
+//		libc
+//			Tested specifically with libc-[0-9\.]+.so
 cld
 
 	fxsave moar_regs[rip]

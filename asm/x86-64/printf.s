@@ -8,67 +8,168 @@ _start:
 //		libc
 //			Tested specifically with libc-[0-9\.]+.so
 cld
-
-	fxsave moar_regs[rip]
-
-	// Open /proc/self/mem
-	mov rax, 2                   # SYS_OPEN
-	lea rdi, proc_self_mem[rip]  # path
-	mov rsi, 2                   # flags (O_RDWR)
-	xor rdx, rdx                 # mode
+	# push rax
+	# mov rax, [read_write_address[rip]]
+	# fxsave [rax]
+	# //fxsave [read_write_address[rip]]
+	# pop rax
+	
+	//debug
+	push rbx
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] #from buffer
 	syscall
-	mov r15, rax  # save the fd for later
+	pop rbx
+	///debug
+	
+	# // move pushed regs to our new stack
+	# //lea rdi, [new_stack_address[rip]]
+	# mov rdi, [new_stack_address[rip]]
+	# mov rsi, [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
+	# mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
+	# rep movsb
 
-	// seek to code
-	mov rax, 8      # SYS_LSEEK
-	mov rdi, r15    # fd
-	mov rsi, [VARIABLE:RIP:VARIABLE]  # offset
-	xor rdx, rdx    # whence (SEEK_SET)
+	//debug
+	push r14
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] + 1 #from buffer
 	syscall
+	pop r14
+	///debug
 
-	// restore code
-	mov rax, 1                   # SYS_WRITE
-	mov rdi, r15                 # fd
-	lea rsi, old_code[rip]       # buf
-	mov rdx, [VARIABLE:LEN_CODE_BACKUP:VARIABLE]   # count
+	// let the script know it can restore the previous data
+	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
+	mov r12, [VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]
+	mov [r14], r12
+
+	//debug
+	push r14
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] + 2 #from buffer
 	syscall
-
-	// close /proc/self/mem
-	mov rax, 3    # SYS_CLOSE
-	mov rdi, r15  # fd
+	pop r14
+	///debug
+	
+	//debug
+	push r14
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] + 3 #from buffer
 	syscall
-
-	// move pushed regs to our new stack
-	lea rdi, new_stack_base[rip-[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]]
-	mov rsi, [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
-	mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
-	rep movsb
-
-	// restore original stack
-	mov rdi, [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
-	lea rsi, old_stack[rip]
-	mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
-	rep movsb
-
-	lea rsp, new_stack_base[rip-[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]]
+	pop r14
+	///debug
 	
 	// BEGIN: example of calling a LIBC function from the asm code using template values
+	push r14
 	push rax
 	push rbx
 	lea rsi, dmsg[rip]
 	lea rdi, format_string[rip]
 	xor rax, rax
 	xor eax, eax
-	//mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	movabsq rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	pop rax
+	pop r14
 	// END: example of calling a LIBC function from the asm code using template values
 	
+	//debug
+	push r14
+	push r15
+	push rbx
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] + 4 #from buffer
+	syscall
+	pop rbx
+	pop r15
+	pop r14
+	///debug
+	
 	mov rax, 0
+	
+	# wait for the script to have restored memory, then restore all of the registers
+	# and jump back to the original instruction
+	// wait for value at communications address to be [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE] before proceeding
+	// store the sys_nanosleep timer data
+	mov rbx, 1
+	mov rcx, 1
+	push rbx
+	push rcx
+	mov r13, rsp
+	
+wait_for_script:
 
-	fxrstor moar_regs[rip]
+	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
+	mov eax, [r14]
+	cmp eax, [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]
+	je cleanup_and_return
+	
+	// sleep 1 second
+	mov rax, 35
+
+	push r15
+	push r14
+	push r13
+	push r11
+	
+	mov rdi, r13
+
+	lea rsi, [rbp]
+	xor rsi, rsi
+	syscall
+	
+	pop r11
+	pop r13
+	pop r14
+	pop r15
+	
+	jmp wait_for_script
+
+cleanup_and_return:
+
+	pop rbx
+	pop rcx
+
+	//debug
+	push r14
+	push r15
+	push rbx
+	mov rax,1 # write to file
+	mov rdi,1 # stdout
+	mov rdx,1 # number of bytes
+	lea rsi, dmsg[rip] + 5 #from buffer
+	syscall
+	pop rbx
+	pop r15
+	pop r14
+	///debug
+
+	push rax
+	mov rax, read_write_address[rip]
+	//lea rax, [read_write_address[rip]]
+	//push rax
+	//mov rax, 0
+	fxrstor [rax]
+	//fxrstor [rsp]
+	//pop rax
+	//fxrstor rax
+	//fxrstor [read_write_address[rip]]
+	pop rax
+
+	//lea rsp, new_stack_base[rip-[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]]
+	//lea rsp, [new_stack_address[rip]]
+	mov rsp, [new_stack_address[rip]]
+	
 	pop r15
 	pop r14
 	pop r13
@@ -85,35 +186,65 @@ cld
 	pop rbx
 	pop rax
 	popf
+	
+	# //debug
+	# pushf
+	# push rax
+	# push rbx
+	# push rcx
+	# push rdx
+	# push rbp
+	# push rsi
+	# push rdi
+	# push r8
+	# push r9
+	# push r10
+	# push r11
+	# push r12
+	# push r13
+	# push r14
+	# push r15
+	# mov rax,1 # write to file
+	# mov rdi,1 # stdout
+	# mov rdx,1 # number of bytes
+	# lea rsi, dmsg[rip] + 6 #from buffer
+	# syscall
+	# pop r15
+	# pop r14
+	# pop r13
+	# pop r12
+	# pop r11
+	# pop r10
+	# pop r9
+	# pop r8
+	# pop rdi
+	# pop rsi
+	# pop rbp
+	# pop rdx
+	# pop rcx
+	# pop rbx
+	# pop rax
+	# popf
+	# ///debug
 
 	mov rsp, [VARIABLE:RSP:VARIABLE]
 	jmp old_rip[rip]
-
+	
 old_rip:
 	.quad [VARIABLE:RIP:VARIABLE]
-
-old_code:
-	.byte [VARIABLE:CODE_BACKUP_JOIN:VARIABLE]
-
-old_stack:
-	.byte [VARIABLE:STACK_BACKUP_JOIN:VARIABLE]
-
-	.align 16
-moar_regs:
-	.space 512
-
-proc_self_mem:
-	.ascii "/proc/self/mem\0"
 
 format_string:
 	.ascii "DEBUG: %s\0"
 
 dmsg:
-	.ascii "123456789ABCDEF\0"
-	
-new_stack:
-	.balign 0x8000
+	.ascii "ZYXWVUTSRQPONMLKJIHG\0"
 
-new_stack_base:
+read_write_address:
+	.quad [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
 
+new_stack_address:
+	.quad [VARIABLE:NEW_STACK_ADDRESS:VARIABLE]
+
+read_write_address_end:
+	.quad [VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]
 

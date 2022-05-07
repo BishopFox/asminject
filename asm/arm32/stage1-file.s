@@ -1,6 +1,10 @@
 .globl _start
 _start:
-	// TKTK: save any necessary registers
+	// Save registers
+	stmdb sp!,{r0-r12}
+	//stmdb sp!,{lr}
+	add r11, sp, #0x4
+	
 	b beginStager
 
 beginStager:
@@ -10,7 +14,7 @@ beginStager:
 	mov r1, #0       	@ flags (O_RDONLY)
 	mov r2, #0        	@ mode
 	swi 0x0				@ syscall
-	mov r11, r0        	@ save the fd for later
+	mov r6, r0        	@ save the fd for later
 	
 	// mmap it
 	//sub sp,sp,#0x10
@@ -23,19 +27,19 @@ beginStager:
 	mov r2, #0x7            					@ prot (rwx)
 	//mov r2, #0x5            					@ prot (r-x)
 	mov r3, #0x2            					@ flags (MAP_PRIVATE)
-	mov r4, r11             					@ fd
+	mov r4, r6             					@ fd
 	mov r5, #0              					@ offset
 	swi 0x0										@ syscall
 	mov r10, r0            						@ save mmap addr
 
 	// close the file
 	mov r7, #6			@ SYS_CLOSE
-	mov r0, r11  		@ fd
+	mov r0, r6  		@ fd
 	swi 0x0				@ syscall
 	
 	// delete the file (not exactly necessary)
 	mov r7, #6			@ SYS_CLOSE
-	mov r0, r11  		@ fd
+	mov r0, r6  		@ fd
 	swi 0x0				@ syscall
 	
 	//begin: debug
@@ -52,7 +56,7 @@ beginStager:
 	swi 0x0				@ syscall
 
 	// jump to stage2
-	blx r10
+	bx r10
 
 path:
 	.ascii "[VARIABLE:STAGE2_PATH:VARIABLE]\0"

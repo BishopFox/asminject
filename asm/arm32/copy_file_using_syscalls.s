@@ -5,68 +5,119 @@ _start:
 
 // Based on the stage 2 code included with dlinject.py
 // no relative offsets required, because everything is done using syscalls
-//cld
 
 // 32-bit ARM's ldr instruction can only refer to data that starts relatively close to the instruction
 // So this code is interleaved with data
 
+
 b openProcSelfMem
 
-//moar_regs:
-//	.space 512
-//	.balign 8
-	
-	//fxsave moar_regs[rip]
-//	.ltorg
+openProcSelfMem:
+	// Open /proc/self/mem
+	mov r7, #5				@ SYS_OPEN
+	//ldr r1, =proc_self_mem
+	mov r1, pc
+	b openProcSelfMem2
 
 proc_self_mem:
 	.ascii "/proc/self/mem\0"
 	.balign 8
 
-openProcSelfMem:
-	// Open /proc/self/mem
-	mov r7, #5				@ SYS_OPEN
-	ldr r1, =proc_self_mem
-	ldr r0, [r1]			@ path
-	mov r1, #2       		@ flags (O_RDONLY)
+openProcSelfMem2:
+	mov r0, r1				@ path
+	mov r1, #2       		@ flags (O_RDWR)
 	mov r2, #0        		@ mode
 	swi 0x0					@ syscall
-	mov r11, r0        		@ save the fd for later
+	mov r5, r0        		@ save the fd for later
 	.ltorg
-	
 	b restoreCode
 
 restoreCode:
 
 	// seek to code
 	mov r7, #19      					@ SYS_LSEEK
-	mov r0, r11    						@ fd
-	ldr r1, =[VARIABLE:RIP:VARIABLE]  	@ offset
+	mov r0, r5    						@ fd
+	//ldr r1, =[VARIABLE:RIP:VARIABLE]  @ offset
+	ldr r1, [pc]  						@ offset
+	b restoreCode2
+saved_rip:
+	.word [VARIABLE:RIP:VARIABLE]
+	.balign 4
+
+restoreCode2:
 	mov r2, #0    						@ whence (SEEK_SET)
 	swi 0x0								@ syscall
 	
 	// restore code
 	mov r7, #4                   					@ SYS_WRITE
-	mov r0, r11                 					@ fd
-	adr r1, old_code       							@ buf
-	ldr r2, =[VARIABLE:LEN_CODE_BACKUP:VARIABLE]   	@ count
+	mov r0, r5                 					@ fd
+	mov r1, pc       							@ buf
+	b restoreCode3
+old_code:
+	.byte [VARIABLE:CODE_BACKUP_JOIN:VARIABLE]
+	.balign 4
+
+restoreCode3:
+	ldr r2, [pc]   	@ count
+	b restoreCode4
+
+code_backup_lenth:
+	.word [VARIABLE:LEN_CODE_BACKUP:VARIABLE]
+	.balign 4
+
+restoreCode4:
 	swi 0x0											@ syscall
 
 	// close /proc/self/mem
 	mov r7, #6			@ SYS_CLOSE
-	mov r0, r11  		@ fd
+	mov r0, r5  		@ fd
 	swi 0x0				@ syscall
 	.ltorg
 		
-	b moveToNewStack
+	//b moveToNewStack
 
-old_code:
-	.byte [VARIABLE:CODE_BACKUP_JOIN:VARIABLE]
-	.balign 8
 
 restoreStack:
 	
 	// restore original stack
+	ldr r0, [pc]
+	b restoreStack1
+old_stack_address:
+	.word [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
+	.balign 4
+
+restoreStack1:
+	mov r1, pc			@ source
+	b restoreStack2
+old_stack:
+	.byte [VARIABLE:STACK_BACKUP_JOIN:VARIABLE]
+	.balign 4
+	
+restoreStack2:
+	ldr r2, [pc]
+	b restoreStack3
+
+stack_backup_size:
+	.word [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
+	.balign 4
+
+rsp_minus_sb_size:
+	.word [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
+	.balign 4
+
+restoreStack3:
+	cmp r2, #0
+	ble restoreStack4
+	
+	ldr r4, [r1]
+	str r4, [r0]
+	
+	sub r2, r2, #4
+	add r0, r0, #4
+	add r1, r1, #4
+	b restoreStack3
+
+restoreStack4:
 	//mov rdi, [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
 	//lea rsi, old_stack[rip]
 	//mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
@@ -75,10 +126,6 @@ restoreStack:
 	//lea rsp, new_stack_base[rip-[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]]
 
 	b shellCode
-
-old_stack:
-	.byte [VARIABLE:STACK_BACKUP_JOIN:VARIABLE]
-	.balign 8
 	
 shellCode:
 	.balign 8
@@ -102,7 +149,7 @@ openSourceFile:
 	mov r1, #0       	@ flags (O_RDONLY)
 	mov r2, #0        	@ mode
 	swi 0x0				@ syscall
-	mov r11, r0        	@ source fd
+	mov r5, r0        	@ source fd
 	
 	mov r12, pc
 	b openDestFile
@@ -136,7 +183,7 @@ copyByteLoop:
 	
 	// read a single byte at a time to avoid more complex logic
 	mov r7, #3			@ SYS_READ
-	mov r0, r11			@ fd
+	mov r0, r5			@ fd
 	mov r1, r9       	@ buffer
 	mov r2, #1        	@ number of bytes to read
 	swi 0x0				@ syscall
@@ -161,7 +208,7 @@ doneCopying:
 
 	// close file handles
 	mov r7, #6			@ SYS_CLOSE
-	mov r0, r11  		@ fd
+	mov r0, r5  		@ fd
 	swi 0x0				@ syscall
 	
 	mov r7, #6			@ SYS_CLOSE
@@ -169,19 +216,46 @@ doneCopying:
 	swi 0x0				@ syscall
 		
 	// exit for now
-	mov r7, #1			@ SYS_EXIT
-	mov r0, #0  		@ return code
-	swi 0x0				@ syscall
+	//mov r7, #1			@ SYS_EXIT
+	//mov r0, #0  		@ return code
+	//swi 0x0				@ syscall
 	
 	// restore registers?
 
 	// mov rsp, [VARIABLE:RSP:VARIABLE]
 	
 	// b [old_rip]
+	
+	// restore registers
+	sub sp, r11, #0x4
+	//ldmia sp!, {lr}
+	ldmia sp!, {r0-r12}
+	//ldmia sp!, {r0-r12 lr}
+
+	// restore stack pointer
+	ldr r0, [pc]
+	b restoreStackPointer2
+	
+old_stack_pointer:
+	.word [VARIABLE:RSP:VARIABLE]
+	.balign 4
+
+restoreStackPointer2:	
+	
+	// load the stored instruction pointer value stored right after this instruction into the program counter register
+	ldr pc, [pc]
+	//ldr pc, [pc]
+	//ldr r0, [pc]
+	//bx r0
+	//bx [old_rip]
 
 old_rip:
 	.word [VARIABLE:RIP:VARIABLE]
-	.balign 8
+	.balign 4
+
+old_rip2:
+	.word [VARIABLE:RIP:VARIABLE]
+	.balign 4
 
 format_string:
 	.ascii "DEBUG: %s\n\0"
@@ -191,20 +265,12 @@ format_string:
 
 moveToNewStack:
 .balign 8
+
 // move pushed regs to our new stack
 //lea rdi, new_stack_base[rip-[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]]
 //mov rsi, [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
 //mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
 //rep movsb
-
-//begin: debug
-mov r7, #4          @ SYS_WRITE
-mov r0, #1          @ fd = stdout
-mov r1, r6    		@ buf
-mov r2, #1   		@ count
-swi 0x0				@ syscall
-add r6, r6, #1		@ Increment debug string counter
-//end: debug
 
 b restoreStack
 

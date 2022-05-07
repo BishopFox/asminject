@@ -54,8 +54,6 @@ echo: write error: invalid argument
 
 3
 
-# echo "oh noes! The production server is throwing errors for 15% of customers! If only I could attach a debugger to the application without rebooting!"
-
 # make
 
 ...omitted for brevity...

@@ -1,7 +1,7 @@
 # asminject.py
 *asminject.py* is a heavily-modified fork of [David Buchanan's dlinject project](https://github.com/DavidBuchanan314/dlinject). Injects arbitrary assembly (or precompiled binary) payloads directly into Linux processes without the use of ptrace by accessing /proc/&lt;pid>/mem. Useful for certain post-exploitation scenarios, recovering content from process memory when ptrace is not available, and bypassing some security controls. Can inject into containerized processes from outside of the container, as long as you have root access on the host.
 
-This is a very early, alpha-quality version of this utility.
+This is a very early, alpha-quality version of this utility. v0.8 is very broken, because it is in the process of a significant rewrite.
 
 * [Origins](#origins)
 * [Setup](#setup)
@@ -504,6 +504,13 @@ Currently, only one example shellcode file is provided (copy files using syscall
 If you are an authorized administrator of a Linux system where someone has accidentally set */proc/sys/kernel/yama/ptrace_scope* to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
 ## Version history
+
+### 0.8 (2022-05-06)
+
+* Lots of things are broken
+* Major rearchitecture in progress
+* No longer crashes python 3 after injected code has finished, though!
+* Only the printf.s shellcode is working right now
 
 ### 0.7 (2021-09-02)
 

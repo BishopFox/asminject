@@ -58,7 +58,7 @@
 	# pop rbx
 	# // END: call Py_Finalize()
 
-BEGIN_SHELLCODE_DATA
+SHELLCODE_SECTION_DELIMITER
 
 python_code:
 	.ascii "[VARIABLE:pythoncode:VARIABLE]\0"

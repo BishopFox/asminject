@@ -137,7 +137,7 @@ doneCopying:
 	pop r15
 	// END: call LIBC fclose
 
-BEGIN_SHELLCODE_DATA
+SHELLCODE_SECTION_DELIMITER
 	
 sourcefile:
 	.ascii "[VARIABLE:sourcefile:VARIABLE]\0"

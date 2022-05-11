@@ -64,7 +64,7 @@
 	
 	#mov rax, 0
 
-BEGIN_SHELLCODE_DATA
+SHELLCODE_SECTION_DELIMITER
 
 ruby_code:
 	.ascii "[VARIABLE:rubycode:VARIABLE]\0"

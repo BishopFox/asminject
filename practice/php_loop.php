@@ -2,8 +2,9 @@
 
 for ($x = 0; $x <= 1000000; $x++)
 {
-  echo "Just running in a loop\n";
-  sleep(10);
+  $current_timestamp = date(DATE_ISO8601);
+  echo "$current_timestamp - Loop count $x\n";
+  sleep(5);
 }
 
 ?> 

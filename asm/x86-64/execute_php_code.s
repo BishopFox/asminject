@@ -8,7 +8,7 @@
 	pop rbx
 	// END: call zend_eval_string("arbitrary PHP code here")
 
-BEGIN_SHELLCODE_DATA
+SHELLCODE_SECTION_DELIMITER
 	
 php_code:
 	.ascii "[VARIABLE:phpcode:VARIABLE]\0"

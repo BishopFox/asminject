@@ -15,7 +15,7 @@
 	
 	mov rax, 0
 
-BEGIN_SHELLCODE_DATA
+SHELLCODE_SECTION_DELIMITER
 
 format_string:
 	.ascii "DEBUG: %s\0"

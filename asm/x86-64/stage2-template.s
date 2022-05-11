@@ -10,12 +10,9 @@ cld
 	mov r12, [VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]
 	mov [r14], r12
 	
-[VARIABLE:SHELLCODE_SOURCE:VARIABLE]
-	
 	mov rax, 0
 	
-	# wait for the script to have restored memory, then restore all of the registers
-	# and jump back to the original instruction
+	# wait for the script to have restored memory, then proceed
 	// wait for value at communications address to be [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE] before proceeding
 	// store the sys_nanosleep timer data
 	mov rbx, 1
@@ -56,13 +53,26 @@ cleanup_and_return:
 
 	pop rbx
 	pop rcx
+	
+	[VARIABLE:SHELLCODE_SOURCE:VARIABLE]
 
+	// restore fancy registers
 	push rax
 	mov rax, read_write_address[rip]
 	fxrstor [rax]
 	pop rax
 
-	mov rsp, [new_stack_address[rip]]
+	// de-allocate the mmapped r/w block
+	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
+	mov rax, 11              								# SYS_MUNMAP
+	mov rdi, [r14 + 16]    									# start address
+	mov rsi, [VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]		# len
+	syscall
+	
+	// cannot really de-allocate the r/x block because that is where this code is
+
+	// restore regular registers
+	mov rsp, [existing_stack_backup_address[rip]]
 	
 	pop r15
 	pop r14
@@ -80,7 +90,8 @@ cleanup_and_return:
 	pop rbx
 	pop rax
 	popf
-
+	
+	// reset RSP to the original value and jump to the original instruction location
 	mov rsp, [VARIABLE:RSP:VARIABLE]
 	jmp old_rip[rip]
 	
@@ -92,8 +103,14 @@ old_rip:
 read_write_address:
 	.quad [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
 
+existing_stack_backup_address:
+	.quad [VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]
+
 new_stack_address:
 	.quad [VARIABLE:NEW_STACK_ADDRESS:VARIABLE]
+
+arbitrary_read_write_data_address:
+	.quad [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 
 read_write_address_end:
 	.quad [VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]

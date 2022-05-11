@@ -41,10 +41,24 @@ _start:
 
 	// move the pushed register values into the read/write area now rather than later
 	add rax, [VARIABLE:CPU_STATE_SIZE:VARIABLE]
+	add rax, [VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]
 	mov rdi, rax
 	mov rsi, [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
 	mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
-	rep movsb	
+	rep movsb
+	
+	# // also copy the pushed register values into the temporary stack
+	# mov rax, r11
+	# add rax, [VARIABLE:NEW_STACK_LOCATION_OFFSET:VARIABLE]
+	# mov rdi, rax
+	# mov rsi, [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
+	# mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
+	# rep movsb
+	
+	# // set the stack pointer to be the new stack with the pushed register values already on it
+	# mov rsp, r11
+	# add rsp, [VARIABLE:NEW_STACK_LOCATION_OFFSET:VARIABLE]
+	# sub rsp, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
 	
 	// allocate a new block of memory for executable instructions using mmap
 	mov rax, 9              					# SYS_MMAP

@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.9
-Ben Lincoln, Bishop Fox, 2022-05-09
+v0.10
+Ben Lincoln, Bishop Fox, 2022-05-10
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -56,8 +56,18 @@ class asminject_parameters:
         
         self.communication_address_offset = -40
         self.communication_address_backup_size = 24
-        self.cpu_state_size = 512
+        # 512 is the minimum for the x86-64 fxsave instruction
+        self.cpu_state_size = 1024
+        # Might need to make this dynamic based on the stack backup size
+        self.existing_stack_backup_location_size = 2048
+        self.existing_stack_backup_location_offset = 1024
+        self.new_stack_size = 2048
+        self.new_stack_location_offset = 1024
+        self.arbitrary_read_write_data_size = 2048
+        self.arbitrary_read_write_data_location_offset = 0
+        # Should probably validate that this is big enough to hold everything
         self.stage2_size = 0x8000
+        # Should probably validate that this is big enough to hold everything
         self.read_write_block_size = 0x8000
         
         # For "slow" mode
@@ -511,6 +521,9 @@ def asminject(injection_params):
             stage1_replacements['[VARIABLE:STAGE2_SIZE:VARIABLE]'] = f"{injection_params.stage2_size}"
             stage1_replacements['[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]'] = f"{injection_params.read_write_block_size}"
             stage1_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.cpu_state_size}"
+            stage1_replacements['[VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]'] = f"{injection_params.existing_stack_backup_location_offset}"
+            
+            stage1_replacements['[VARIABLE:NEW_STACK_LOCATION_OFFSET:VARIABLE]'] = f"{injection_params.cpu_state_size + injection_params.existing_stack_backup_location_size + injection_params.new_stack_location_offset}"
             
             with open(stage1_path, "r") as stage1_code:
                 stage1 = assemble(stage1_code.read(), injection_params, library_bases, replacements=stage1_replacements)
@@ -586,10 +599,13 @@ def asminject(injection_params):
             stage2_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_ready_for_memory_restore}"
             stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_memory_restored}"
             stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.cpu_state_size}"
+            stage2_replacements['[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]'] = f"{injection_params.read_write_block_size}"
             
             current_state = wait_for_communication_state(injection_params.pid, communication_address, injection_params.state_ready_for_shellcode_write)
             stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address}"
-            stage2_replacements['[VARIABLE:NEW_STACK_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size}"
+            stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size + injection_params.existing_stack_backup_location_offset}"
+            stage2_replacements['[VARIABLE:NEW_STACK_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size + injection_params.existing_stack_backup_location_size + injection_params.new_stack_location_offset}"
+            stage2_replacements['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size + injection_params.existing_stack_backup_location_size + injection_params.new_stack_size + injection_params.arbitrary_read_write_data_location_offset}"
             stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{current_state.read_write_address + injection_params.read_write_block_size - 8}"
             
             stage2_source_code = ""

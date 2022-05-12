@@ -16,7 +16,7 @@
 	// END: copy the Python string to arbitrary read/write memory
 
 	// BEGIN: call PyGILState_Ensure() and store the handle it returns
-	push rbx
+	push r14
 	xor rax, rax
 	mov rdi, 0
 	mov rsi, 0
@@ -24,11 +24,11 @@
 	call rbx
 	mov rbx, arbitrary_read_write_data_address[rip]
 	mov [rbx], rax
-	pop rbx
+	pop r14
 	// END: call PyGILState_Ensure()
 
 	// BEGIN: call PyRun_SimpleString("arbitrary Python code here")
-	//push rbx
+	push r14
 	mov rsi, 0
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 32
@@ -36,26 +36,26 @@
 	mov [rsp], rdi
 	mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
 	call rbx
-	//pop rbx
+	pop r14
 	// END: call PyRun_SimpleString("arbitrary Python code here")
 	
 	// BEGIN: call PyGILState_Release(handle)
-	push rbx
+	push r14
 	mov rbx, arbitrary_read_write_data_address[rip]
 	mov rax, [rbx]
 	mov rdi, rax
 	mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Release:RELATIVEOFFSET]
 	call rbx
-	pop rbx
+	pop r14
 	// END: call PyGILState_Release(handle)
 	
 	# // BEGIN: call Py_Finalize()
-	# push rbx
+	# push r14
 	# mov rax, 0
 	# mov rdi, rax
 	# mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:Py_Finalize:RELATIVEOFFSET]
 	# call rbx
-	# pop rbx
+	# pop r14
 	# // END: call Py_Finalize()
 
 SHELLCODE_SECTION_DELIMITER

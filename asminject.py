@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.11
-Ben Lincoln, Bishop Fox, 2022-05-11
+v0.12
+Ben Lincoln, Bishop Fox, 2022-05-12
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -756,11 +756,12 @@ if __name__ == "__main__":
         help="Regular expression identifying one or more executables/libraries that do *not* use position-independent code, such as Python 3.x")
 
     parser.add_argument("--stop-method",
-        choices=["sigstop", "cgroup_freeze", "slow", "none"],
+        choices=["slow", "sigstop", "cgroup_freeze", "none"],
+        default="slow",
         help="How to stop the target process prior to shellcode injection. \
-              'sigstop' (default) uses the built-in Linux process suspension mechanism, and can have side-effects. \
+              'sigstop' uses the built-in Linux process suspension mechanism, and can have side-effects. \
               'cgroup_freeze' requires root, and only operates in environments with cgroups.\
-              'slow' attempts to avoid forensic detection and side-effects of suspending a process by \
+              'slow' (default) attempts to avoid forensic detection and side-effects of suspending a process by \
               temporarily setting the priority of the target process to the lowest possible value, \
               and the priority of asminject.py to the highest possible value. \
               'none' leaves the target process running as-is and is likely to cause race conditions.")
@@ -834,8 +835,9 @@ if __name__ == "__main__":
                                 offset_value = int(line_array[0], 16)
                                 if offset_value > 0:
                                     injection_params.relative_offsets[offset_name] = offset_value
-                                #else:
-                                #    log_warning(f"Ignoring offset '{offset_name}' in '{reloff_abs_path}' because it has a value of zero", ansi=args.plaintext)
+                                else:
+                                    if injection_params.enable_debugging_output:
+                                        log_warning(f"Ignoring offset '{offset_name}' in '{reloff_abs_path}' because it has a value of zero", ansi=args.plaintext)
     
     if len(injection_params.relative_offsets) < 1:
         log_error("A list of relative offsets was not specified. If the injection fails, check your payload to make sure you're including the offsets of any exported functions it calls.", ansi=args.plaintext)

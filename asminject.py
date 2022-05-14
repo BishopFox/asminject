@@ -374,6 +374,8 @@ def get_syscall_values(pid):
 def wait_for_communication_state(pid, communication_address, wait_for_value):
     done_waiting = False
     data = communication_variables()
+    if injection_params.enable_debugging_output:
+        log(f"Waiting for value 0x{wait_for_value:016x} at communication address 0x{communication_address:08x}", ansi=injection_params.ansi)
     while not done_waiting:
         try:
             with open(f"/proc/{pid}/mem", "rb") as mem:

@@ -21,27 +21,35 @@ store_state_ready_for_memory_restore:
 // wait for the script to have restored memory, then proceed
 // load the value that indicates memory_restored into r8
 	ldr r8, [pc]
-	b begin_waiting
+	b begin_waiting1
 
 state_memory_restored:
 	.word [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]
 	.balign 4
 
-begin_waiting:
+begin_waiting1:
 
 // store the sys_nanosleep timer data
-	mov r0, #1
-	mov r1, #1
-	push {r0}
-	push {r1}
+	mov r5, pc
+	b begin_waiting2
+
+nanosleep_timespec:
+	.word 1
+	.balign 4
+
+begin_waiting2:
+
+// store the sys_nanosleep timer data
+	mov r0, r5
+	mov r1, r5
 
 // wait for value at communications address to be [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE] before proceeding
 wait_for_script:
 
 	// sleep 1 second
 	mov r7, #162             					@ sys_nanosleep
-	mov r0, #1	            					@ seconds
-	mov r1, #1  								@ nanoseconds
+	mov r0, r5
+	mov r1, r5
 	swi 0x0										@ syscall
 
 	ldr r7, [r12]
@@ -51,14 +59,11 @@ wait_for_script:
 	b wait_for_script
 
 cleanup_and_return:
-
-	pop {r1}
-	pop {r0}
 	
 	[VARIABLE:SHELLCODE_SOURCE:VARIABLE]
 
 	// de-allocate the mmapped r/w block
-	mov r7, #91             					@ SYS_MUNMAP\
+	mov r7, #91             					@ SYS_MUNMAP
 	mov r0, r11	            					@ addr
 	mov r1, #[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]  	@ len
 	swi 0x0										@ syscall
@@ -67,6 +72,7 @@ cleanup_and_return:
 	
 	// restore registers
 	sub sp, r11, #0x4
+	// currently segfaulting here:
 	ldmia sp!, {r0-r12}
 
 	// restore stack pointer

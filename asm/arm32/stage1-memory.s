@@ -71,27 +71,33 @@ store_state_ready_for_shellcode_write:
 
 // load the value that indicates shellcode written into r8
 	ldr r8, [pc]
-	b begin_waiting
+	b begin_waiting1
 
 state_shellcode_written:
 	.word [VARIABLE:STATE_SHELLCODE_WRITTEN:VARIABLE]
 	.balign 4
 
-begin_waiting:
+begin_waiting1:
+	mov r5, pc
+	b begin_waiting2
+
+nanosleep_timespec:
+	.word 1
+	.balign 4
+
+begin_waiting2:
 
 // store the sys_nanosleep timer data
-	mov r0, #1
-	mov r1, #1
-	push {r0}
-	push {r1}
+	mov r0, r5
+	mov r1, r5
 
 // wait for value at communications address to be [VARIABLE:STATE_SHELLCODE_WRITTEN:VARIABLE] before proceeding
 wait_for_script:
 
 	// sleep 1 second
 	mov r7, #162             					@ sys_nanosleep
-	mov r0, #1	            					@ seconds
-	mov r1, #1  								@ nanoseconds
+	mov r0, r5	            					@ seconds
+	mov r1, r5  								@ nanoseconds
 	swi 0x0										@ syscall
 
 	ldr r7, [r12]
@@ -101,10 +107,6 @@ wait_for_script:
 	b wait_for_script
 
 launch_stage2:
-	
-	// discard the nanosleep-related data
-	pop {r1}
-	pop {r0}
 
 	// jump to stage2
 	bx r10

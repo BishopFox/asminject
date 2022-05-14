@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.12
-Ben Lincoln, Bishop Fox, 2022-05-12
+v0.13
+Ben Lincoln, Bishop Fox, 2022-05-13
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -53,6 +53,10 @@ class asminject_parameters:
     def __init__(self):
         # x86-64: 8 bytes * 16 registers
         self.stack_backup_size = 8 * 16
+        
+        # CPU register width in bytes
+        self.register_size = 8
+        self.register_size_format_string = 'Q'
         
         self.communication_address_offset = -40
         self.communication_address_backup_size = 24
@@ -124,6 +128,16 @@ class asminject_parameters:
         self.target_priority = self.target_process.nice()
         self.asminject_affinity = self.asminject_process.cpu_affinity()
         self.target_affinity = self.target_process.cpu_affinity()
+
+    def set_architecture(self, architecture_string):
+        self.architecture = architecture_string
+        
+        if self.architecture == "x86-64":
+            self.register_size = 8
+            self.register_size_format_string = 'Q'
+        if self.architecture == "arm32":
+            self.register_size = 4
+            self.register_size_format_string = 'L'
 
 class communication_variables:
     def __init__(self):
@@ -374,14 +388,14 @@ def wait_for_communication_state(pid, communication_address, wait_for_value):
                         if injection_params.enable_debugging_output:
                             log(f"RSP is 0x{rsp:016x}", ansi=injection_params.ansi)
                         mem.seek(communication_address)
-                        data.state_value = struct.unpack('Q', mem.read(8))[0]
-                        mem.seek(communication_address + 8)
-                        data.read_execute_address = struct.unpack('Q', mem.read(8))[0]
-                        data.read_write_address = struct.unpack('Q', mem.read(8))[0]
+                        data.state_value = struct.unpack(injection_params.register_size_format_string, mem.read(injection_params.register_size))[0]
+                        #mem.seek(communication_address + injection_params.register_size)
+                        data.read_execute_address = struct.unpack(injection_params.register_size_format_string, mem.read(injection_params.register_size))[0]
+                        data.read_write_address = struct.unpack(injection_params.register_size_format_string, mem.read(injection_params.register_size))[0]
                         if injection_params.enable_debugging_output:
                             log(f"State value at communication address 0x{communication_address:08x} is 0x{data.state_value:016x}", ansi=injection_params.ansi)
-                            log(f"Read/execute block address at communication address 0x{communication_address:08x} + 8 is 0x{data.read_execute_address:016x}", ansi=injection_params.ansi)
-                            log(f"Read/write block address at communication address 0x{communication_address:08x} + 16 is 0x{data.read_write_address:016x}", ansi=injection_params.ansi)
+                            log(f"Read/execute block address at communication address 0x{communication_address:08x} + {injection_params.register_size} is 0x{data.read_execute_address:016x}", ansi=injection_params.ansi)
+                            log(f"Read/write block address at communication address 0x{communication_address:08x} + {injection_params.register_size * 2} is 0x{data.read_write_address:016x}", ansi=injection_params.ansi)
                         
                         if data.state_value == wait_for_value:
                             if injection_params.enable_debugging_output:
@@ -628,7 +642,7 @@ def asminject(injection_params):
                     mem.seek(communication_address)
                     communication_address_backup = mem.read(injection_params.communication_address_backup_size)
                     
-                    # Set the "memory restored" state variable to match the first 8 bytes of the backed up communications address data
+                    # Set the "memory restored" state variable to match the first 4 bytes of the backed up communications address data
                     injection_params.state_memory_restored = struct.unpack('I', communication_address_backup[0:4])[0]
                     #log(f"Will specify 0x{injection_params.state_shellcode_written:016x} @ 0x{communication_address:016x} as the 'memory restored' value", ansi=injection_params.ansi)
                     log(f"Using: 0x{injection_params.state_ready_for_memory_restore:08x} for 'ready for memory restore' state value", ansi=injection_params.ansi)
@@ -674,6 +688,7 @@ def asminject(injection_params):
             stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{len(code_backup)}"
             stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_memory_restored}"
             stage2_replacements['[VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(rsp-injection_params.stack_backup_size)}"
+            log(f"Waiting for stage 1 to indicate that it has allocated additional memory and is ready for the script to write stage 2", ansi=injection_params.ansi)
             current_state = wait_for_communication_state(injection_params.pid, communication_address, injection_params.state_ready_for_shellcode_write)
             stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address}"
             stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size + injection_params.existing_stack_backup_location_offset}"
@@ -696,7 +711,7 @@ def asminject(injection_params):
                     mem.write(stage2)
                     
                     # Give stage 1 the OK to proceed
-                    log(f"Writing 0x{injection_params.state_shellcode_written:016x} to 0x{communication_address:016x} in target memory to indicate OK", ansi=injection_params.ansi)
+                    log(f"Writing 0x{injection_params.state_shellcode_written:016x} to 0x{communication_address:016x} in target memory to indicate stage 2 has been written to memory", ansi=injection_params.ansi)
                     mem.seek(communication_address)
                     ok_val = struct.pack('I', injection_params.state_shellcode_written)
                     mem.write(ok_val)
@@ -705,6 +720,7 @@ def asminject(injection_params):
                 if injection_params.restore_delay > 0.0:
                     log(f"Waiting {injection_params.restore_delay} second(s) before starting memory restore check", ansi=injection_params.ansi)
                     time.sleep(injection_params.restore_delay)
+                log(f"Waiting for stage 2 to indicate that it is ready for process memory to be restored", ansi=injection_params.ansi)
                 current_state = wait_for_communication_state(injection_params.pid, communication_address, injection_params.state_ready_for_memory_restore)
                 log("Restoring original memory content", ansi=injection_params.ansi)
                 with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
@@ -806,8 +822,8 @@ if __name__ == "__main__":
 
     injection_params.base_script_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
     injection_params.pid = args.pid
-    injection_params.asm_path = os.path.abspath(args.asm_path)
-    injection_params.architecture = args.arch
+    injection_params.set_architecture(args.arch)
+    injection_params.asm_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, args.asm_path)
     injection_params.stop_method = args.stop_method
     injection_params.pause = args.pause
     injection_params.ansi = args.plaintext

@@ -531,7 +531,7 @@ def asminject(injection_params):
         log("Sending SIGSTOP", ansi=injection_params.ansi)
         os.kill(injection_params.pid, signal.SIGSTOP)
         while True:
-            with open(f"/proc/{pid}/stat") as stat_file:
+            with open(f"/proc/{injection_params.pid}/stat") as stat_file:
                 state = stat_file.read().split(" ")[2]
             if state in ["T", "t"]:
                 break

@@ -2,6 +2,7 @@
 	push {r12}
 	push {r11}
 	push {r10}
+	push {r6}
 	
 	mov r0, pc
 	b load_debug_message
@@ -37,6 +38,7 @@ printf_offset:
 call_printf:
 	add r9, r9, r8
 	blx r9
+	pop {r6}
 	pop {r10}
 	pop {r11}
 	pop {r12}

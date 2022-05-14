@@ -71,7 +71,7 @@ cleanup_and_return:
 	// cannot really de-allocate the r/x block because that is where this code is
 	
 	// restore registers
-	sub sp, r11, #0x4
+	sub sp, r6, #0x4
 	// currently segfaulting here:
 	ldmia sp!, {r0-r12}
 

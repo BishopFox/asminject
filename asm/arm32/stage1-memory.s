@@ -3,7 +3,7 @@ _start:
 	// Save registers
 	stmdb sp!,{r0-r12}
 	//stmdb sp!,{lr}
-	add r11, sp, #0x4
+	add r6, sp, #0x4
 	
 	b beginStager
 

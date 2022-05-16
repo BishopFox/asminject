@@ -508,6 +508,10 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.14 (2022-05-15)
+
+* ARM32 stage 1, stage 2 template, and printf.s are working!
+
 ### 0.13 (2022-05-13)
 
 * Made asm/<architecture>/ an implicit part of the path to the stage 2 code

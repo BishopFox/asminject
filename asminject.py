@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.13
-Ben Lincoln, Bishop Fox, 2022-05-13
+v0.14
+Ben Lincoln, Bishop Fox, 2022-05-15
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -21,6 +21,7 @@ dlinject source: https://github.com/DavidBuchanan314/dlinject
 
 import argparse
 import inspect
+import math
 import os
 import psutil
 import re
@@ -135,9 +136,14 @@ class asminject_parameters:
         if self.architecture == "x86-64":
             self.register_size = 8
             self.register_size_format_string = 'Q'
+            # 8 bytes * 16 registers
+            self.stack_backup_size = 8 * 16
         if self.architecture == "arm32":
             self.register_size = 4
             self.register_size_format_string = 'L'
+            # 4 bytes * 13 registers
+            #self.stack_backup_size = 4 * 12
+            self.stack_backup_size = 8 * 16
 
 class communication_variables:
     def __init__(self):
@@ -180,9 +186,9 @@ def assemble(source, injection_params, library_bases, replacements = {}):
         if injection_params.enable_debugging_output:
             log(f"Library base entry: '{lname}'", ansi=injection_params.ansi)
             
-    for rname in replacements.keys():
-        if injection_params.enable_debugging_output:
-            log(f"Replacement key: '{rname}', value '{replacements[rname]}'", ansi=injection_params.ansi)  
+    #for rname in replacements.keys():
+    #    if injection_params.enable_debugging_output:
+    #        log(f"Replacement key: '{rname}', value '{replacements[rname]}'", ansi=injection_params.ansi)  
     
     lname_placeholders = []
     lname_placeholders_matches = re.finditer(r'(\[BASEADDRESS:)(.*?)(:BASEADDRESS\])', formatted_source)
@@ -220,8 +226,8 @@ def assemble(source, injection_params, library_bases, replacements = {}):
             if missing_string not in missing_values:
                 missing_values.append(missing_string)
                 
-    if injection_params.enable_debugging_output:
-        log(f"Formatted assembly code:\n{formatted_source}", ansi=injection_params.ansi)
+    #if injection_params.enable_debugging_output:
+    #    log(f"Formatted assembly code:\n{formatted_source}", ansi=injection_params.ansi)
     
     if len(missing_values) > 0:
         log_error(f"The following placeholders in the assembly source code code not be found: {missing_values}", ansi=injection_params.ansi)
@@ -313,6 +319,30 @@ def assemble(source, injection_params, library_bases, replacements = {}):
             log_error(f"Couldn't delete temporary binary file '{out_path}': {e}", ansi=injection_params.ansi)
     
     return result_code
+
+def output_memory_block_data(injection_params, memory_block_name, memory_block):
+    if not injection_params.enable_debugging_output:
+        return
+    output = f"{memory_block_name}:"
+    num_blocks = int(math.ceil(float(len(memory_block)) / float(injection_params.register_size)))
+    for block_num in range(0, num_blocks):
+        block_data = "0x "
+        num_sub_blocks = int(injection_params.register_size / 4)
+        for sub_block_num in range(0, num_sub_blocks):
+            sub_block_data = ""
+            base_byte_num = (block_num * injection_params.register_size) + (sub_block_num * 4)
+            for byte_num in range(0, 4):
+                current_byte_num = base_byte_num + byte_num
+                current_byte_data = 0
+                if current_byte_num < len(memory_block):
+                    current_byte_data = memory_block[current_byte_num]
+                else:
+                    current_byte_data = 0
+                sub_block_data = f"{sub_block_data}{format(current_byte_data, '02x')}"
+            block_data = f"{block_data} {sub_block_data}"
+        block_data = block_data.strip()
+        output = f"{output}\n\t{block_data}"
+    log(output, ansi=injection_params.ansi)
 
 def get_memory_map_data(injection_params):
     result = {}
@@ -639,10 +669,13 @@ def asminject(injection_params):
                     stack_backup_address = rsp - injection_params.stack_backup_size
                     mem.seek(stack_backup_address)
                     stack_backup = mem.read(injection_params.stack_backup_size)
+                    output_memory_block_data(injection_params, f"Stack backup (0x{stack_backup_address:08x})", stack_backup)
+                    
                     
                     # back up the data at the communication address
                     mem.seek(communication_address)
                     communication_address_backup = mem.read(injection_params.communication_address_backup_size)
+                    output_memory_block_data(injection_params, f"Communication address backup (0x{communication_address:08x})", communication_address_backup)
                     
                     # Set the "memory restored" state variable to match the first 4 bytes of the backed up communications address data
                     injection_params.state_memory_restored = struct.unpack('I', communication_address_backup[0:4])[0]
@@ -729,11 +762,30 @@ def asminject(injection_params):
                     mem.seek(code_backup_address)
                     mem.write(code_backup)
 
+                    # stack restore
                     mem.seek(stack_backup_address)
-                    mem.write(stack_backup)
+                    current_stack_backup = mem.read(injection_params.stack_backup_size)
+                    output_memory_block_data(injection_params, f"Stack backup location after shellcode execution (0x{stack_backup_address:08x})", current_stack_backup)
+
+                    #mem.seek(stack_backup_address)
+                    #mem.write(stack_backup)
+                    
+                    mem.seek(stack_backup_address)
+                    current_stack_backup = mem.read(injection_params.stack_backup_size)
+                    output_memory_block_data(injection_params, f"Stack backup location after memory restore (0x{stack_backup_address:08x})", current_stack_backup)
+                    
+                    # communication address restore
+                    
+                    mem.seek(communication_address)
+                    current_communication_address_backup = mem.read(injection_params.communication_address_backup_size)
+                    output_memory_block_data(injection_params, f"Communication address location after shellcode execution (0x{communication_address:08x})", current_communication_address_backup)
 
                     mem.seek(communication_address)
                     mem.write(communication_address_backup)
+                    
+                    mem.seek(communication_address)
+                    current_communication_address_backup = mem.read(injection_params.communication_address_backup_size)
+                    output_memory_block_data(injection_params, f"Communication address location after memory restore (0x{communication_address:08x})", current_communication_address_backup)
                         
     except KeyboardInterrupt as ki:
         log_warning(f"Operator cancelled the injection attempt", ansi=injection_params.ansi)

@@ -71,12 +71,13 @@ cleanup_and_return:
 	// cannot really de-allocate the r/x block because that is where this code is
 	
 	// restore registers
-	sub sp, r6, #0x4
+	//sub sp, r6, #0x4
 	// currently segfaulting here:
-	ldmia sp!, {r0-r12}
+	//ldmia sp!, {r0-r12}
+	ldmia sp!, {r0-r11}
 
 	// restore stack pointer
-	ldr r0, [pc]
+	//ldr r0, [pc]
 	b restoreStackPointer2
 	
 old_stack_pointer:

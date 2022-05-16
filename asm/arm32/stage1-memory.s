@@ -1,9 +1,11 @@
 .globl _start
 _start:
 	// Save registers
-	stmdb sp!,{r0-r12}
+	//stmdb sp!,{r0-r12}
+	stmdb sp!,{r0-r11}
 	//stmdb sp!,{lr}
-	add r6, sp, #0x4
+	//add r6, sp, #0x4
+	//sub sp, sp, #0x20
 	
 	b beginStager
 

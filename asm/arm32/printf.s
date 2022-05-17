@@ -1,14 +1,9 @@
-// BEGIN: example of calling a LIBC function from the asm code using template values
-	push {r12}
-	push {r11}
-	push {r10}
-	push {r6}
-	
+// test payload to call printf() from libc
 	mov r0, pc
 	b load_debug_message
 
 format_string:
-	.ascii "DEBUG: %s\0"
+	.ascii "DEBUG: '%s'\0"
 	.balign 4
 
 load_debug_message:
@@ -38,10 +33,4 @@ printf_offset:
 call_printf:
 	add r9, r9, r8
 	blx r9
-	pop {r6}
-	pop {r10}
-	pop {r11}
-	pop {r12}
-// END: example of calling a LIBC function from the asm code using template values
-
 SHELLCODE_SECTION_DELIMITER

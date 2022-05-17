@@ -84,7 +84,8 @@ begin_waiting1:
 	b begin_waiting2
 
 nanosleep_timespec:
-	.word 1
+	.word [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
+	.word [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
 	.balign 4
 
 begin_waiting2:

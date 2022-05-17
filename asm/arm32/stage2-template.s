@@ -34,7 +34,8 @@ begin_waiting1:
 	b begin_waiting2
 
 nanosleep_timespec:
-	.word 1
+	.word [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
+	.word [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
 	.balign 4
 
 begin_waiting2:
@@ -60,7 +61,15 @@ wait_for_script:
 
 cleanup_and_return:
 	
+	// save any necessary register values before running the inner payload
+	push {r11}
+	push {r10}
+	
 	[VARIABLE:SHELLCODE_SOURCE:VARIABLE]
+
+	// restore the register values now that the inner payload has finished
+	pop {r10}
+	pop {r11}
 
 	// de-allocate the mmapped r/w block
 	mov r7, #91             					@ SYS_MUNMAP
@@ -81,7 +90,7 @@ cleanup_and_return:
 	b restoreStackPointer2
 	
 old_stack_pointer:
-	.word [VARIABLE:RSP:VARIABLE]
+	.word [VARIABLE:STACK_POINTER:VARIABLE]
 	.balign 4
 
 restoreStackPointer2:	
@@ -89,11 +98,49 @@ restoreStackPointer2:
 	// load the stored instruction pointer value stored right after this instruction into the program counter register
 	ldr pc, [pc]
 
-old_rip:
-	.word [VARIABLE:RIP:VARIABLE]
+old_instruction_pointer:
+	.word [VARIABLE:INSTRUCTION_POINTER:VARIABLE]
 	.balign 4
 
-old_rip2:
-	.word [VARIABLE:RIP:VARIABLE]
+old_instruction_pointer2:
+	.word [VARIABLE:INSTRUCTION_POINTER:VARIABLE]
 	.balign 4
+
+// reusable functions for payloads to call
+
+// BEGIN: asminject_copy_bytes
+// very basic byte-copying function
+// r0 = source address
+// r1 = destination address
+// r2 = number of bytes to copy
+
+asminject_copy_bytes:
+	stmdb sp!, {r11,lr}
+	add r11, sp, #0x04
+	sub sp, sp, #0x20
+	
+	mov r3, #0x0
+	
+asminject_copy_bytes_loop:
+
+	ldrb r4, [r0, r3]
+	strb r4, [r1, r3]
+
+	// increment the counter
+	// as well as the source and destination addresses
+	add r3, r3, #0x1
+	//add r0, r0, #0x1
+	//add r1, r1, #0x1
+	// check to see if all bytes have been copied
+	cmp r2, r3
+	beq asminject_copy_bytes_done
+	b asminject_copy_bytes_loop
+	
+asminject_copy_bytes_done:
+
+	sub sp, r11, #0x04
+	ldmia sp!, {r11,pc}
+
+
+// END: asminject_copy_bytes
 

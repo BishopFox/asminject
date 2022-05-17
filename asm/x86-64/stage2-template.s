@@ -15,8 +15,8 @@ cld
 	# wait for the script to have restored memory, then proceed
 	// wait for value at communications address to be [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE] before proceeding
 	// store the sys_nanosleep timer data
-	mov rbx, 1
-	mov rcx, 1
+	mov rbx, [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
+	mov rcx, [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
 	push rbx
 	push rcx
 	mov r13, rsp
@@ -28,7 +28,7 @@ wait_for_script:
 	cmp eax, [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]
 	je cleanup_and_return
 	
-	// sleep 1 second
+	// sleep [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE] second(s)
 	mov rax, 35
 
 	push r15
@@ -91,12 +91,12 @@ cleanup_and_return:
 	pop rax
 	popf
 	
-	// reset RSP to the original value and jump to the original instruction location
-	mov rsp, [VARIABLE:RSP:VARIABLE]
-	jmp old_rip[rip]
+	// reset stack pointer to the original value and jump to the original instruction location
+	mov rsp, [VARIABLE:STACK_POINTER:VARIABLE]
+	jmp old_instruction_pointer[rip]
 	
-old_rip:
-	.quad [VARIABLE:RIP:VARIABLE]
+old_instruction_pointer:
+	.quad [VARIABLE:INSTRUCTION_POINTER:VARIABLE]
 
 [VARIABLE:SHELLCODE_DATA:VARIABLE]
 

@@ -1,9 +1,17 @@
 # asminject.py examples - ARM32 payloads
 
-{{TKTK: TOC}}
+* [Injecting Python code into a Python 3 process](#injecting-python-code-into-a-python-3-process)
+* [Injecting Python code into a Python 2 process](#injecting-python-code-into-a-python-2-process)
+* [Injecting PHP code into a PHP process](#injecting-php-code-into-a-php-process)
+* [Injecting Ruby code into a Ruby process](#injecting-ruby-code-into-a-ruby-process)
+* [Inject Meterpreter into an existing process](#inject-meterpreter-into-an-existing-process)
+* [Inject shellcode into a separate thread of an existing process](#inject-shellcode-into-a-separate-thread-of-an-existing-process)
+* [Inject a Linux shared library (.so) file into an existing process, like the original dlinject.py](#inject-a-linux-shared-library-so-file-into-an-existing-process-like-the-original-dlinjectpy)
+* [Inject a Linux shared library (.so) file into a new thread in an existing process](#inject-a-linux-shared-library-so-file-into-a-new-thread-in-an-existing-process)
+* [Create a world-readable copy of a file using only Linux syscalls](#create-a-world-readable-copy-of-a-file-using-only-linux-syscalls)
+* [Create a copy of a file using buffered read/write libc calls](#create-a-copy-of-a-file-using-buffered-read/write-libc-calls)
 
-
-## Injecting Python code into a Python 3 process:
+## Injecting Python code into a Python 3 process
 
 Terminal 1:
 
@@ -40,7 +48,7 @@ injected python code
 2022-05-16T22:18:17.547089 - Loop count 23
 ```
 
-## Injecting Python code into a Python 2 process:
+## Injecting Python code into a Python 2 process
 
 Terminal 1:
 
@@ -91,7 +99,7 @@ injected python code
 2022-05-16T22:11:35.054965 - Loop count 7
 ```
 
-## Injecting PHP code into a PHP process:
+## Injecting PHP code into a PHP process
 
 Terminal 1:
 
@@ -127,7 +135,7 @@ Injected PHP code
 2022-05-16T17:08:47-0700 - Loop count 8
 ```
 
-## Injecting Ruby code into a Ruby process:
+## Injecting Ruby code into a Ruby process
 
 Terminal 1:
 

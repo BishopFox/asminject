@@ -747,6 +747,11 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.16 (2022-05-17)
+
+* Implemented support for code fragment references in payloads to make more complex ARM32 payloads less unwieldy to write
+* Work in progress on remaining ARM32 payloads
+
 ### 0.15 (2022-05-16)
 
 * ARM32 `execute_python_code.s`, `execute_php_code.s`, `execute_ruby_code.s`, and `copy_file_using_syscalls.s` implemented.

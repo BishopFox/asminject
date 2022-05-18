@@ -1,3 +1,9 @@
+b execute_php_code_main
+
+// import reusable code fragments
+[FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
+
+execute_php_code_main:
 // load a pointer to the PHP code
 	mov r0, pc
 	b load_destination_address

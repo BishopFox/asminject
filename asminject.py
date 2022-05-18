@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.15
-Ben Lincoln, Bishop Fox, 2022-05-16
+v0.16
+Ben Lincoln, Bishop Fox, 2022-05-17
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -86,6 +86,10 @@ class asminject_parameters:
         self.sleep_time_waiting_for_syscalls = 0.1
         self.max_address_npic_suggestion = 0x00400000
         
+        # More than anyone will ever intentionally use
+        # But low enough that the script will time out in a reasonable amount of time if there's an infinite loop
+        self.max_fragment_recursion = 1000
+        
         # Making this slightly more than 1 second so that it should be impossible
         # For the stage/shellcode and the script to get stuck in a state where 
         # They're exactly out of sync
@@ -116,6 +120,7 @@ class asminject_parameters:
         self.custom_replacements = {}
         self.delete_temp_files = True
         self.freeze_dir = "/sys/fs/cgroup/freezer/" + secrets.token_bytes(8).hex()
+        self.fragment_directory_name = "fragments"
         
         self.asminject_pid = None
         self.asminject_priority = None
@@ -227,7 +232,60 @@ def assemble(source, injection_params, library_bases, replacements = {}):
     for lname in library_bases.keys():
         if injection_params.enable_debugging_output:
             log(f"Library base entry: '{lname}'", ansi=injection_params.ansi)
-            
+    
+    # Recursively replace any fragment references with actual file content
+    fragment_refs_found = True
+    recursion_count = 0
+    recursion_count_list = {}
+    while fragment_refs_found:
+        found_this_iteration = 0
+        fragment_placeholders = []
+        fragment_placeholders_matches = re.finditer(r'(\[FRAGMENT:)(.*?)(:FRAGMENT\])', formatted_source)
+        for match in fragment_placeholders_matches:
+            fragment_file_name = match.group(2)
+            if fragment_file_name in recursion_count_list.keys():
+                recursion_count_list[fragment_file_name] += 1
+            else:
+                recursion_count_list[fragment_file_name] = 1
+            if fragment_file_name not in fragment_placeholders:
+                if injection_params.enable_debugging_output:
+                    log(f"Found code fragment placeholder '{fragment_file_name}' in assembly code", ansi=injection_params.ansi)
+                fragment_placeholders.append(fragment_file_name)
+        for fragment_file_name in fragment_placeholders:
+            fragment_file_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, injection_params.fragment_directory_name, fragment_file_name)
+            if not os.path.isfile(fragment_file_path):
+                log_error(f"Could not find the assembly source code fragment '{fragment_file_path}' referenced in the payload", ansi=injection_params.ansi)
+                return None
+            try:
+                with open(fragment_file_path, "r") as fragment_source_file:
+                    fragment_source = fragment_source_file.read()
+                    string_to_replace = f"[FRAGMENT:{fragment_file_name}:FRAGMENT]"
+                    if injection_params.enable_debugging_output:
+                        log(f"Replacing '{string_to_replace}' with the content of file '{fragment_file_path}' in assembly code", ansi=injection_params.ansi)
+                    formatted_source = formatted_source.replace(string_to_replace, fragment_source)
+            except Exception as e:
+                log_error(f"Could not read assembly source code fragment '{fragment_file_path}' referenced in the payload: {e}", ansi=injection_params.ansi)
+                return None
+        if len(fragment_placeholders) == 0:
+            fragment_refs_found = False
+        else:
+            recursion_count += 1
+            if recursion_count > injection_params.max_fragment_recursion:
+                recursion_reference_string = ""
+                recursion_reference_keys = []
+                for rck in recursion_count_list.keys():
+                    if rck not in recursion_reference_keys:
+                        recursion_reference_keys.append(rck)
+                recursion_reference_keys.sort()
+                for ref_key in recursion_reference_keys:
+                    new_key_string = f"{ref_key}: {recursion_count_list:ref_key} references"
+                    if recursion_reference_string == "":
+                        recursion_reference_string = new_key_string
+                    else:
+                        recursion_reference_string = f"{recursion_reference_string}, {new_key_string}"
+                log_error(f"Reached maximum recursion count of {injection_params.max_fragment_recursion} while importing assembly code fragments. This is usually due to a reference loop, such as fragment A referencing fragment B, while fragment B also references fragment A. The fragment files with the highest counts in the following list are most likely responsible: {recursion_reference_string}", ansi=injection_params.ansi)
+                return None
+    
     for rname in replacements.keys():
         if injection_params.enable_debugging_output:
             log(f"Replacement key: '{rname}', value '{replacements[rname]}'", ansi=injection_params.ansi)  
@@ -929,6 +987,15 @@ if __name__ == "__main__":
         const=True, default=False,
         help="Prompt for input after restoring memory, but before signalling the shellcode to proceed")
     
+    # parser.add_argument("--do-not-deallocate", type=str, 
+        # help="Do not deallocate the read/write data block when the payload finishes")
+    
+    # parser.add_argument("--reuse-read-execute-address", type=str, 
+        # help="When injecting into a process that's already been injected into, use this existing block of memory for read/execute data instead of allocating a new one")
+
+    # parser.add_argument("--reuse-read-write-address", type=str, 
+        # help="When injecting into a process that's already been injected into, use this existing block of memory for read/write data instead of allocating a new one")
+
     parser.add_argument("--precompiled", type=str, 
         help="Path to a precompiled binary shellcode payload to embed and launch (requires use of execute_precompiled.s or execute_precompiled_threaded.s as the stage 2 payload)")
 

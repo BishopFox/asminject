@@ -1,152 +1,130 @@
-	// BEGIN: call LIBC fopen against the source file
-	push r14
-	push rbx
-	lea rax, sourcefile[rip]
-	lea rdi, sourcefile[rip]
-    lea rsi, read_only_string[rip]
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC_2.2.5:RELATIVEOFFSET]
-	call rbx
-    mov r13, rax          # store file descriptor in r13 rather than a variable to avoid attempts to write to executable memory
-	pop rbx
-	pop r14
-	// END: call LIBC fopen
-	
-	// BEGIN: call LIBC fopen against the destination file
-	push r14
-	push r13
-	push rbx
-	lea rax, destfile[rip]
-	lea rdi, destfile[rip]
-    lea rsi, write_only_string[rip]
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC_2.2.5:RELATIVEOFFSET]
-	call rbx
-    mov r10, rax          # store file descriptor in r10 rather than a variable to avoid attempts to write to executable memory
-	pop rbx
-	pop r13
-	pop r14
-	// END: call LIBC fopen
+// import reusable code fragments
+[FRAGMENT:asminject_libc_fopen.s:FRAGMENT]
+[FRAGMENT:asminject_libc_fread.s:FRAGMENT]
+[FRAGMENT:asminject_libc_fwrite.s:FRAGMENT]
+[FRAGMENT:asminject_libc_fclose.s:FRAGMENT]
 
-	// push rax onto the stack 8 times (= 64 bytes) to use as a copy buffer
-	// instead of using a variable defined in this file, because that would result in writing to executable memory
-	mov rax, 0
-	push rax
-	push rax
-	push rax
-	push rax
-	push rax
-	push rax
-	push rax
-	push rax
-	mov r15, rsp
+// load the address of the source file string into r0
+	mov r0, pc
+	b load_read_only_string
 
-copyLoop:
-
-	// BEGIN: call LIBC fread against the source file
-	push r15
-	push r14
-	push r13
-	push r10
-	push rbx
-	mov rcx, r13	# file descriptor
-	mov rdx, 64		# number of elements
-	mov esi, 1		# element size
-	mov rax, r15	# buffer
-	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fread@@GLIBC_2.2.5:RELATIVEOFFSET]
-	call rbx
-    mov r12, rax    # result
-	pop rbx
-	pop r10
-	pop r13
-	pop r14
-	pop r15
-	// END: call LIBC fread
-	
-	// if no bytes were read (usually end-of-file), processing is complete
-	cmp r12, 0
-	jle doneCopying
-	
-	// BEGIN: call LIBC fwrite against the destination file with the number of elements read by fread()
-	push r15
-	push r14
-	push r13
-	push r10
-	push rbx
-	mov rcx, r10	# file descriptor
-	mov rdx, r12	# number of elements
-	mov esi, 1		# element size
-	mov rax, r15	# buffer
-	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fwrite@@GLIBC_2.2.5:RELATIVEOFFSET]
-	call rbx
-    mov r12, rax    # result
-	pop rbx
-	pop r10
-	pop r13
-	pop r14
-	pop r15
-	// END: call LIBC fwrite
-
-	jmp copyLoop
-
-doneCopying:
-
-	// discard the buffer stack variables
-	pop rax
-	pop rax
-	pop rax
-	pop rax
-	pop rax
-	pop rax
-	pop rax
-	pop rax
-
-	// close file handles using fclose()
-	
-	// BEGIN: call LIBC fclose against the destination file with the number of elements read by fread()
-	push r15
-	push r14
-	push r13
-	push r10
-	push rbx
-	mov rax, r13	# file descriptor
-	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@GLIBC_2.2.5:RELATIVEOFFSET]
-	call rbx
-	pop rbx
-	pop r10
-	pop r13
-	pop r14
-	pop r15
-	// END: call LIBC fclose
-	
-	// BEGIN: call LIBC fclose against the destination file with the number of elements read by fread()
-	push r15
-	push r14
-	push r13
-	push r10
-	push rbx
-	mov rax, r10	# file descriptor
-	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@GLIBC_2.2.5:RELATIVEOFFSET]
-	call rbx
-	pop rbx
-	pop r10
-	pop r13
-	pop r14
-	pop r15
-	// END: call LIBC fclose
-
-SHELLCODE_SECTION_DELIMITER
-	
 sourcefile:
 	.ascii "[VARIABLE:sourcefile:VARIABLE]\0"
+	.balign 4
 
-destfile:
-	.ascii "[VARIABLE:destfile:VARIABLE]\0"
+// load the address of the read-only mode string into r1
+load_read_only_string:
+	mov r1, pc
+	b call_asminject_libc_fopen_source
 
 read_only_string:
 	.ascii "r\0"
+	.balign 4
+	
+call_asminject_libc_fopen_source:
+	push {r11}
+	bl asminject_libc_fopen
+	pop {r11}
+
+// copy the source file handle into r9 for use throughout the rest of the code
+	mov r9, r0
+
+// load the address of the destination file string into r0
+	mov r0, pc
+	b load_write_only_string
+
+destfile:
+	.ascii "[VARIABLE:destfile:VARIABLE]\0"
+	.balign 4
+
+// load the address of the write-only mode string into r1
+load_write_only_string:
+	mov r1, pc
+	b call_asminject_libc_fopen_destination
 
 write_only_string:
 	.ascii "w\0"
+	.balign 4
+	
+call_asminject_libc_fopen_destination:
+	push {r11}
+	push {r9}
+	bl asminject_libc_fopen
+	pop {r9}
+	pop {r11}
+
+// copy the destination file handle into r8 for use throughout the rest of the code
+	mov r8, r0
+
+// load the address of the read-write memory block
+	ldr r0, [pc]
+	b continue_preparing_copy
+
+read_write_address:
+	.word [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
+	.balign 4
+
+continue_preparing_copy:
+	mov r7, r0		@ keep read_write address
+	add r7, #0x200	@ location of fread-fwrite copy buffer
+
+copyLoop:
+	
+// call fread
+	mov r0, r7		@ buffer
+	mov r1, #1		@ element size (1 byte)
+	mov r2, #256	@ max elements to read/write (256)
+	mov r3, r9		@ set file handle to source file
+	push {r11}
+	push {r9}
+	push {r8}
+	push {r7}
+	bl asminject_libc_fread
+	pop {r7}
+	pop {r8}
+	pop {r9}
+	pop {r11}
+	cmp r0, #0x0
+	beq doneCopying
+	mov r0, r7		@ buffer
+	mov r1, #1		@ element size (1 byte)
+	mov r2, #256	@ max elements to read/write (256)
+	mov r3, r8
+	push {r11}
+	push {r9}
+	push {r8}
+	push {r7}
+	bl asminject_libc_fwrite
+	pop {r7}
+	pop {r8}
+	pop {r9}
+	pop {r11}
+	b copyLoop
+
+doneCopying:
+
+// close destination file handle using fclose()
+	mov r0, r8
+	push {r11}
+	push {r9}
+	push {r8}
+	push {r7}
+	bl asminject_libc_fclose
+	pop {r7}
+	pop {r8}
+	pop {r9}
+	pop {r11}
+
+// close source file handle using fclose()
+	mov r0, r9
+	push {r11}
+	push {r9}
+	push {r8}
+	push {r7}
+	bl asminject_libc_fclose
+	pop {r7}
+	pop {r8}
+	pop {r9}
+	pop {r11}
+
+SHELLCODE_SECTION_DELIMITER

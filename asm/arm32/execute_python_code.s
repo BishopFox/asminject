@@ -1,3 +1,9 @@
+b execute_python_code_main
+
+// import reusable code fragments
+[FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
+
+execute_python_code_main:
 // load a pointer to the Python code
 	mov r0, pc
 	b load_destination_address

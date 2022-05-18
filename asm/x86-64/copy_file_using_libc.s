@@ -1,4 +1,5 @@
 	// BEGIN: call LIBC fopen against the source file
+	push r11
 	push r14
 	push rbx
 	lea rax, sourcefile[rip]
@@ -9,9 +10,11 @@
     mov r13, rax          # store file descriptor in r13 rather than a variable to avoid attempts to write to executable memory
 	pop rbx
 	pop r14
+	pop r11
 	// END: call LIBC fopen
 	
 	// BEGIN: call LIBC fopen against the destination file
+	push r11
 	push r14
 	push r13
 	push rbx
@@ -24,20 +27,21 @@
 	pop rbx
 	pop r13
 	pop r14
+	pop r11
 	// END: call LIBC fopen
 
 	// push rax onto the stack 8 times (= 64 bytes) to use as a copy buffer
 	// instead of using a variable defined in this file, because that would result in writing to executable memory
-	mov rax, 0
-	push rax
-	push rax
-	push rax
-	push rax
-	push rax
-	push rax
-	push rax
-	push rax
-	mov r15, rsp
+	# mov rax, 0
+	# push rax
+	# push rax
+	# push rax
+	# push rax
+	# push rax
+	# push rax
+	# push rax
+	# push rax
+	# mov r15, rsp
 
 copyLoop:
 
@@ -45,18 +49,22 @@ copyLoop:
 	push r15
 	push r14
 	push r13
+	push r11
 	push r10
 	push rbx
 	mov rcx, r13	# file descriptor
-	mov rdx, 64		# number of elements
+	//mov rdx, 64		# number of elements
+	mov rdx, 256		# number of elements
 	mov esi, 1		# element size
-	mov rax, r15	# buffer
+	mov rax, r11	# buffer - read/write area allocated earlier
+	add rax, 0x1000	# don't overwrite anything else that's in it
 	mov rdi, rax
     mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fread@@.+:RELATIVEOFFSET]
 	call rbx
     mov r12, rax    # result
 	pop rbx
 	pop r10
+	pop r11
 	pop r13
 	pop r14
 	pop r15
@@ -70,18 +78,21 @@ copyLoop:
 	push r15
 	push r14
 	push r13
+	push r11
 	push r10
 	push rbx
 	mov rcx, r10	# file descriptor
 	mov rdx, r12	# number of elements
 	mov esi, 1		# element size
-	mov rax, r15	# buffer
+	mov rax, r11	# buffer
+	add rax, 0x1000	# don't overwrite anything else that's in it
 	mov rdi, rax
     mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fwrite@@.+:RELATIVEOFFSET]
 	call rbx
     mov r12, rax    # result
 	pop rbx
 	pop r10
+	pop r11
 	pop r13
 	pop r14
 	pop r15
@@ -91,15 +102,15 @@ copyLoop:
 
 doneCopying:
 
-	// discard the buffer stack variables
-	pop rax
-	pop rax
-	pop rax
-	pop rax
-	pop rax
-	pop rax
-	pop rax
-	pop rax
+	# // discard the buffer stack variables
+	# pop rax
+	# pop rax
+	# pop rax
+	# pop rax
+	# pop rax
+	# pop rax
+	# pop rax
+	# pop rax
 
 	// close file handles using fclose()
 	
@@ -141,12 +152,16 @@ SHELLCODE_SECTION_DELIMITER
 	
 sourcefile:
 	.ascii "[VARIABLE:sourcefile:VARIABLE]\0"
+	.balign 8
 
 destfile:
 	.ascii "[VARIABLE:destfile:VARIABLE]\0"
+	.balign 8
 
 read_only_string:
 	.ascii "r\0"
+	.balign 8
 
 write_only_string:
 	.ascii "w\0"
+	.balign 8

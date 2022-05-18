@@ -175,6 +175,7 @@ class asminject_parameters:
             self.register_size = 8
             self.register_size_format_string = 'Q'
             # 8 bytes * 16 registers
+            self.stage_sleep_seconds = 2
             self.stack_backup_size = 8 * 16
             self.instruction_pointer_register_name = "RIP"
             self.stack_pointer_register_name = "RSP"
@@ -308,6 +309,7 @@ def assemble(source, injection_params, library_bases, replacements = {}):
                 log(f"Using '{lname}' for library base address regex placeholder '{lname_regex}' in assembly code", ansi=injection_params.ansi)
                 replacements[f"[BASEADDRESS:{lname_regex}:BASEADDRESS]"] = f"{hex(library_bases[lname]['base'])}"
                 found_library_match = True
+                break
         if not found_library_match:
             log_error(f"Could not find a match for the library base address regular expression '{lname_regex}' in the list of libraries loaded by the target process. Make sure you've targeted the correct process, and that it is compatible with the selected payload.", ansi=injection_params.ansi)
             return None
@@ -332,6 +334,7 @@ def assemble(source, injection_params, library_bases, replacements = {}):
                 log(f"Using '{r_offset}' for relative offset regex placeholder '{r_offset_regex}' in assembly code", ansi=injection_params.ansi)
                 replacements[f"[RELATIVEOFFSET:{r_offset_regex}:RELATIVEOFFSET]"] = f"{hex(injection_params.relative_offsets[r_offset])}"
                 found_offset_match = True
+                break
         if not found_offset_match:
             log_error(f"Could not find a match for the relative offset regular expression '{r_offset_regex}' in the list of relative offsets provided to asminject.py. Make sure you've targeted the correct process, and provided accurate lists of any necessary relative offsets for the process.", ansi=injection_params.ansi)
             return None

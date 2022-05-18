@@ -18,8 +18,8 @@
 SHELLCODE_SECTION_DELIMITER
 
 format_string:
-	.ascii "DEBUG: %s\0"
+	.ascii "DEBUG: %s\n\0"
 
 dmsg:
-	.ascii "ZYXWVUTSRQPONMLKJIHG\0"
+	.ascii "[VARIABLE:message:VARIABLE]\0"
 

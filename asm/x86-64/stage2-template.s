@@ -97,21 +97,27 @@ cleanup_and_return:
 	
 old_instruction_pointer:
 	.quad [VARIABLE:INSTRUCTION_POINTER:VARIABLE]
+	.balign 8
 
 [VARIABLE:SHELLCODE_DATA:VARIABLE]
 
 read_write_address:
 	.quad [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
+	.balign 8
 
 existing_stack_backup_address:
 	.quad [VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]
+	.balign 8
 
 new_stack_address:
 	.quad [VARIABLE:NEW_STACK_ADDRESS:VARIABLE]
+	.balign 8
 
 arbitrary_read_write_data_address:
 	.quad [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
+	.balign 8
 
 read_write_address_end:
 	.quad [VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]
+	.balign 8
 

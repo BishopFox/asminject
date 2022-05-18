@@ -7,9 +7,9 @@
 	push r14
 	lea rdi, library_path[rip]
     mov rsi, 2              # mode (RTLD_NOW)
-	mov rdx, [BASEADDRESS:.+/libdl-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:dlopen@@GLIBC_2.2.5:RELATIVEOFFSET]
+	mov rdx, [BASEADDRESS:.+/libdl-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:dlopen@@GLIBC.+:RELATIVEOFFSET]
 	xor rcx, rcx
-    mov r9, [BASEADDRESS:.+/libdl-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:dlopen@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov r9, rdx
 	call r9
 	pop r14
 	// END: call dlopen()

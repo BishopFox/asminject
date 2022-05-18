@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.16
-Ben Lincoln, Bishop Fox, 2022-05-17
+v0.17
+Ben Lincoln, Bishop Fox, 2022-05-18
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -290,28 +290,52 @@ def assemble(source, injection_params, library_bases, replacements = {}):
         if injection_params.enable_debugging_output:
             log(f"Replacement key: '{rname}', value '{replacements[rname]}'", ansi=injection_params.ansi)  
     
+    # Replace base address regex matches
     lname_placeholders = []
     lname_placeholders_matches = re.finditer(r'(\[BASEADDRESS:)(.*?)(:BASEADDRESS\])', formatted_source)
     for match in lname_placeholders_matches:
         placeholder_regex = match.group(2)
         if placeholder_regex not in lname_placeholders:
             if injection_params.enable_debugging_output:
-                log(f"Found regex placeholder '{placeholder_regex}' in assembly code", ansi=injection_params.ansi)
+                log(f"Found library base address regex placeholder '{placeholder_regex}' in assembly code", ansi=injection_params.ansi)
             lname_placeholders.append(placeholder_regex)
     for lname_regex in lname_placeholders:
         found_library_match = False
         for lname in library_bases.keys():
             if injection_params.enable_debugging_output:
-                log(f"Checking '{lname}' against regex placeholder '{lname_regex}' from assembly code", ansi=injection_params.ansi)
+                log(f"Checking '{lname}' against library base address regex placeholder '{lname_regex}' from assembly code", ansi=injection_params.ansi)
             if re.search(lname_regex, lname):
-                log(f"Using '{lname}' for regex placeholder '{lname_regex}' in assembly code", ansi=injection_params.ansi)
+                log(f"Using '{lname}' for library base address regex placeholder '{lname_regex}' in assembly code", ansi=injection_params.ansi)
                 replacements[f"[BASEADDRESS:{lname_regex}:BASEADDRESS]"] = f"{hex(library_bases[lname]['base'])}"
                 found_library_match = True
         if not found_library_match:
-            log_error(f"Could not find a match for the regular expression '{lname_regex}' in the list of libraries loaded by the target process. Make sure you've targeted the correct process, and that it is compatible with the selected payload.", ansi=injection_params.ansi)
+            log_error(f"Could not find a match for the library base address regular expression '{lname_regex}' in the list of libraries loaded by the target process. Make sure you've targeted the correct process, and that it is compatible with the selected payload.", ansi=injection_params.ansi)
             return None
-    for fname in injection_params.relative_offsets.keys():
-        replacements[f"[RELATIVEOFFSET:{fname}:RELATIVEOFFSET]"] = f"{hex(injection_params.relative_offsets[fname])}"    
+    #for fname in injection_params.relative_offsets.keys():
+    #    replacements[f"[RELATIVEOFFSET:{fname}:RELATIVEOFFSET]"] = f"{hex(injection_params.relative_offsets[fname])}"   
+    
+    # Replace relative offset regex matches
+    r_offset_placeholders = []
+    r_offset_placeholders_matches = re.finditer(r'(\[RELATIVEOFFSET:)(.*?)(:RELATIVEOFFSET\])', formatted_source)
+    for match in r_offset_placeholders_matches:
+        r_offset_placeholder_regex = match.group(2)
+        if r_offset_placeholder_regex not in r_offset_placeholders:
+            if injection_params.enable_debugging_output:
+                log(f"Found relative offset regex placeholder '{r_offset_placeholder_regex}' in assembly code", ansi=injection_params.ansi)
+            r_offset_placeholders.append(r_offset_placeholder_regex)
+    for r_offset_regex in r_offset_placeholders:
+        found_offset_match = False
+        for r_offset in injection_params.relative_offsets.keys():
+            if injection_params.enable_debugging_output:
+                log(f"Checking '{r_offset}' against relative offset regex placeholder '{r_offset_regex}' from assembly code", ansi=injection_params.ansi)
+            if re.search(f"^{r_offset_regex}$", r_offset):
+                log(f"Using '{r_offset}' for relative offset regex placeholder '{r_offset_regex}' in assembly code", ansi=injection_params.ansi)
+                replacements[f"[RELATIVEOFFSET:{r_offset_regex}:RELATIVEOFFSET]"] = f"{hex(injection_params.relative_offsets[r_offset])}"
+                found_offset_match = True
+        if not found_offset_match:
+            log_error(f"Could not find a match for the relative offset regular expression '{r_offset_regex}' in the list of relative offsets provided to asminject.py. Make sure you've targeted the correct process, and provided accurate lists of any necessary relative offsets for the process.", ansi=injection_params.ansi)
+            return None
+
 
     for search_text in replacements.keys():
         formatted_source = formatted_source.replace(search_text, replacements[search_text])

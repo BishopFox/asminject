@@ -1,9 +1,12 @@
+b copy_file_using_libc_main
+
 // import reusable code fragments
 [FRAGMENT:asminject_libc_fopen.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fread.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fwrite.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fclose.s:FRAGMENT]
 
+copy_file_using_libc_main:
 // load the address of the source file string into r0
 	mov r0, pc
 	b load_read_only_string

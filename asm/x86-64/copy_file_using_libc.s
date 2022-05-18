@@ -4,7 +4,7 @@
 	lea rax, sourcefile[rip]
 	lea rdi, sourcefile[rip]
     lea rsi, read_only_string[rip]
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC.+:RELATIVEOFFSET]
 	call rbx
     mov r13, rax          # store file descriptor in r13 rather than a variable to avoid attempts to write to executable memory
 	pop rbx
@@ -18,7 +18,7 @@
 	lea rax, destfile[rip]
 	lea rdi, destfile[rip]
     lea rsi, write_only_string[rip]
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC.+:RELATIVEOFFSET]
 	call rbx
     mov r10, rax          # store file descriptor in r10 rather than a variable to avoid attempts to write to executable memory
 	pop rbx
@@ -52,7 +52,7 @@ copyLoop:
 	mov esi, 1		# element size
 	mov rax, r15	# buffer
 	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fread@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fread@@.+:RELATIVEOFFSET]
 	call rbx
     mov r12, rax    # result
 	pop rbx
@@ -77,7 +77,7 @@ copyLoop:
 	mov esi, 1		# element size
 	mov rax, r15	# buffer
 	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fwrite@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fwrite@@.+:RELATIVEOFFSET]
 	call rbx
     mov r12, rax    # result
 	pop rbx
@@ -111,7 +111,7 @@ doneCopying:
 	push rbx
 	mov rax, r13	# file descriptor
 	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@.+:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	pop r10
@@ -128,7 +128,7 @@ doneCopying:
 	push rbx
 	mov rax, r10	# file descriptor
 	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@GLIBC_2.2.5:RELATIVEOFFSET]
+    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@.+:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	pop r10

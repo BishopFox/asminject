@@ -19,6 +19,8 @@ int func1(char *arg1, char *arg2, char *arg3, char *arg4, char *arg5, char *arg6
 	printf(formatString, 6, arg6);
 	printf(formatString, 7, arg7);
 	printf(formatString, 8, arg8);
+	
+	return 1;
 }
 
 int main() {

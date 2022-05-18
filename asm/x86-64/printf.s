@@ -6,7 +6,7 @@
 	lea rdi, format_string[rip]
 	xor rax, rax
 	xor eax, eax
-	movabsq rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC_2.2.5:RELATIVEOFFSET]
+	movabsq rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC.+:RELATIVEOFFSET]
 	call rbx
 	pop rbx
 	pop rax

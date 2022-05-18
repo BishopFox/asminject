@@ -3,19 +3,24 @@
 # instead of the private _dl_open function that some versions of ld
 # sort of exported
 
-	// BEGIN: call dlopen() against the specified library
-	push r14
-	lea rdi, library_path[rip]
-    mov rsi, 2              # mode (RTLD_NOW)
-	mov rdx, [BASEADDRESS:.+/libdl-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:dlopen@@GLIBC_2.2.5:RELATIVEOFFSET]
-	xor rcx, rcx
-    mov r9, [BASEADDRESS:.+/libdl-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:dlopen@@GLIBC_2.2.5:RELATIVEOFFSET]
-	call r9
-	pop r14
-	// END: call dlopen()
+b dlinject_main
+// import reusable code fragments
+[FRAGMENT:asminject_libdl_dlopen.s:FRAGMENT]
 
-SHELLCODE_SECTION_DELIMITER
-	
+dlinject_main:	
+
+	mov r0, pc
+	b call_dlopen
+
 library_path:
 	.ascii "[VARIABLE:librarypath:VARIABLE]\0"
+	.balign 4
+
+call_dlopen:
+	push {r1}
+	mov r1, #0x2@				@ mode (RTLD_NOW)
+	bl asminject_libdl_dlopen
+	pop {r1}
+
+SHELLCODE_SECTION_DELIMITER
 

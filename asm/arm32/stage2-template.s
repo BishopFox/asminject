@@ -81,8 +81,6 @@ cleanup_and_return:
 	
 	// restore registers
 	//sub sp, r6, #0x4
-	// currently segfaulting here:
-	//ldmia sp!, {r0-r12}
 	ldmia sp!, {r0-r11}
 
 	// restore stack pointer
@@ -105,3 +103,5 @@ old_instruction_pointer:
 old_instruction_pointer2:
 	.word [VARIABLE:INSTRUCTION_POINTER:VARIABLE]
 	.balign 4
+
+[VARIABLE:SHELLCODE_DATA:VARIABLE]

@@ -3,7 +3,7 @@
 # to be terminated after the shellcode executes
 # On the positive side, no library calls are necessary
 
-jmp [VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE]
+b [VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE]
 
 [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]:
 
@@ -14,4 +14,4 @@ SHELLCODE_SECTION_DELIMITER
 
 jump_back_from_shellcode:
 
-jmp [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]
+b [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]

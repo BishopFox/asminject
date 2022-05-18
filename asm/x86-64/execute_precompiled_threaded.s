@@ -14,7 +14,7 @@ mov rdx, rax
 mov rsi, 0
 mov rax, arbitrary_read_write_data_address[rip]
 mov rdi, rax
-mov r9, [BASEADDRESS:.+/libpthread-[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:pthread_create@@GLIBC_2.2.5:RELATIVEOFFSET]
+mov r9, [BASEADDRESS:.+/libpthread-[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:pthread_create@@GLIBC.+:RELATIVEOFFSET]
 call r9
 
 [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]:

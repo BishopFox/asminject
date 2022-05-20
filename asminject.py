@@ -806,9 +806,9 @@ def asminject(injection_params):
                     code_backup = mem.read(len(stage1))
 
                     # back up the part of the stack that the shellcode will clobber
-                    stack_backup_address = stack_pointer - injection_params.stack_backup_size
-                    mem.seek(stack_backup_address)
-                    stack_backup = mem.read(injection_params.stack_backup_size)
+                    #stack_backup_address = stack_pointer - injection_params.stack_backup_size
+                    #mem.seek(stack_backup_address)
+                    #stack_backup = mem.read(injection_params.stack_backup_size)
                     #output_memory_block_data(injection_params, f"Stack backup ({hex(stack_backup_address)})", stack_backup)
                     
                     
@@ -985,6 +985,11 @@ if __name__ == "__main__":
               and the priority of asminject.py to the highest possible value. \
               'none' leaves the target process running as-is and is likely to cause race conditions.")
     
+    # parser.add_argument("--inject-method",
+        # choices=["wait-syscall", "overwrite-specific"], default="wait-syscall",
+        # help="Code-injection technique to use: wait for a syscall and overwrite the return address (like dlinject.py), or pre-emptively overwrite a specific function \
+              # Default: wait-syscall.")
+    
     parser.add_argument("--arch",
         #choices=["x86-32", "x86-64", "arm32", "arm64"], default="x86-64",
         choices=["x86-64", "arm32"], default="x86-64",
@@ -1025,6 +1030,10 @@ if __name__ == "__main__":
 
     parser.add_argument("--precompiled", type=str, 
         help="Path to a precompiled binary shellcode payload to embed and launch (requires use of execute_precompiled.s or execute_precompiled_threaded.s as the stage 2 payload)")
+
+    # parser.add_argument("--obfuscate", type=str2bool, nargs='?',
+        # const=True, default=False,
+        # help="Enable code obfuscation")
 
     parser.add_argument("--preserve-temp-files", type=str2bool, nargs='?',
         const=True, default=False,

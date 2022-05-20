@@ -3,7 +3,7 @@
 	b load_debug_message
 
 format_string:
-	.ascii "DEBUG: '%s'\0"
+	.ascii "DEBUG: '%s'\n\0"
 	.balign 4
 
 load_debug_message:

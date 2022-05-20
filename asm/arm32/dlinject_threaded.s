@@ -6,6 +6,7 @@ b dlinject_threaded_main
 // import reusable code fragments
 [FRAGMENT:asminject_libdl_dlopen.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
+[FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
 
 load_dlinject_wrapper_address:
 	mov r2, pc
@@ -24,6 +25,8 @@ call_dlopen:
 	mov r1, #0x2@				@ mode (RTLD_NOW)
 	bl asminject_libdl_dlopen
 	pop {r1}
+	mov r0, #0x0	@ pthread_exit return value NULL
+	bl asminject_libpthread_pthread_exit
 
 call_pthread_create:
 	bl asminject_libpthread_pthread_create

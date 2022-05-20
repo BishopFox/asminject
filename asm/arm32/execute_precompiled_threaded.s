@@ -11,6 +11,8 @@
 b execute_precompiled_threaded_main
 // import reusable code fragments
 [FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
+[FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
+[FRAGMENT:asminject_nanosleep.s:FRAGMENT]
 
 execute_precompiled_threaded_main:
 // load the arbitrary read/write address into r0
@@ -34,6 +36,14 @@ load_shellcode_address:
 	b call_pthread_create
 
 [VARIABLE:INLINE_SHELLCODE:VARIABLE]
+
+	//mov r0, #0x0	@ pthread_exit return value NULL
+	//bl asminject_libpthread_pthread_exit
+loop_forever:
+	mov r0, #0x10
+	mov r1, #0x10
+	bl asminject_nanosleep
+	b loop_forever
 
 jump_back_from_shellcode:
 

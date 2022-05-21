@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.17
-Ben Lincoln, Bishop Fox, 2022-05-18
+v0.18
+Ben Lincoln, Bishop Fox, 2022-05-20
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -70,9 +70,12 @@ class asminject_parameters:
         self.new_stack_location_offset = 1024
         self.arbitrary_read_write_data_size = 2048
         self.arbitrary_read_write_data_location_offset = 0
+        # When allocating memory, use blocks evenly divisible by this amount:
+        self.allocation_unit_size = 0x1000
         # Should probably validate that this is big enough to hold everything
         self.stage2_size = 0x8000
-        # Should probably validate that this is big enough to hold everything
+        # Should probably validate that these are big enough to hold everything
+        self.read_execute_block_size = 0x8000
         self.read_write_block_size = 0x8000
         
         # number of seconds the stage 1 and stage 2 code should sleep
@@ -144,6 +147,16 @@ class asminject_parameters:
         self.instruction_pointer_register_name = "RIP"
         self.stack_pointer_register_name = "RSP"
         
+        # deallocate the r/w memory allocated by stage 1 when stage 2 is about to exit
+        # haven't come up with a way to deallocate the r/x memory
+        self.deallocate_memory = True
+        # If these values are not None, then stage 1 will use the specified locations 
+        # for read/write and/or read/execute purposes
+        # to avoid repeated allocate/deallocate operations and memory leak if injecting
+        # into the same process repeatedly
+        self.existing_read_write_address = None
+        self.existing_read_execute_address = None
+        
     def set_dynamic_process_info_vars(self):
         self.target_process = psutil.Process(self.pid)
         self.asminject_pid = os.getpid()
@@ -212,7 +225,7 @@ def ansi_color(name):
 
 def log(msg, color="blue", symbol="*", ansi=True):
     if ansi:
-        print(f"[{ansi_color(color)}{symbol}{ansi_color('default')}] {msg}")
+        print(f"{ansi_color(color)}[{symbol}]{ansi_color('default')} {msg}")
     else:
         print(f"[{symbol}] {msg}")
 
@@ -221,7 +234,7 @@ def log_success(msg, ansi=True):
     log(msg, "green", "+", ansi)
 
 def log_warning(msg, ansi=True):
-    log(msg, "orange", "*", ansi)
+    log(msg, "orange", "-", ansi)
 
 def log_error(msg, ansi=True):
     log(msg, "red", "!", ansi)
@@ -303,8 +316,8 @@ def assemble(source, injection_params, library_bases, replacements = {}):
     for lname_regex in lname_placeholders:
         found_library_match = False
         for lname in library_bases.keys():
-            if injection_params.enable_debugging_output:
-                log(f"Checking '{lname}' against library base address regex placeholder '{lname_regex}' from assembly code", ansi=injection_params.ansi)
+            #if injection_params.enable_debugging_output:
+            #    log(f"Checking '{lname}' against library base address regex placeholder '{lname_regex}' from assembly code", ansi=injection_params.ansi)
             if re.search(lname_regex, lname):
                 log(f"Using '{lname}' for library base address regex placeholder '{lname_regex}' in assembly code", ansi=injection_params.ansi)
                 replacements[f"[BASEADDRESS:{lname_regex}:BASEADDRESS]"] = f"{hex(library_bases[lname]['base'])}"
@@ -328,8 +341,8 @@ def assemble(source, injection_params, library_bases, replacements = {}):
     for r_offset_regex in r_offset_placeholders:
         found_offset_match = False
         for r_offset in injection_params.relative_offsets.keys():
-            if injection_params.enable_debugging_output:
-                log(f"Checking '{r_offset}' against relative offset regex placeholder '{r_offset_regex}' from assembly code", ansi=injection_params.ansi)
+            #if injection_params.enable_debugging_output:
+            #    log(f"Checking '{r_offset}' against relative offset regex placeholder '{r_offset_regex}' from assembly code", ansi=injection_params.ansi)
             if re.search(f"^{r_offset_regex}$", r_offset):
                 log(f"Using '{r_offset}' for relative offset regex placeholder '{r_offset_regex}' in assembly code", ansi=injection_params.ansi)
                 replacements[f"[RELATIVEOFFSET:{r_offset_regex}:RELATIVEOFFSET]"] = f"{hex(injection_params.relative_offsets[r_offset])}"
@@ -635,16 +648,18 @@ def asminject(injection_params):
     stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.cpu_state_size}"
     stage2_replacements['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{injection_params.stage_sleep_seconds}"
     stage2_replacements['[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]'] = f"{injection_params.read_write_block_size}"
+    stage2_replacements['[VARIABLE:READ_EXECUTE_BLOCK_SIZE:VARIABLE]'] = f"{injection_params.read_execute_block_size}"
     #stage2_replacements['[VARIABLE:SHELLCODE_SECTION_DELIMITER:VARIABLE]'] = f"{injection_params.shellcode_section_delimiter}"
     stage2_replacements['[VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.precompiled_shellcode_label}"
     stage2_replacements['[VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.post_shellcode_label}"
     # these values are placeholders - real values will be determined by result of stage 1
     stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_memory_restored}"
-    stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{injection_params.stage2_size}"
+    #stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{injection_params.stage2_size}"
     stage2_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(communication_address-injection_params.stack_backup_size)}"
     stage2_replacements['[VARIABLE:INSTRUCTION_POINTER:VARIABLE]'] = f"{communication_address}"
     stage2_replacements['[VARIABLE:STACK_POINTER:VARIABLE]'] = f"{communication_address}"
     stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    stage2_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{communication_address}"
     stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{communication_address}"
     stage2_replacements['[VARIABLE:NEW_STACK_ADDRESS:VARIABLE]'] = f"{communication_address}"
     stage2_replacements['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{communication_address}"
@@ -658,6 +673,12 @@ def asminject(injection_params):
     except Exception as e:
         log_error(f"Couldn't read the stage 2 template source code file '{stage2_template_source_path}': {e}", ansi=injection_params.ansi)
         sys.exit(1)
+    
+    if injection_params.deallocate_memory:
+        stage2_source_code = stage2_source_code.replace("[DEALLOCATE_MEMORY]", "[FRAGMENT:stage2-deallocate.s:FRAGMENT]")
+    else:
+        log_warning(f"Memory allocated by the staging code will not be deallocated after the payload executes", ansi=injection_params.ansi)
+        stage2_source_code = stage2_source_code.replace("[DEALLOCATE_MEMORY]", "")
     
     try:
         with open(injection_params.asm_path, "r") as shellcode_source_code_file:
@@ -697,6 +718,26 @@ def asminject(injection_params):
 
     log("Validating ability to assemble stage 2 code", ansi=injection_params.ansi)
     stage2 = assemble(stage2_source_code, injection_params, library_bases, replacements=stage2_replacements)
+    
+    # make sure that the read/execute block will be big enough to hold the payload
+    if not stage2:
+        log_error(f"Failed to assemble the selected payload. Rerun with --debug for additional information.", ansi=injection_params.ansi)
+        sys.exit(1)
+        
+    stage2_real_size = len(stage2)
+    
+    if injection_params.read_execute_block_size < stage2_real_size:
+        existing_rx_block_size = injection_params.read_execute_block_size
+        injection_params.read_execute_block_size = stage2_real_size
+        if (injection_params.read_execute_block_size % injection_params.allocation_unit_size) > 0:
+            while (injection_params.read_execute_block_size % injection_params.allocation_unit_size) > 0:
+                injection_params.read_execute_block_size += 1
+        injection_params.stage2_size = injection_params.read_execute_block_size
+        if injection_params.existing_read_execute_address:
+            log_error(f"The selected payload is too large to fit into the existing read/execute block. It would require a block size of {hex(injection_params.read_execute_block_size)} bytes, but the existing block is only {hex(existing_rx_block_size)} bytes", ansi=injection_params.ansi)
+            sys.exit(1)
+        else:
+            log_warning(f"Increased read/execute block size to {hex(injection_params.read_execute_block_size)} due to the size of the payload", ansi=injection_params.ansi)
                            
     if not stage2:
         log_error(f"Validation assembly of stage 2 failed. Please verify that all required parameters and offset lists have been provided. Rerun with --debug for additional information.'", ansi=injection_params.ansi)
@@ -753,6 +794,7 @@ def asminject(injection_params):
     stack_backup = b''
     code_backup = b''
     communication_address_backup = b''
+    current_state = None
     
     continue_executing = True
     try:
@@ -777,6 +819,10 @@ def asminject(injection_params):
             log(f"Using: {hex(injection_params.state_shellcode_written)} for 'shellcode written' state value", ansi=injection_params.ansi)
             #log(f"Using: {hex(injection_params.state_ready_for_memory_restore)} for 'ready for memory restore' state value", ansi=injection_params.ansi)
             
+            stage_1_code = ""
+            with open(stage1_path, "r") as stage1_code:
+                stage_1_code = stage1_code.read()
+            
             stage1_replacements = {}
             stage1_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
             stage1_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(stack_pointer - injection_params.stack_backup_size)}"
@@ -784,16 +830,27 @@ def asminject(injection_params):
             stage1_replacements['[VARIABLE:STATE_READY_FOR_SHELLCODE_WRITE:VARIABLE]'] = f"{injection_params.state_ready_for_shellcode_write}"
             stage1_replacements['[VARIABLE:STATE_SHELLCODE_WRITTEN:VARIABLE]'] = f"{injection_params.state_shellcode_written}"
             stage1_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_ready_for_memory_restore}"
-            stage1_replacements['[VARIABLE:STAGE2_SIZE:VARIABLE]'] = f"{injection_params.stage2_size}"
+            stage1_replacements['[VARIABLE:READ_EXECUTE_BLOCK_SIZE:VARIABLE]'] = f"{injection_params.read_execute_block_size}"
             stage1_replacements['[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]'] = f"{injection_params.read_write_block_size}"
             stage1_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.cpu_state_size}"
             stage1_replacements['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{injection_params.stage_sleep_seconds}"
             stage1_replacements['[VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]'] = f"{injection_params.existing_stack_backup_location_offset}"
-            
             stage1_replacements['[VARIABLE:NEW_STACK_LOCATION_OFFSET:VARIABLE]'] = f"{injection_params.cpu_state_size + injection_params.existing_stack_backup_location_size + injection_params.new_stack_location_offset}"
+            if injection_params.existing_read_execute_address:
+                log_warning(f"Attempting to reuse existing read/execute block at {hex(injection_params.existing_read_execute_address)}")
+                stage1_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{hex(injection_params.existing_read_execute_address)}"
+                stage_1_code = stage_1_code.replace("[READ_EXECUTE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-use_existing_read-execute.s:FRAGMENT]")
+            else:
+                stage_1_code = stage_1_code.replace("[READ_EXECUTE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-allocate_read-execute.s:FRAGMENT]")
+            if injection_params.existing_read_write_address:
+                log_warning(f"Attempting to reuse existing read/write block at {hex(injection_params.existing_read_write_address)}")
+                stage1_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{injection_params.existing_read_write_address}"
+                stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-use_existing_read-write.s:FRAGMENT]")
+            else:
+                stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-allocate_read-write.s:FRAGMENT]")
             
-            with open(stage1_path, "r") as stage1_code:
-                stage1 = assemble(stage1_code.read(), injection_params, library_bases, replacements=stage1_replacements)
+            
+            stage1 = assemble(stage_1_code, injection_params, library_bases, replacements=stage1_replacements)
 
             if not stage1:
                 continue_executing = False
@@ -866,6 +923,9 @@ def asminject(injection_params):
             stage2_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(stack_pointer - injection_params.stack_backup_size)}"
             log(f"Waiting for stage 1 to indicate that it has allocated additional memory and is ready for the script to write stage 2", ansi=injection_params.ansi)
             current_state = wait_for_communication_state(injection_params, injection_params.pid, communication_address, injection_params.state_ready_for_shellcode_write)
+            log_success(f"Read/execute base address: {hex(current_state.read_execute_address)}")
+            log_success(f"Read/execute base address: {hex(current_state.read_write_address)}")
+            stage2_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{current_state.read_execute_address}"
             stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address}"
             stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size + injection_params.existing_stack_backup_location_offset}"
             stage2_replacements['[VARIABLE:NEW_STACK_ADDRESS:VARIABLE]'] = f"{current_state.read_write_address + injection_params.cpu_state_size + injection_params.existing_stack_backup_location_size + injection_params.new_stack_location_offset}"
@@ -894,7 +954,7 @@ def asminject(injection_params):
                     mem.seek(communication_address)
                     ok_val = struct.pack('I', injection_params.state_shellcode_written)
                     mem.write(ok_val)
-                    log("Stage 2 proceeding", ansi=injection_params.ansi)
+                    log_success("Stage 2 proceeding", ansi=injection_params.ansi)
                 
                 if injection_params.restore_delay > 0.0:
                     log(f"Waiting {injection_params.restore_delay} second(s) before starting memory restore check", ansi=injection_params.ansi)
@@ -941,7 +1001,24 @@ def asminject(injection_params):
         continue_executing = False
     
     log_success("Done!", ansi=injection_params.ansi)
+    if not injection_params.deallocate_memory and current_state:
+        log_success(f"To reuse the existing read/write and read execute memory allocated during this injection attempt, include the following options in your next asminject.py command: --use-read-execute-address {hex(current_state.read_execute_address)} --use-read-execute-size {hex(injection_params.read_execute_block_size)} --use-read-write-address {hex(current_state.read_write_address)} --use-read-write-size {hex(injection_params.read_write_block_size)}", ansi=injection_params.ansi)
 
+def parse_command_line_numeric_value(v):
+    result = None
+    if len(v) > 2 and v[0:2].lower() == "0x":
+        try:
+            result = int(v[2:], 16)
+        except Exception as e:
+            log_error(f"Couldn't parse '{v}' as a hexadecimal integer: {e}", ansi=injection_params.ansi)
+            sys.exit(1)
+    else:
+        try:
+            result = int(v)
+        except Exception as e:
+            log_error(f"Couldn't parse '{v}' as a decimal integer: {e}", ansi=injection_params.ansi)
+            sys.exit(1)
+    return result
 
 # begin: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
 def str2bool(v):
@@ -970,6 +1047,10 @@ if __name__ == "__main__":
 
     parser.add_argument("--relative-offsets", action='append', nargs='*', required=False,
         help="Path to the list of relative offsets referenced in the assembly code. May be specified multiple times to reference several files. Generate on a per-binary basis using the following command, e.g. for libc-2.31: # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d\" \" -f3,9")
+
+    # parser.add_argument("--relative-offsets-from-binaries",type=str2bool, nargs='?',
+    #    const=True, default=False,
+    #    help="Read relative offsets from the binaries referred to in /proc/<pid>/maps instead of a text file. This will *only* work if the target process is not running in a container, or if the container has the exact same executable and library versions as the host or container where asminject.py is running. Requires that the elftools Python library be installed on the system where asminject.py is running.")
     
     parser.add_argument("--non-pic-binary", action='append', nargs='*', required=False,
         help="Regular expression identifying one or more executables/libraries that do *not* use position-independent code, such as Python 3.x")
@@ -991,7 +1072,7 @@ if __name__ == "__main__":
               # Default: wait-syscall.")
     
     parser.add_argument("--arch",
-        #choices=["x86-32", "x86-64", "arm32", "arm64"], default="x86-64",
+        #choices=["x86-32", "x86-64", "arm32", "aarch64"], default="x86-64",
         choices=["x86-64", "arm32"], default="x86-64",
         help="Processor architecture for the injected code. \
               Default: x86-64.")
@@ -1019,17 +1100,28 @@ if __name__ == "__main__":
         const=True, default=False,
         help="Prompt for input after restoring memory, but before signalling the shellcode to proceed")
     
-    # parser.add_argument("--do-not-deallocate", type=str, 
-        # help="Do not deallocate the read/write data block when the payload finishes")
+    parser.add_argument("--do-not-deallocate", type=str2bool, nargs='?',
+        const=True, default=False,
+        help="Do not deallocate the read/write data block when the payload finishes (for reuse using --use-read-write-address)")
     
-    # parser.add_argument("--reuse-read-execute-address", type=str, 
-        # help="When injecting into a process that's already been injected into, use this existing block of memory for read/execute data instead of allocating a new one")
+    parser.add_argument("--use-read-execute-address", type=parse_command_line_numeric_value, 
+        help="When injecting into a process that's already been injected into, use this existing block of memory for read/execute data instead of allocating a new one")
 
-    # parser.add_argument("--reuse-read-write-address", type=str, 
-        # help="When injecting into a process that's already been injected into, use this existing block of memory for read/write data instead of allocating a new one")
+    parser.add_argument("--use-read-execute-size", type=parse_command_line_numeric_value, 
+        help="When injecting into a process that's already been injected into, assume this size for the existing block of read/execute memory")
+
+    parser.add_argument("--use-read-write-address", type=parse_command_line_numeric_value, 
+        help="When injecting into a process that's already been injected into, use this existing block of memory for read/write data instead of allocating a new one")
+
+    parser.add_argument("--use-read-write-size", type=parse_command_line_numeric_value, 
+        help="When injecting into a process that's already been injected into, assume this size for the existing block of read/write memory")
 
     parser.add_argument("--precompiled", type=str, 
         help="Path to a precompiled binary shellcode payload to embed and launch (requires use of execute_precompiled.s or execute_precompiled_threaded.s as the stage 2 payload)")
+
+    # parser.add_argument("--clear-memory-on-exit", type=str2bool, nargs='?',
+        # const=True, default=False,
+        # help="Set all bytes in the read/execute and read/write memory to 0x00 after the payload has finished executing")
 
     # parser.add_argument("--obfuscate", type=str2bool, nargs='?',
         # const=True, default=False,
@@ -1062,8 +1154,23 @@ if __name__ == "__main__":
     injection_params.pause_before_launching_stage2 = args.pause_before_launching_stage2
     injection_params.pause_before_memory_restore = args.pause_before_memory_restore    
     injection_params.pause_after_memory_restore = args.pause_after_memory_restore    
-    injection_params.ansi = args.plaintext
+    injection_params.ansi = not args.plaintext
     injection_params.enable_debugging_output = args.debug
+    
+    if args.do_not_deallocate:
+        injection_params.deallocate_memory = False
+    
+    if args.use_read_execute_address:
+        injection_params.existing_read_execute_address = args.use_read_execute_address
+    
+    if args.use_read_execute_size:
+        injection_params.read_execute_block_size = args.use_read_execute_size
+    
+    if args.use_read_write_address:
+        injection_params.existing_read_write_address = args.use_read_write_address
+    
+    if args.use_read_write_size:
+        injection_params.read_write_block_size = args.use_read_write_size
     
     if args.preserve_temp_files:
         injection_params.delete_temp_files = False

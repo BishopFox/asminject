@@ -8,6 +8,7 @@
 
 	gcc -o launch_thread-x32 -O0 -m32 -fPIC launch_thread.c -m32 -lpthread
 	gcc -o launch_thread-x64 -O0 -m64 -fPIC launch_thread.c -m64 -lpthread
+	gcc -o launch_thread-arm32 -O0 -fPIC launch_thread.c -lpthread
 */
 
 pthread_t thread_id;

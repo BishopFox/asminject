@@ -1,24 +1,20 @@
-	// BEGIN: example of calling a LIBC function from the asm code using template values
+jmp printf_main
+// import reusable code fragments 
+[FRAGMENT:asminject_libc_printf.s:FRAGMENT]
+
+printf_main:
 	push r14
-	push rax
-	push rbx
-	lea rsi, dmsg[rip]
+	// BEGIN: example of calling a LIBC function from the asm code using template values
 	lea rdi, format_string[rip]
-	xor rax, rax
-	xor eax, eax
-	movabsq rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:printf@@GLIBC.+:RELATIVEOFFSET]
-	call rbx
-	pop rbx
-	pop rax
-	pop r14
+	lea rsi, dmsg[rip]
+	call asminject_libc_printf
 	// END: example of calling a LIBC function from the asm code using template values
-	
-	mov rax, 0
+	pop r14
 
 SHELLCODE_SECTION_DELIMITER
 
 format_string:
-	.ascii "DEBUG: %s\n\0"
+	.ascii "[VARIABLE:formatstring:VARIABLE]\n\0"
 
 dmsg:
 	.ascii "[VARIABLE:message:VARIABLE]\0"

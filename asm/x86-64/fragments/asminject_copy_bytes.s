@@ -1,33 +1,18 @@
 // BEGIN: asminject_copy_bytes
 // very basic byte-copying function
-// r0 = source address
-// r1 = destination address
-// r2 = number of bytes to copy
+// rdi = source address
+// rsi = destination address
+// rcx = number of bytes to copy
+// this is just a wrapper around rep movsb for this architecture
+// which is kind of silly, but keeps code more consistent
 
 asminject_copy_bytes:
-	stmdb sp!, {r11,lr}
-	add r11, sp, #0x04
-	sub sp, sp, #0x20
+	push rbp
+	mov rbp, rsp
+	sub rsp, 0x10
 	
-	mov r3, #0x0
+	rep movsb
 	
-asminject_copy_bytes_loop:
-
-	ldrb r4, [r0, r3]
-	strb r4, [r1, r3]
-
-	// increment the counter
-	// as well as the source and destination addresses
-	add r3, r3, #0x1
-	//add r0, r0, #0x1
-	//add r1, r1, #0x1
-	// check to see if all bytes have been copied
-	cmp r2, r3
-	beq asminject_copy_bytes_done
-	b asminject_copy_bytes_loop
-	
-asminject_copy_bytes_done:
-
-	sub sp, r11, #0x04
-	ldmia sp!, {r11,pc}
+	leave
+	ret
 // END: asminject_copy_bytes

@@ -1,8 +1,15 @@
+// an attempt to work around Ruby locking up when code is injected
+// does not currently work any better than the unthreaded version
+
 jmp execute_ruby_code_main
 // import reusable code fragments 
 [FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
+[FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
+[FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
+[FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
+[FRAGMENT:asminject_nanosleep.s:FRAGMENT]
 
-execute_ruby_code_main:
+execute_ruby_code_inner:
 	# // BEGIN: call ruby_sysinit
 	# push rbx
 	# lea rax, ruby_argv[rip]	# fake argv data
@@ -68,6 +75,28 @@ execute_ruby_code_main:
 	# // END: call ruby_cleanup
 	
 	#mov rax, 0
+	#mov rdi, 0
+	#call asminject_libpthread_pthread_exit
+	# calling pthread_exit here will cause Ruby to crash with a stack trace
+	ret
+	
+forever_loop:
+	mov rdi, 10
+	mov rsi, 10
+	call asminject_nanosleep
+	jmp forever_loop
+
+execute_ruby_code_main:
+	lea rdx, execute_ruby_code_inner[rip]
+	mov rdi, arbitrary_read_write_data_address[rip]
+	add rdi, 0x1000		# don't overwrite anything important
+	push rdx
+	push rdi
+	call asminject_libpthread_pthread_create
+	pop rdi
+	pop rdx
+// detach the newly-created thread where the library has been loaded
+	call asminject_libpthread_pthread_detach
 
 SHELLCODE_SECTION_DELIMITER
 

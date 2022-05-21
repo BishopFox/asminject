@@ -84,6 +84,12 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.18 (2022-05-20)
+
+* Added support for reusing the same blocks of memory between runs of the tool, to make detection harder and avoid leaking (small) amounts of memory when injecting into the same process repeatedly
+* Updated all of the existing x86-64 code to use the improved design developed while writing the ARM32 code
+* Fixed ANSI terminal colours
+
 ### 0.17 (2022-05-18)
 
 * ARM32 `copy_file_using_libc.s`, `execute_precompiled.s`, `execute_precompiled_threaded.s`, `dlinject.s`, and `dlinject_threaded.s` implemented, bringing ARM32 support to parity with x86-64

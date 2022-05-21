@@ -11,6 +11,7 @@
 b execute_precompiled_threaded_main
 // import reusable code fragments
 [FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
+[FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
 [FRAGMENT:asminject_nanosleep.s:FRAGMENT]
 
@@ -24,7 +25,11 @@ read_write_address:
 	.balign 4
 
 call_pthread_create:
+	push {r0}
 	bl asminject_libpthread_pthread_create
+	pop {r0}
+// detach the newly-created thread where the shellcode is running
+	bl asminject_libpthread_pthread_detach
 
 [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]:
 
@@ -32,18 +37,28 @@ call_pthread_create:
 SHELLCODE_SECTION_DELIMITER
 
 load_shellcode_address:
+// Add 0x1000 to avoid overwriting backed-up data
+	add r0, r0, #0x1000
 	mov r2, pc
 	b call_pthread_create
 
+//	stmdb sp!, {r11,lr}
+//	add r11, sp, #0x04
+//	sub sp, sp, #0x20
 [VARIABLE:INLINE_SHELLCODE:VARIABLE]
 
-	//mov r0, #0x0	@ pthread_exit return value NULL
-	//bl asminject_libpthread_pthread_exit
-loop_forever:
-	mov r0, #0x10
-	mov r1, #0x10
-	bl asminject_nanosleep
-	b loop_forever
+// if the inline code returns, have it perform a pthread_exit to clean up
+	mov r0, #0x0	@ pthread_exit return value NULL
+	bl asminject_libpthread_pthread_exit
+	
+//	sub sp, r11, #0x04
+//	ldmia sp!, {r11,pc}
+	
+//loop_forever:
+//	mov r0, #0x10
+//	mov r1, #0x10
+//	bl asminject_nanosleep
+//	b loop_forever
 
 jump_back_from_shellcode:
 

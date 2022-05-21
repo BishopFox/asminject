@@ -18,7 +18,7 @@ load_destination_address:
 	b copy_code_to_rw_memory
 
 read_write_address:
-	.word [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
+	.word [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	.balign 4
 
 copy_code_to_rw_memory:

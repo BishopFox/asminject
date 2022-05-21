@@ -272,6 +272,7 @@ msf6 exploit(multi/handler) > set LPORT 11443
 LPORT => 11443
 msf6 exploit(multi/handler) > exploit
 
+
 [!] You are binding to a loopback address by setting LHOST to 127.0.0.1. Did you want ReverseListenerBindAddress?
 [*] Started reverse TCP handler on 127.0.0.1:11443 
 ```
@@ -322,7 +323,7 @@ This payload requires relative offsets for `libpthread` shared library used by t
 
 Warnings:
 
-* The original process will still exit if your shellcode triggers an OS-level process exit. Meterpreter's default configuration does this, so consider just leaving it hanging around instead of typing "exit" in the Meterpreter console.
+* The original process will still exit if your shellcode triggers an OS-level process exit. Meterpreter's default configuration does this, and as of this writing, the Linux version of Meterpreter does not have an equivalent of the Windows Meterpreter `EXITFUNC=thread` option, so the only workaround is to not call `exit` in Meterpreter until you want the target process to exit.
 
 ## Inject a Linux shared library (.so) file into an existing process, like the original dlinject.py
 

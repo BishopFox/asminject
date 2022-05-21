@@ -26,7 +26,7 @@ wait_for_script:
 	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
 	mov eax, [r14]
 	cmp eax, [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]
-	je cleanup_and_return
+	je execute_inner_payload
 	
 	// sleep [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE] second(s)
 	mov rax, 35
@@ -49,12 +49,14 @@ wait_for_script:
 	
 	jmp wait_for_script
 
-cleanup_and_return:
+execute_inner_payload:
 
 	pop rbx
 	pop rcx
 	
 	[VARIABLE:SHELLCODE_SOURCE:VARIABLE]
+
+cleanup_and_return:
 
 	// restore fancy registers
 	push rax
@@ -62,14 +64,16 @@ cleanup_and_return:
 	fxrstor [rax]
 	pop rax
 
-	// de-allocate the mmapped r/w block
-	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
-	mov rax, 11              								# SYS_MUNMAP
-	mov rdi, [r14 + 16]    									# start address
-	mov rsi, [VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]		# len
-	syscall
+	# // de-allocate the mmapped r/w block
+	# movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
+	# mov rax, 11              								# SYS_MUNMAP
+	# mov rdi, [r14 + 16]    									# start address
+	# mov rsi, [VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]		# len
+	# syscall
 	
-	// cannot really de-allocate the r/x block because that is where this code is
+	# // cannot really de-allocate the r/x block because that is where this code is
+
+[DEALLOCATE_MEMORY]
 
 	// restore regular registers
 	mov rsp, [existing_stack_backup_address[rip]]

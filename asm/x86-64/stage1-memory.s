@@ -19,16 +19,19 @@ _start:
 	push r14
 	push r15
 			
-	// allocate a new block of memory for read/write data using mmap
-	mov rax, 9              								# SYS_MMAP
-	xor rdi, rdi            								# start address
-	mov rsi, [VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]  	# len
-	mov rdx, 0x3            								# prot (rw)
-	mov r10, 0x22           								# flags (MAP_PRIVATE | MAP_ANONYMOUS)
-	mov r8, -1             									# fd
-	xor r9, r9              								# offset 0
-	syscall
-	mov r11, rax            								# save mmap addr
+	# // allocate a new block of memory for read/write data using mmap
+	# mov rax, 9              								# SYS_MMAP
+	# xor rdi, rdi            								# start address
+	# mov rsi, [VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]  	# len
+	# mov rdx, 0x3            								# prot (rw)
+	# mov r10, 0x22           								# flags (MAP_PRIVATE | MAP_ANONYMOUS)
+	# mov r8, -1             									# fd
+	# xor r9, r9              								# offset 0
+	# syscall
+	# mov r11, rax            								# save mmap addr
+	
+	[READ_WRITE_ALLOCATE_OR_REUSE]
+	mov rax, r11
 	
 	// Store the read/write block address returned by mmap
 	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
@@ -60,17 +63,20 @@ _start:
 	# add rsp, [VARIABLE:NEW_STACK_LOCATION_OFFSET:VARIABLE]
 	# sub rsp, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
 	
-	// allocate a new block of memory for executable instructions using mmap
-	mov rax, 9              					# SYS_MMAP
-	xor rdi, rdi            					# start address
-	mov rsi, [VARIABLE:STAGE2_SIZE:VARIABLE]  	# len
-	// mov rdx, 0x7            					# prot (rwx)
-	mov rdx, 0x5            					# prot (rx)
-	mov r10, 0x22           					# flags (MAP_PRIVATE | MAP_ANONYMOUS)
-	mov r8, -1             						# fd
-	xor r9, r9              					# offset 0
-	syscall
-	mov r15, rax            					# save mmap addr
+	# // allocate a new block of memory for executable instructions using mmap
+	# mov rax, 9              								# SYS_MMAP
+	# xor rdi, rdi            								# start address
+	# mov rsi, [VARIABLE:READ_EXECUTE_BLOCK_SIZE:VARIABLE]  	# len
+	# // mov rdx, 0x7            								# prot (rwx)
+	# mov rdx, 0x5            								# prot (rx)
+	# mov r10, 0x22           								# flags (MAP_PRIVATE | MAP_ANONYMOUS)
+	# mov r8, -1             									# fd
+	# xor r9, r9              								# offset 0
+	# syscall
+	# mov r15, rax            								# save mmap addr
+	
+	[READ_EXECUTE_ALLOCATE_OR_REUSE]
+	mov rax, r15
 	
 	// Store the read/execute block address returned by mmap
 	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]

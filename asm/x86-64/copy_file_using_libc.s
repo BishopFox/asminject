@@ -1,12 +1,19 @@
+jmp copy_file_using_libc_main
+// import reusable code fragments 
+[FRAGMENT:asminject_libc_fopen.s:FRAGMENT]
+[FRAGMENT:asminject_libc_fclose.s:FRAGMENT]
+[FRAGMENT:asminject_libc_fread.s:FRAGMENT]
+[FRAGMENT:asminject_libc_fwrite.s:FRAGMENT]
+
+copy_file_using_libc_main:
+
 	// BEGIN: call LIBC fopen against the source file
 	push r11
 	push r14
 	push rbx
-	lea rax, sourcefile[rip]
 	lea rdi, sourcefile[rip]
     lea rsi, read_only_string[rip]
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC.+:RELATIVEOFFSET]
-	call rbx
+	call asminject_libc_fopen
     mov r13, rax          # store file descriptor in r13 rather than a variable to avoid attempts to write to executable memory
 	pop rbx
 	pop r14
@@ -18,11 +25,9 @@
 	push r14
 	push r13
 	push rbx
-	lea rax, destfile[rip]
 	lea rdi, destfile[rip]
     lea rsi, write_only_string[rip]
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC.+:RELATIVEOFFSET]
-	call rbx
+	call asminject_libc_fopen
     mov r10, rax          # store file descriptor in r10 rather than a variable to avoid attempts to write to executable memory
 	pop rbx
 	pop r13
@@ -30,44 +35,26 @@
 	pop r11
 	// END: call LIBC fopen
 
-	// push rax onto the stack 8 times (= 64 bytes) to use as a copy buffer
-	// instead of using a variable defined in this file, because that would result in writing to executable memory
-	# mov rax, 0
-	# push rax
-	# push rax
-	# push rax
-	# push rax
-	# push rax
-	# push rax
-	# push rax
-	# push rax
-	# mov r15, rsp
-
 copyLoop:
 
 	// BEGIN: call LIBC fread against the source file
-	push r15
 	push r14
 	push r13
 	push r11
 	push r10
 	push rbx
 	mov rcx, r13	# file descriptor
-	//mov rdx, 64		# number of elements
 	mov rdx, 256		# number of elements
-	mov esi, 1		# element size
-	mov rax, r11	# buffer - read/write area allocated earlier
-	add rax, 0x1000	# don't overwrite anything else that's in it
-	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fread@@.+:RELATIVEOFFSET]
-	call rbx
+	mov rsi, 1		# element size
+	mov rdi, arbitrary_read_write_data_address[rip]	# buffer - read/write area allocated earlier
+	add rdi, 0x1000	# don't overwrite anything else that's in it
+	call asminject_libc_fread
     mov r12, rax    # result
 	pop rbx
 	pop r10
 	pop r11
 	pop r13
 	pop r14
-	pop r15
 	// END: call LIBC fread
 	
 	// if no bytes were read (usually end-of-file), processing is complete
@@ -75,7 +62,6 @@ copyLoop:
 	jle doneCopying
 	
 	// BEGIN: call LIBC fwrite against the destination file with the number of elements read by fread()
-	push r15
 	push r14
 	push r13
 	push r11
@@ -84,46 +70,31 @@ copyLoop:
 	mov rcx, r10	# file descriptor
 	mov rdx, r12	# number of elements
 	mov esi, 1		# element size
-	mov rax, r11	# buffer
-	add rax, 0x1000	# don't overwrite anything else that's in it
-	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fwrite@@.+:RELATIVEOFFSET]
-	call rbx
+	mov rdi, arbitrary_read_write_data_address[rip]	# buffer - read/write area allocated earlier
+	add rdi, 0x1000	# don't overwrite anything else that's in it
+	call asminject_libc_fwrite
     mov r12, rax    # result
 	pop rbx
 	pop r10
 	pop r11
 	pop r13
 	pop r14
-	pop r15
 	// END: call LIBC fwrite
 
 	jmp copyLoop
 
 doneCopying:
 
-	# // discard the buffer stack variables
-	# pop rax
-	# pop rax
-	# pop rax
-	# pop rax
-	# pop rax
-	# pop rax
-	# pop rax
-	# pop rax
-
 	// close file handles using fclose()
 	
-	// BEGIN: call LIBC fclose against the destination file with the number of elements read by fread()
+	// BEGIN: call LIBC fclose against the destination file
 	push r15
 	push r14
 	push r13
 	push r10
 	push rbx
-	mov rax, r13	# file descriptor
-	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@.+:RELATIVEOFFSET]
-	call rbx
+	mov rdi, r13	# file descriptor
+	call asminject_libc_fclose
 	pop rbx
 	pop r10
 	pop r13
@@ -131,16 +102,14 @@ doneCopying:
 	pop r15
 	// END: call LIBC fclose
 	
-	// BEGIN: call LIBC fclose against the destination file with the number of elements read by fread()
+	// BEGIN: call LIBC fclose against the source file
 	push r15
 	push r14
 	push r13
 	push r10
 	push rbx
-	mov rax, r10	# file descriptor
-	mov rdi, rax
-    mov rbx, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fclose@@.+:RELATIVEOFFSET]
-	call rbx
+	mov rdi, r10	# file descriptor
+	call asminject_libc_fclose
 	pop rbx
 	pop r10
 	pop r13

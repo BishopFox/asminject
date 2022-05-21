@@ -34,7 +34,7 @@ ldr r1, [pc] 	@ Set r1 (destination) to the read/write memory address
 b copy_string
 
 read_write_address:
-	.word [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
+	.word [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	.balign 4
 
 copy_string:

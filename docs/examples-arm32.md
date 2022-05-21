@@ -257,7 +257,7 @@ This payload requires relative offsets for `libpthread` shared library used by t
 
 Warnings:
 
-* The original process will still exit if your shellcode triggers an OS-level process exit. Meterpreter's default configuration does this, so consider just leaving it hanging around instead of typing "exit" in the Meterpreter console.
+* The original process will still exit if your shellcode triggers an OS-level process exit. Meterpreter's default configuration does this, and as of this writing, the Linux version of Meterpreter does not have an equivalent of the Windows Meterpreter `EXITFUNC=thread` option, so the only workaround is to not call `exit` in Meterpreter until you want the target process to exit.
 
 ## Inject a Linux shared library (.so) file into an existing process, like the original dlinject.py
 
@@ -267,7 +267,7 @@ This payload requires one variable: `librarypath`, which should point to the lib
 
 This payload requires relative offsets for the `libdl` shared library used by the target process.
 
-As of this writing, generating an ARM32 elf-so Meterpreter payload doesn't work for me using `msfvenom`, but you can copy/paste some raw meterpreter shellcode into `asm_development/execute_inline_shellcode.c` and compile it into a .so file using the instructions in the source code.
+As of this writing, generating an ARM32 `elf-so` Meterpreter payload doesn't work for me using `msfvenom`, but you can copy/paste some raw meterpreter shellcode into `asm_development/execute_inline_shellcode.c` and compile it into a .so file using the instructions in the source code.
 
 ```
 # ./get_relative_offsets.sh /lib/arm-linux-gnueabihf/libdl-2.28.so > relative_offsets-libdl-2.28.txt

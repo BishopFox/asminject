@@ -1,5 +1,10 @@
 # asminject.py - Specialized Options
 
+* [Process suspension methods](#process-suspension-methods)
+* [Specifying non-PIC code](#specifying-non-pic-code)
+* [Multi-architecture support](#multi-architecture-support)
+* [Memory reuse](#memory-reuse)
+
 ## Process suspension methods
 
 `asminject.py` supports four methods for pre/post-injection handling of the target process. Three of those methods are borrowed from the original [dlinject.py](https://github.com/DavidBuchanan314/dlinject):
@@ -143,3 +148,25 @@ In this case (Python 2.7 on ARM32 Linux), the binary was *not* position-independ
 ## Multi-architecture support
 
 `asminject.py` currently supports both x86-64 and ARM32 payloads. Add the `--arch arm32` option to use ARM32. The examples for that architecture in the documentation were executed on a Raspberry Pi.
+
+## Memory reuse
+
+`asminject.py` needs two areas of memory to operate in: one with read/write permissions (for dynamic data), and one with read/execute permissions (for code). Early versions of the tool used a single read/write/execute block of memory, but this approach doesn't work for platforms that enforce "w^x" memory models.
+
+When executed without any memory-related options, the first stage of `asminject.py` allocates both blocks of memory. It places the second stage and inner payload in the read/execute block, and uses the read/write block to store data. Once the payload finishes executing, `asminject.py` deallocates the read/write block, but not the read/execute block (because that's where the code is running from). This means that if you run it against the same process multiple times, it will accrue an additional read/write memory block each time. The blocks are very small (32k by default), but can add up if many injections are performed, and the increasing number of blocks may appear suspicious to administrators or security software.
+
+If you add the `--do-not-deallocate` option when calling `asminject.py`, it will leave both blocks allocated in the target process when it exits, and indicate how to reuse them the next time you inject code into the same process, e.g.:
+
+```
+# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-copyroom-usr-bin-python3.9-2022-05-05.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate
+
+...omitted for brevity...
+[+] Done!
+[+] To reuse the existing read/write and read execute memory allocated during this injection attempt, include the following options in your next asminject.py command: --use-read-execute-address 0x7ffff7faf000 --use-read-execute-size 0x8000 --use-read-write-address 0x7ffff7fb7000 --use-read-write-size 0x8000
+```
+
+i.e. to inject the same code into the same process again:
+
+```
+# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-copyroom-usr-bin-python3.9-2022-05-05.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate --use-read-execute-address 0x7ffff7faf000 --use-read-execute-size 0x8000 --use-read-write-address 0x7ffff7fb7000 --use-read-write-size 0x8000
+```

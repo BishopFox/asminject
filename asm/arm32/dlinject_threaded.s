@@ -6,6 +6,7 @@ b dlinject_threaded_main
 // import reusable code fragments
 [FRAGMENT:asminject_libdl_dlopen.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
+[FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
 
 load_dlinject_wrapper_address:
@@ -30,7 +31,9 @@ call_dlopen:
 
 call_pthread_create:
 	bl asminject_libpthread_pthread_create
-
+// detach the newly-created thread where the library has been loaded
+	bl asminject_libpthread_pthread_detach
+	
 SHELLCODE_SECTION_DELIMITER
 
 dlinject_threaded_main:
@@ -39,6 +42,6 @@ dlinject_threaded_main:
 	b load_dlinject_wrapper_address
 
 read_write_address:
-	.word [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
+	.word [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	.balign 4
 

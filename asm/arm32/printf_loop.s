@@ -1,3 +1,5 @@
+// --var formatstring "DEBUG: '%s'" --var message 'test123'
+
 b printf_loop_main
 // import reusable code fragments
 [FRAGMENT:asminject_libc_printf.s:FRAGMENT]
@@ -13,7 +15,7 @@ printf_loop_main:
 	b load_debug_message
 
 format_string:
-	.ascii "DEBUG: '%s'\n\0"
+	.ascii "[VARIABLE:formatstring:VARIABLE]\n\0"
 	.balign 4
 
 load_debug_message:

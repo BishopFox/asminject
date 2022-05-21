@@ -64,7 +64,7 @@ call_asminject_libc_fopen_destination:
 	b continue_preparing_copy
 
 read_write_address:
-	.word [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
+	.word [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	.balign 4
 
 continue_preparing_copy:

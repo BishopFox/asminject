@@ -55,16 +55,33 @@ execute_ruby_code_inner:
 	pop r14
 	// END: copy the Ruby string to arbitrary read/write memory
 	
-	// BEGIN: call rb_eval_string
+	# // BEGIN: call rb_eval_string
+	# push r14
+	# push rbx
+	# mov rdi, arbitrary_read_write_data_address[rip]
+	# add rdi, 32
+	# mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:rb_eval_string:RELATIVEOFFSET]
+	# push rdi
+	# call rbx
+	# pop rdi
+	# pop rbx
+	# pop r14
+	# // END: call rb_eval_string
+	
+	// BEGIN: call rb_eval_string_protect
 	push r14
 	push rbx
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 32
-	mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:rb_eval_string:RELATIVEOFFSET]
+	mov rsi, arbitrary_read_write_data_address[rip]
+	add rsi, 8
+	mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:rb_eval_string_protect:RELATIVEOFFSET]
+	push rdi
 	call rbx
+	pop rdi
 	pop rbx
 	pop r14
-	// END: call rb_eval_string
+	// END: call rb_eval_string_protect
 	
 	# // BEGIN: call ruby_cleanup
 	# push rbx
@@ -75,10 +92,14 @@ execute_ruby_code_inner:
 	# // END: call ruby_cleanup
 	
 	#mov rax, 0
-	#mov rdi, 0
-	#call asminject_libpthread_pthread_exit
-	# calling pthread_exit here will cause Ruby to crash with a stack trace
-	ret
+	# calling pthread_exit here will cause Ruby to crash with a stack trace on ARM32
+	# it will lock up the process 
+	mov rdi, 0
+	call asminject_libpthread_pthread_exit
+	#mov rsi, 0
+	#call asminject_libpthread_pthread_join
+	
+	#ret
 	
 forever_loop:
 	mov rdi, 10
@@ -96,7 +117,11 @@ execute_ruby_code_main:
 	pop rdi
 	pop rdx
 // detach the newly-created thread where the library has been loaded
-	call asminject_libpthread_pthread_detach
+	#push rdi
+	#call asminject_libpthread_pthread_detach
+	#pop rdi
+	mov rsi, 0
+	call asminject_libpthread_pthread_join
 
 SHELLCODE_SECTION_DELIMITER
 

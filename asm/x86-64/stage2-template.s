@@ -76,7 +76,7 @@ cleanup_and_return:
 [DEALLOCATE_MEMORY]
 
 	// restore regular registers
-	//mov rsp, [existing_stack_backup_address[rip]]
+	mov rsp, [existing_stack_backup_address[rip]]
 	
 	pop r15
 	pop r14
@@ -96,7 +96,7 @@ cleanup_and_return:
 	popf
 	
 	// reset stack pointer to the original value and jump to the original instruction location
-	//mov rsp, [VARIABLE:STACK_POINTER:VARIABLE]
+	mov rsp, [VARIABLE:STACK_POINTER:VARIABLE]
 	jmp old_instruction_pointer[rip]
 	
 old_instruction_pointer:

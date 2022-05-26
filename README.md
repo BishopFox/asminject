@@ -84,6 +84,10 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.19 (2022-05-26)
+
+* Work in progress version with some internal logic redesigned to support new features in a later release
+
 ### 0.18 (2022-05-20)
 
 * Added support for reusing the same blocks of memory between runs of the tool, to make detection harder and avoid leaking (small) amounts of memory when injecting into the same process repeatedly

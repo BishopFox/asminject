@@ -12,20 +12,23 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.18
-Ben Lincoln, Bishop Fox, 2022-05-20
+v0.19
+Ben Lincoln, Bishop Fox, 2022-05-21
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
 """
 
 import argparse
+import datetime
 import inspect
+import json
 import math
 import os
 import psutil
 import re
 import secrets
+import shutil
 import signal
 import stat
 import struct
@@ -33,6 +36,8 @@ import sys
 import tempfile
 import time
 import subprocess
+
+from pathlib import Path
 
 class asminject_parameters:
     def get_secure_random_not_in_list(self, max_value, list_of_existing_values):
@@ -50,6 +55,22 @@ class asminject_parameters:
         comparison_list.append(self.state_ready_for_memory_restore)
         self.state_memory_restored = self.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
         comparison_list.append(self.state_memory_restored)
+
+    @staticmethod
+    def get_timestamp_string():
+        return datetime.datetime.utcnow().isoformat()
+    
+    @staticmethod
+    def get_timestamp_string_for_paths():
+        result = asminject_parameters.get_timestamp_string()
+        # replace the "+00:00" with "Z" in case it shows up
+        # because "-[offset]" instead of "+[offset]" would be inaccurate
+        result = result.replace("+00:00", "Z")
+        # replace delimiters that are frequently problematic in paths:
+        result = re.sub('[: ]', '-', result)
+        # remove any other unexpected characters
+        result = re.sub('[^0-9\-TZ]', '', result)
+        return result
 
     def __init__(self):
         # x86-64: 8 bytes * 16 registers
@@ -124,6 +145,8 @@ class asminject_parameters:
         self.delete_temp_files = True
         self.freeze_dir = "/sys/fs/cgroup/freezer/" + secrets.token_bytes(8).hex()
         self.fragment_directory_name = "fragments"
+        self.payload_assembly_subdirectory_name = "payload_assembly"
+        self.memory_region_backup_subdirectory_name = "memory_region_backup"
         
         self.asminject_pid = None
         self.asminject_priority = None
@@ -156,6 +179,14 @@ class asminject_parameters:
         # into the same process repeatedly
         self.existing_read_write_address = None
         self.existing_read_execute_address = None
+        
+        self.internal_memory_region_restore_ignore_list = [ '[vdso]', '[vvar]' ]
+        self.restore_memory_region_regexes = []
+        self.restore_all_memory_regions = False
+        
+        timestamp_string = asminject_parameters.get_timestamp_string_for_paths()
+        random_string = hex(secrets.randbelow(0xFFFFFFF))
+        self.temp_file_base_directory = os.path.join(tempfile.gettempdir(), f"asminject-{timestamp_string}-{random_string}")
         
     def set_dynamic_process_info_vars(self):
         self.target_process = psutil.Process(self.pid)
@@ -205,12 +236,222 @@ class asminject_parameters:
             self.stage_sleep_seconds = 2
             self.instruction_pointer_register_name = "pc"
             self.stack_pointer_register_name = "sp"
+    
+    def get_map_file_path(self):
+        return f"/proc/{self.pid}/maps"
+    
+    def create_empty_temp_file(self, subdirectory_name = None, suffix = None):
+        out_path = None
+        tf = None
+        target_directory = self.temp_file_base_directory
+        if subdirectory_name:
+            target_directory = os.path.join(self.temp_file_base_directory, subdirectory_name)
+        asminject_parameters.make_required_directory(target_directory, self)
+        if suffix:
+            (tf, out_path) = tempfile.mkstemp(suffix=suffix, dir=target_directory, text=False)
+        else:
+            (tf, out_path) = tempfile.mkstemp(dir=target_directory, text=False)
+        os.close(tf)
+        return out_path
+    
+    @staticmethod
+    def make_required_directory(directory_path, injection_params):
+        try:
+            Path(directory_path).mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            log_error(f"Could not create the required output directory '{directory_path}': {e}", ansi=injection_params.ansi)
+            sys.exit(1)
+
+    @staticmethod
+    def delete_directory_tree(directory_path, injection_params):
+        try:
+            shutil.rmtree(directory_path)
+        except Exception as e:
+            log_warning(f"Could not recursively delete the directory '{directory_path}': {e}", ansi=injection_params.ansi)
 
 class communication_variables:
     def __init__(self):
         self.state_value = None
         self.read_execute_address = None
         self.read_write_address = None
+
+class memory_map_permissions:
+    def set_default_values(self):
+        self.read = False
+        self.write = False
+        self.execute = False
+        self.shared = False
+    
+    def set_from_permission_string(self, permission_string):
+        if permission_string[0:1].lower() == "r":
+            self.read = True
+        if permission_string[1:2].lower() == "w":
+            self.write = True
+        if permission_string[2:3].lower() == "x":
+            self.execute = True
+        if permission_string[3:4].lower() == "s":
+            self.shared = True
+            
+    def __init__(self):
+        self.set_default_values()
+    
+    def __init__(self, permission_string):
+        self.set_default_values()
+        self.set_from_permission_string(permission_string)
+
+class memory_map_entry:
+    def set_default_values(self):
+        self.start_address = None
+        self.end_address = None
+        self.permissions = None
+        self.offset = None
+        self.device = None
+        self.inode = None
+        self.path = None
+        self.position_independent_code = False
+    
+    def set_from_map_entry_line(self, map_entry_line):
+        linesplit = map_entry_line.split()
+        addr_split = linesplit[0].split("-")
+        self.start_address = int(addr_split[0], 16)
+        self.end_address = int(addr_split[1], 16)
+        perms = linesplit[1]
+        self.permissions = memory_map_permissions(perms)
+        self.offset = int(linesplit[2], 16)
+        self.device = linesplit[3]
+        self.inode = linesplit[4]
+        self.path = linesplit[-1]
+
+    def __init__(self):
+        self.set_default_values()
+    
+    def __init__(self, map_entry_line):
+        self.set_default_values()
+        self.set_from_map_entry_line(map_entry_line)
+    
+    def get_base_address(self):
+        if self.position_independent_code:
+            return self.start_address
+        return 0
+    
+    def to_dictionary(self):
+        result = {}
+        result["start_address"] = self.start_address
+        result["end_address"] = self.end_address
+        result["permissions"] = self.permissions
+        result["offset"] = self.offset
+        result["device"] = self.device
+        result["inode"] = self.inode
+        result["path"] = self.path
+        result["position_independent_code"] = self.position_independent_code
+        return result
+    
+    def to_json(self):
+        return json.dumps(self.to_dictionary())
+    
+    @staticmethod
+    def from_dictionary(dict):
+        result = memory_map_entry()
+        if "start_address" in dict.keys():
+            result.start_address = dict["start_address"]
+        if "end_address" in dict.keys():
+            result.end_address = dict["end_address"]
+        if "permissions" in dict.keys():
+            result.permissions = dict["permissions"]
+        if "offset" in dict.keys():
+            result.offset = dict["offset"]
+        if "device" in dict.keys():
+            result.device = dict["device"]
+        if "inode" in dict.keys():
+            result.inode = dict["inode"]
+        if "path" in dict.keys():
+            result.path = dict["path"]
+        if "position_independent_code" in dict.keys():
+            result.position_independent_code = dict["position_independent_code"]
+        return result
+    
+    @staticmethod
+    def from_json(json_string):
+        return memory_map_entry.from_dictionary(json.loads(json_string))
+        
+
+class asminject_memory_map_data:
+    def __init__(self):
+        self.map_data = {}
+        self.map_data_keys_ordered = []
+        self.first_region_for_named_file_map = {}
+
+    def get_unique_path_names(self):
+        return self.first_region_for_named_file_map.keys()
+    
+    def get_first_region_for_named_file(self, file_path):
+        existing_path_names = self.get_unique_path_names()
+        if file_path not in existing_path_names:
+            raise Exception(f"Could not locate a memory map entry for '{file_path}'")
+        region_start_address = self.first_region_for_named_file_map[file_path].start_address
+        if region_start_address not in self.map_data.keys():
+            print(self.map_data.keys())
+            raise Exception(f"Found a memory map file path entry for '{file_path}', with base address '{region_start_address}', but no entry was found for it in the main list of memory regions. This is almost certainly a bug in asminject.py")
+        return self.map_data[region_start_address]
+    
+    def add_first_region_data(self, injection_params, new_map_entry):
+        if new_map_entry.path.strip() != "" and new_map_entry.path not in self.first_region_for_named_file_map.keys():
+            #result_entry = {}
+            #result_entry["access"] = linesplit[1]
+            
+            if new_map_entry.position_independent_code:
+                #result_entry["base"] = ld_base
+                #result_entry["end"] = ld_end
+                if new_map_entry.start_address <= injection_params.max_address_npic_suggestion:
+                    log_warning(f"'{new_map_entry.path}' has a base address of {hex(new_map_entry.start_address)}, which is very low for position-independent code. If the exploit attempt fails, try adding --non-pic-binary \"{new_map_entry.path}\" to your asminject.py options.", ansi=injection_params.ansi)
+            else:
+                
+                #result_entry["base"] = 0
+                #result_entry["end"] = ld_end
+                log_warning(f"Handling '{new_map_entry.path}' as non-PIC binary", ansi=injection_params.ansi)
+            
+            self.first_region_for_named_file_map[new_map_entry.path] = new_map_entry
+                    
+                    #result[new_map_entry.path] = result_entry
+    
+    def load_memory_map_data(self, injection_params):
+        with open(injection_params.get_map_file_path()) as maps_file:
+            for line in maps_file.readlines():
+                new_map_entry = memory_map_entry(line)
+                self.map_data[new_map_entry.start_address] = new_map_entry
+                self.map_data_keys_ordered.append(new_map_entry.start_address)
+                if new_map_entry.path.strip() != "":
+                    new_map_entry.position_independent_code = True
+                    for npb_pattern in injection_params.non_pic_binaries:
+                        if re.search(npb_pattern, new_map_entry.path):
+                            new_map_entry.position_independent_code = False
+                            break
+                
+                self.add_first_region_data(injection_params, new_map_entry)
+                
+    def to_array(self):
+        result = []
+        for start_address in self.map_data_keys_ordered:
+            result_entry = self.map_data[start_address].to_dictionary()
+        return result
+
+    def to_json(self):
+        return json.dumps(self.to_array())
+    
+    @staticmethod
+    def from_array(injection_params, arr):
+        result = asminject_memory_map_data()
+        for arr_entry in arr:
+            new_entry = memory_map_entry.from_dictionary(arr_entry)
+            result.map_data_keys_ordered.append(new_entry.start_address)
+            result.map_data[new_entry.start_address] = new_entry
+            result.add_first_region_data(injection_params, new_entry)
+        return result
+    
+    @staticmethod
+    def from_json(json_string):
+        arr = json.loads(json_string)
+        return asminject_memory_map_data.from_array(arr)
 
 def ansi_color(name):
     color_codes = {
@@ -240,10 +481,10 @@ def log_error(msg, ansi=True):
     log(msg, "red", "!", ansi)
     #raise Exception(msg)
 
-
-def assemble(source, injection_params, library_bases, replacements = {}):
+def assemble(source, injection_params, memory_map_data, replacements = {}):
     formatted_source = source
-    for lname in library_bases.keys():
+    memory_map_path_names = memory_map_data.get_unique_path_names()
+    for lname in memory_map_path_names:
         if injection_params.enable_debugging_output:
             log(f"Library base entry: '{lname}'", ansi=injection_params.ansi)
     
@@ -315,12 +556,12 @@ def assemble(source, injection_params, library_bases, replacements = {}):
             lname_placeholders.append(placeholder_regex)
     for lname_regex in lname_placeholders:
         found_library_match = False
-        for lname in library_bases.keys():
+        for lname in memory_map_path_names:
             #if injection_params.enable_debugging_output:
             #    log(f"Checking '{lname}' against library base address regex placeholder '{lname_regex}' from assembly code", ansi=injection_params.ansi)
             if re.search(lname_regex, lname):
                 log(f"Using '{lname}' for library base address regex placeholder '{lname_regex}' in assembly code", ansi=injection_params.ansi)
-                replacements[f"[BASEADDRESS:{lname_regex}:BASEADDRESS]"] = f"{hex(library_bases[lname]['base'])}"
+                replacements[f"[BASEADDRESS:{lname_regex}:BASEADDRESS]"] = f"{hex(memory_map_data.get_first_region_for_named_file(lname).get_base_address())}"
                 found_library_match = True
                 break
         if not found_library_match:
@@ -376,8 +617,7 @@ def assemble(source, injection_params, library_bases, replacements = {}):
     result = None
 
     try:
-        (tf, out_path) = tempfile.mkstemp(suffix=".o", dir=None, text=False)
-        os.close(tf)
+        out_path = injection_params.create_empty_temp_file(subdirectory_name = injection_params.payload_assembly_subdirectory_name, suffix = ".o")
         # # output file is chmodded 0777 so that the target process' user account can delete it if necessary as well as reading it
         # try:
             # os.chmod(out_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
@@ -411,8 +651,7 @@ def assemble(source, injection_params, library_bases, replacements = {}):
         # ld for ARM won't emit raw binaries like it will for x86-32
         if injection_params.architecture == "arm32":
             try:
-                (tf2, obj_out_path) = tempfile.mkstemp(suffix=".o", dir=None, text=False)
-                os.close(tf2)
+                obj_out_path = injection_params.create_empty_temp_file(subdirectory_name = injection_params.payload_assembly_subdirectory_name, suffix = ".o")
                 try:
                     os.chmod(obj_out_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
                 except Exception as e:
@@ -484,41 +723,7 @@ def output_memory_block_data(injection_params, memory_block_name, memory_block):
         output = f"{output}\n\t{block_data}"
     log(output, ansi=injection_params.ansi)
 
-def get_memory_map_data(injection_params):
-    result = {}
-    with open(f"/proc/{injection_params.pid}/maps") as maps_file:
-        for line in maps_file.readlines():
-            linesplit = line.split()
-            ld_path = linesplit[-1]
-            addr_split = linesplit[0].split("-")
-            ld_base = int(addr_split[0], 16)
-            ld_end = int(addr_split[1], 16)
-            if ld_path not in result.keys():
-                is_non_pic_binary = False
-                for npb_pattern in injection_params.non_pic_binaries:
-                    if re.search(npb_pattern, ld_path):
-                        is_non_pic_binary = True
-                        break
-                result_entry = {}
-                result_entry["access"] = linesplit[1]
-                
-                if is_non_pic_binary:
-                    result_entry["base"] = 0
-                    result_entry["end"] = ld_end
-                    log_warning(f"Handling '{ld_path}' as non-PIC binary", ansi=injection_params.ansi)
-                else:
-                    result_entry["base"] = ld_base
-                    result_entry["end"] = ld_end
-                    if ld_base <= injection_params.max_address_npic_suggestion:
-                        log_warning(f"'{ld_path}' has a base address of {ld_base}, which is very low for position-independent code. If the exploit attempt fails, try adding --non-pic-binary \"{ld_path}\" to your asminject.py options.", ansi=injection_params.ansi)
-                
-                result[ld_path] = result_entry
-    return result
 
-def get_temp_file_name():
-    (tf, result) = tempfile.mkstemp(suffix=None, dir=None, text=False)
-    os.close(tf)
-    return result
     
 def get_syscall_values(injection_params, pid):
     result = {}
@@ -602,8 +807,14 @@ def set_process_priority_and_affinity(injection_params, asminject_priority, targ
     injection_params.target_process.cpu_affinity(target_affinity)
 
 def asminject(injection_params):
+    log(f"Starting at {injection_params.get_timestamp_string()} (UTC)", ansi=injection_params.ansi)
+    map_file_path = injection_params.get_map_file_path()
+    if not os.path.isfile(map_file_path):
+        log_error(f"Could not find the memory map pseudofile '{map_file_path}' - please verify that you have specified a valid process ID", ansi=injection_params.ansi)
+        sys.exit(1)
+
     stage1 = None
-        
+    
     stage1_source_filename = "stage1-memory.s"
     stage1_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, stage1_source_filename)
     if not os.path.isfile(stage1_path):
@@ -625,17 +836,19 @@ def asminject(injection_params):
             log_error(f"Could not find the precompiled binary shellcode file '{injection_params.precompiled_shellcode}'", ansi=injection_params.ansi)
             sys.exit(1)
     
-    library_bases = get_memory_map_data(injection_params)
+    memory_map_data = asminject_memory_map_data()
+    memory_map_data.load_memory_map_data(injection_params)
     library_names = []
-    for lname in library_bases.keys():
+    for lname in memory_map_data.get_unique_path_names():
         library_names.append(lname)
     library_names.sort()
     for lname in library_names:
-        log(f"{lname}: {hex(library_bases[lname]['base'])}", ansi=injection_params.ansi)
+        log(f"{lname}: {hex(memory_map_data.get_first_region_for_named_file(lname).get_base_address())}", ansi=injection_params.ansi)
 
     # Do basic setup first to perform a validation on the stage 2 code
     # (Avoids injecting stage 1 only to have stage 2 fail)
-    communication_address = library_bases["[stack]"]["end"] + injection_params.communication_address_offset
+    stack_region = memory_map_data.get_first_region_for_named_file("[stack]")
+    communication_address = stack_region.end_address + injection_params.communication_address_offset
 
     stage2_replacements = injection_params.custom_replacements
     # these values will stay the same even for the real assembly
@@ -717,7 +930,7 @@ def asminject(injection_params):
     stage2_source_code = stage2_source_code.replace('[VARIABLE:SHELLCODE_DATA:VARIABLE]', shellcode_data_section)
 
     log("Validating ability to assemble stage 2 code", ansi=injection_params.ansi)
-    stage2 = assemble(stage2_source_code, injection_params, library_bases, replacements=stage2_replacements)
+    stage2 = assemble(stage2_source_code, injection_params, memory_map_data, replacements=stage2_replacements)
     
     # make sure that the read/execute block will be big enough to hold the payload
     if not stage2:
@@ -850,7 +1063,7 @@ def asminject(injection_params):
                 stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-allocate_read-write.s:FRAGMENT]")
             
             
-            stage1 = assemble(stage_1_code, injection_params, library_bases, replacements=stage1_replacements)
+            stage1 = assemble(stage_1_code, injection_params, memory_map_data, replacements=stage1_replacements)
 
             if not stage1:
                 continue_executing = False
@@ -934,7 +1147,7 @@ def asminject(injection_params):
             
             
 
-            stage2 = assemble(stage2_source_code, injection_params, library_bases, replacements=stage2_replacements)
+            stage2 = assemble(stage2_source_code, injection_params, memory_map_data, replacements=stage2_replacements)
                 
             
             if not stage2:
@@ -1000,7 +1213,13 @@ def asminject(injection_params):
         log_warning(f"Operator cancelled the injection attempt", ansi=injection_params.ansi)
         continue_executing = False
     
-    log_success("Done!", ansi=injection_params.ansi)
+    log(f"Finished at {injection_params.get_timestamp_string()} (UTC)", ansi=injection_params.ansi)
+    if injection_params.delete_temp_files:
+        log(f"Deleting the temporary directory '{injection_params.temp_file_base_directory}' and all of its contents", ansi=injection_params.ansi)
+        asminject_parameters.delete_directory_tree(injection_params.temp_file_base_directory, injection_params)
+    else:
+        log(f"The temporary directory '{injection_params.temp_file_base_directory}' has been preserved", ansi=injection_params.ansi)
+    
     if not injection_params.deallocate_memory and current_state:
         log_success(f"To reuse the existing read/write and read execute memory allocated during this injection attempt, include the following options in your next asminject.py command: --use-read-execute-address {hex(current_state.read_execute_address)} --use-read-execute-size {hex(injection_params.read_execute_block_size)} --use-read-write-address {hex(current_state.read_write_address)} --use-read-write-size {hex(injection_params.read_write_block_size)}", ansi=injection_params.ansi)
 
@@ -1034,6 +1253,8 @@ def str2bool(v):
 # end: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
 
 if __name__ == "__main__":
+    injection_params = asminject_parameters()
+
     print(BANNER)
 
     parser = argparse.ArgumentParser(
@@ -1053,7 +1274,14 @@ if __name__ == "__main__":
     #    help="Read relative offsets from the binaries referred to in /proc/<pid>/maps instead of a text file. This will *only* work if the target process is not running in a container, or if the container has the exact same executable and library versions as the host or container where asminject.py is running. Requires that the elftools Python library be installed on the system where asminject.py is running.")
     
     parser.add_argument("--non-pic-binary", action='append', nargs='*', required=False,
-        help="Regular expression identifying one or more executables/libraries that do *not* use position-independent code, such as Python 3.x")
+        help="Regular expression identifying one or more executables/libraries that do *not* use position-independent code, such as Python 3.x. May be specified multiple times.")
+
+    parser.add_argument("--restore-memory-region", action='append', nargs='*', required=False,
+        help=f"Regular expression identifying one or more regions of memory to perform a full backup of before injecting code, and restore after the payload has executed. May be specified multiple times.")
+
+    parser.add_argument("--restore-all-memory-regions", type=str2bool, nargs='?',
+        const=True, default=False,
+        help="Back up all of the memory mapped by the target process before injecting the payload, and restore all regions that are possible to restore after the payload has completed. Using this option is not recommended due to the volume of data that will be written to disk. If possible, use one or more --restore-memory-region directives to perform a targeted backup restore.")
 
     parser.add_argument("--stop-method",
         choices=["slow", "sigstop", "cgroup_freeze", "none"],
@@ -1127,6 +1355,9 @@ if __name__ == "__main__":
         # const=True, default=False,
         # help="Enable code obfuscation")
 
+    parser.add_argument("--temp-dir", type=str, 
+        help="Path to use for writing temporary files instead of the default (a dynamically-created directory underneath the default temporary directory for the OS)")
+
     parser.add_argument("--preserve-temp-files", type=str2bool, nargs='?',
         const=True, default=False,
         help="Do not delete temporary files created during the assembling and linking process")
@@ -1136,8 +1367,8 @@ if __name__ == "__main__":
         help="Enable debugging messages")
         
     args = parser.parse_args()
-
-    injection_params = asminject_parameters()
+    
+    injection_params.ansi = not args.plaintext
     
     if args.var:
         for var_set in args.var:
@@ -1153,8 +1384,7 @@ if __name__ == "__main__":
     injection_params.pause_before_resume = args.pause_before_resume
     injection_params.pause_before_launching_stage2 = args.pause_before_launching_stage2
     injection_params.pause_before_memory_restore = args.pause_before_memory_restore    
-    injection_params.pause_after_memory_restore = args.pause_after_memory_restore    
-    injection_params.ansi = not args.plaintext
+    injection_params.pause_after_memory_restore = args.pause_after_memory_restore
     injection_params.enable_debugging_output = args.debug
     
     if args.do_not_deallocate:
@@ -1190,16 +1420,16 @@ if __name__ == "__main__":
                                 line_array = line.strip().split(" ")
                                 offset_name = line_array[1].strip()
                                 if offset_name in injection_params.relative_offsets.keys():
-                                    log_warning(f"The offset '{offset_name}' is redefined in '{reloff_abs_path}'", ansi=args.plaintext)
+                                    log_warning(f"The offset '{offset_name}' is redefined in '{reloff_abs_path}'", ansi=injection_params.ansi)
                                 offset_value = int(line_array[0], 16)
                                 if offset_value > 0:
                                     injection_params.relative_offsets[offset_name] = offset_value
                                 else:
                                     if injection_params.enable_debugging_output:
-                                        log_warning(f"Ignoring offset '{offset_name}' in '{reloff_abs_path}' because it has a value of zero", ansi=args.plaintext)
+                                        log_warning(f"Ignoring offset '{offset_name}' in '{reloff_abs_path}' because it has a value of zero", ansi=injection_params.ansi)
     
     if len(injection_params.relative_offsets) < 1:
-        log_error("A list of relative offsets was not specified. If the injection fails, check your payload to make sure you're including the offsets of any exported functions it calls.", ansi=args.plaintext)
+        log_error("A list of relative offsets was not specified. If the injection fails, check your payload to make sure you're including the offsets of any exported functions it calls.", ansi=injection_params.ansi)
     
     if args.non_pic_binary:
         if len(args.non_pic_binary) > 0:
@@ -1208,5 +1438,24 @@ if __name__ == "__main__":
                     if pb.strip() != "":
                         if pb not in injection_params.non_pic_binaries:
                             injection_params.non_pic_binaries.append(pb)
+
+    if args.restore_memory_region:
+        if len(args.restore_memory_region) > 0:
+            for elem in args.restore_memory_region:
+                for mr in elem:
+                    if mr.strip() != "":
+                        if mr not in injection_params.restore_memory_region_regexes:
+                            injection_params.restore_memory_region_regexes.append(mr)
+
+    if args.restore_all_memory_regions:
+        injection_params.restore_all_memory_regions = True
+
+    if args.temp_dir:
+        injection_params.temp_file_base_directory = os.path.abspath(args.temp_dir)
+
+    log(f"Using '{injection_params.temp_file_base_directory}' as the base temporary directory", ansi=injection_params.ansi)
+
+    # Create the temporary directory
+    asminject_parameters.make_required_directory(injection_params.temp_file_base_directory, injection_params)
 
     asminject(injection_params)

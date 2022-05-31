@@ -183,6 +183,7 @@ class asminject_parameters:
         self.internal_memory_region_restore_ignore_list = [ '[vdso]', '[vvar]' ]
         self.restore_memory_region_regexes = []
         self.restore_all_memory_regions = False
+        self.backup_chunk_size = 0x1000
         
         timestamp_string = asminject_parameters.get_timestamp_string_for_paths()
         random_string = hex(secrets.randbelow(0xFFFFFFF))
@@ -437,15 +438,18 @@ class asminject_memory_map_data:
 
     def to_json(self):
         return json.dumps(self.to_array())
+        
+    def add_entry(self, injection_params, new_entry):
+        self.map_data_keys_ordered.append(new_entry.start_address)
+        self.map_data[new_entry.start_address] = new_entry
+        self.add_first_region_data(injection_params, new_entry)
     
     @staticmethod
     def from_array(injection_params, arr):
         result = asminject_memory_map_data()
         for arr_entry in arr:
             new_entry = memory_map_entry.from_dictionary(arr_entry)
-            result.map_data_keys_ordered.append(new_entry.start_address)
-            result.map_data[new_entry.start_address] = new_entry
-            result.add_first_region_data(injection_params, new_entry)
+            result.add_entry(injection_params, new_entry)
         return result
     
     @staticmethod
@@ -723,8 +727,6 @@ def output_memory_block_data(injection_params, memory_block_name, memory_block):
         output = f"{output}\n\t{block_data}"
     log(output, ansi=injection_params.ansi)
 
-
-    
 def get_syscall_values(injection_params, pid):
     result = {}
     syscall_data = ""
@@ -805,6 +807,70 @@ def set_process_priority_and_affinity(injection_params, asminject_priority, targ
     injection_params.target_process.cpu_affinity(asminject_affinity)
     log(f"Setting CPU affinity for target process (PID: {injection_params.pid}) to {target_affinity}", ansi=injection_params.ansi)
     injection_params.target_process.cpu_affinity(target_affinity)
+
+def back_up_memory_region(injection_params, map_entry):
+    backup_path = os.path.join(injection_params.temp_file_base_directory, injection_params.memory_region_backup_subdirectory_name, f"{hex(map_entry.start_address)}-{hex(map_entry.end_address)}.bin")
+    with open(backup_path, "wb") as backup_file:
+        with open(f"/proc/{injection_params.pid}/mem", "rb") as mem:
+            total_size = map_entry.end_address - map_entry.start_address
+            read_size = 0
+            mem.seek(map_entry.start_address)
+            while read_size < total_size:
+                current_block_size = injection_params.backup_chunk_size
+                remaining_size = total_size - read_size
+                if remaining_size < current_block_size:
+                    current_block_size = remaining_size
+                region_backup_chunk = mem.read(current_block_size)
+                backup_path.write(region_backup_chunk)
+                read_size += current_block_size
+
+def back_up_memory_regions(injection_params, memory_map_data):
+    # Create a separate container for only the regions that have been backed up
+    # (as opposed to the complete list that asminject.py is using for other purposes)
+    backed_up_region_data = asminject_memory_map_data()
+    exiting_map_data_array = memory_map_data.to_array()
+    json_path = injection_params.create_empty_temp_file(subdirectory_name = injection_params.memory_region_backup_subdirectory_name, suffix = ".json")
+    
+    for arr_entry in exiting_map_data_array:
+        new_entry = memory_map_entry.from_dictionary(arr_entry)
+        add_entry = False
+        # Only continue processing the current region
+        # if all memory regions are being backed up/restored
+        # or its path/name matches a user-supplied regex
+        if injection_params.restore_all_memory_regions:
+            add_entry = True
+
+        if not add_entry:
+            for rmr_rex in injection_params.restore_memory_region_regexes:
+                if e.search(rmr_rex, new_entry.path):
+                    add_entry = True
+                    break
+
+        # Don't back up/restore anything on the internal ignore list
+        if add_entry:
+            if new_entry.path in injection_params.internal_memory_region_restore_ignore_list:
+                add_entry = False
+
+        # Don't back up/restore asminject.py's own memory regions
+        if add_entry:
+            if new_entry.start_address == injection_params.existing_read_execute_address
+                add_entry = False
+            if new_entry.start_address == injection_params.existing_read_write_address
+                add_entry = False
+
+        if add_entry:
+            try:
+                back_up_memory_region(injection_params, new_entry)
+                log_success(f"Backed up the memory region {hex(new_entry.start_address)} - {hex(new_entry.end_address)} (Path: '{new_entry.path}'): {e}", ansi=injection_params.ansi)
+            except Exception as e:
+                log_error(f"Couldn't back up the memory region {hex(new_entry.start_address)} - {hex(new_entry.end_address)} (Path: '{new_entry.path}'): {e}", ansi=injection_params.ansi)
+            backed_up_region_data.add_entry(injection_params, new_entry)
+    
+    # Also save a JSON version of the backed-up region list
+    with open(json_path, "w") as json_file:
+        json_file.write(backed_up_region_data.to_json())
+    
+    return backed_up_region_data
 
 def asminject(injection_params):
     log(f"Starting at {injection_params.get_timestamp_string()} (UTC)", ansi=injection_params.ansi)

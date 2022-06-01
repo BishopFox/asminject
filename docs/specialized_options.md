@@ -4,6 +4,8 @@
 * [Specifying non-PIC code](#specifying-non-pic-code)
 * [Multi-architecture support](#multi-architecture-support)
 * [Memory reuse](#memory-reuse)
+* [Restoring more of the target process's memory](#restoring-more-of-the-target-processs-memory)
+* [Debugging/troubleshooting options](#debuggingtroubleshooting-options)
 
 ## Process suspension methods
 
@@ -170,3 +172,32 @@ i.e. to inject the same code into the same process again:
 ```
 # python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-copyroom-usr-bin-python3.9-2022-05-05.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate --use-read-execute-address 0x7ffff7faf000 --use-read-execute-size 0x8000 --use-read-write-address 0x7ffff7fb7000 --use-read-write-size 0x8000
 ```
+
+## Restoring more of the target process's memory
+
+Under normal operating conditions, `asminject.py` backs up and restores only the areas of the target process memory that it explicitly overwrites when placing the first stage and when communicating with the first and second stages of the payload. If your payload causes significant changes to the state of the process, it may be helpful to restore one or more entire regions of memory.
+
+The `--restore-memory-region` option can be used to specify a regular expression for matching the path of a memory-mapped region, and may be specified multiple times. e.g.: `--restore-memory-region '[heap]' --restore-memory-region '[stack]'`.
+
+The `--restore-all-memory-regions` option will cause `asminject.py` to attempt a backup and restore of *all* regions in the target process, with the exception of the kernel interface regions `[vdso]` and `[vvar]`.
+
+## Debugging/troubleshooting options
+
+`--debug` will cause `asminject.py` to log a large amount of additional information, including the generated assembly source code for the first and second stage payloads.
+
+`--temp-dir` specifies a custom base path for temporary files. When this option is not specified, `asminject.py` generates a unique path based on the current date/time and a secure random number.
+
+`--preserve-temp-files` prevents `asminject.py` from deleting any of the temporary files it generates.
+
+### Pause options
+
+`asminject.py` can be directory to pause before proceeding at certain key points in the injection process. This can make it easier to attach `gdb` to troubleshoot custom payloads. While paused, the payload will be running in a loop with a `nanosleep`-based delay between iterations.
+
+`--pause-before-resume` pauses execution after the first stage has been injected, but before the target process is resumed.
+
+`--pause-before-launching-stage2` pauses execution after stage one has injected stage two, but before launched stage two.
+
+`--pause-before-memory-restore` pauses execution after the payload has indicated it is ready for target process memory to be restored, but before that restoration takes place.
+
+`--pause-after-memory-restore` pauses execution after target process memory has been restored, but before stage two restores CPU state and jumps back to the original instruction pointer.
+

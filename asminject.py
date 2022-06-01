@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.19
-Ben Lincoln, Bishop Fox, 2022-05-21
+v0.20
+Ben Lincoln, Bishop Fox, 2022-06-01
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -69,7 +69,9 @@ class asminject_parameters:
         # replace delimiters that are frequently problematic in paths:
         result = re.sub('[: ]', '-', result)
         # remove any other unexpected characters
-        result = re.sub('[^0-9\-TZ]', '', result)
+        # result = re.sub('[^0-9\-TZ]', '', result)
+        # as well as characters that make it easier to recognize the string as asminject.py's
+        result = re.sub('[^0-9]', '', result)
         return result
 
     def __init__(self):
@@ -186,8 +188,8 @@ class asminject_parameters:
         self.backup_chunk_size = 0x1000
         
         timestamp_string = asminject_parameters.get_timestamp_string_for_paths()
-        random_string = hex(secrets.randbelow(0xFFFFFFF))
-        self.temp_file_base_directory = os.path.join(tempfile.gettempdir(), f"asminject-{timestamp_string}-{random_string}")
+        random_string = hex(secrets.randbelow(0xFFFFFFF)).replace("0x", "")
+        self.temp_file_base_directory = os.path.join(tempfile.gettempdir(), f"{timestamp_string}{random_string}")
         
     def set_dynamic_process_info_vars(self):
         self.target_process = psutil.Process(self.pid)
@@ -292,13 +294,35 @@ class memory_map_permissions:
             self.execute = True
         if permission_string[3:4].lower() == "s":
             self.shared = True
+    
+    def to_permission_string(self):
+        result = ""
+        if self.read:
+            result += "r"
+        else:
+            result += "-"
+        if self.write:
+            result += "w"
+        else:
+            result += "-"
+        if self.execute:
+            result += "x"
+        else:
+            result += "-"
+        if self.shared:
+            result += "s"
+        else:
+            result += "p"
+        return result
             
     def __init__(self):
         self.set_default_values()
     
-    def __init__(self, permission_string):
-        self.set_default_values()
-        self.set_from_permission_string(permission_string)
+    @staticmethod
+    def from_permission_string(permission_string):
+        result = memory_map_permissions()
+        result.set_from_permission_string(permission_string)
+        return result
 
 class memory_map_entry:
     def set_default_values(self):
@@ -310,6 +334,7 @@ class memory_map_entry:
         self.inode = None
         self.path = None
         self.position_independent_code = False
+        self.backup_path = None
     
     def set_from_map_entry_line(self, map_entry_line):
         linesplit = map_entry_line.split()
@@ -317,7 +342,7 @@ class memory_map_entry:
         self.start_address = int(addr_split[0], 16)
         self.end_address = int(addr_split[1], 16)
         perms = linesplit[1]
-        self.permissions = memory_map_permissions(perms)
+        self.permissions = memory_map_permissions.from_permission_string(perms)
         self.offset = int(linesplit[2], 16)
         self.device = linesplit[3]
         self.inode = linesplit[4]
@@ -325,25 +350,31 @@ class memory_map_entry:
 
     def __init__(self):
         self.set_default_values()
-    
-    def __init__(self, map_entry_line):
-        self.set_default_values()
-        self.set_from_map_entry_line(map_entry_line)
+        
+    @staticmethod
+    def from_map_entry_line(map_entry_line):
+        result = memory_map_entry()
+        result.set_from_map_entry_line(map_entry_line)
+        return result
     
     def get_base_address(self):
         if self.position_independent_code:
             return self.start_address
         return 0
     
+    def get_description_string(self):
+        return f"{hex(self.start_address)} - {hex(self.end_address)} (Path: '{self.path}')"
+    
     def to_dictionary(self):
         result = {}
         result["start_address"] = self.start_address
         result["end_address"] = self.end_address
-        result["permissions"] = self.permissions
+        result["permissions"] = self.permissions.to_permission_string()
         result["offset"] = self.offset
         result["device"] = self.device
         result["inode"] = self.inode
         result["path"] = self.path
+        result["backup_path"] = self.backup_path
         result["position_independent_code"] = self.position_independent_code
         return result
     
@@ -358,7 +389,9 @@ class memory_map_entry:
         if "end_address" in dict.keys():
             result.end_address = dict["end_address"]
         if "permissions" in dict.keys():
-            result.permissions = dict["permissions"]
+            perms = memory_map_permissions()
+            perms.set_from_permission_string(dict["permissions"])
+            result.permissions = perms
         if "offset" in dict.keys():
             result.offset = dict["offset"]
         if "device" in dict.keys():
@@ -367,6 +400,8 @@ class memory_map_entry:
             result.inode = dict["inode"]
         if "path" in dict.keys():
             result.path = dict["path"]
+        if "backup_path" in dict.keys():
+            result.backup_path = dict["backup_path"]
         if "position_independent_code" in dict.keys():
             result.position_independent_code = dict["position_independent_code"]
         return result
@@ -381,6 +416,7 @@ class asminject_memory_map_data:
         self.map_data = {}
         self.map_data_keys_ordered = []
         self.first_region_for_named_file_map = {}
+        self.backup_directory = None
 
     def get_unique_path_names(self):
         return self.first_region_for_named_file_map.keys()
@@ -418,7 +454,7 @@ class asminject_memory_map_data:
     def load_memory_map_data(self, injection_params):
         with open(injection_params.get_map_file_path()) as maps_file:
             for line in maps_file.readlines():
-                new_map_entry = memory_map_entry(line)
+                new_map_entry = memory_map_entry.from_map_entry_line(line)
                 self.map_data[new_map_entry.start_address] = new_map_entry
                 self.map_data_keys_ordered.append(new_map_entry.start_address)
                 if new_map_entry.path.strip() != "":
@@ -429,11 +465,13 @@ class asminject_memory_map_data:
                             break
                 
                 self.add_first_region_data(injection_params, new_map_entry)
+                #self.add_entry(injection_params, new_map_entry)
                 
     def to_array(self):
         result = []
         for start_address in self.map_data_keys_ordered:
             result_entry = self.map_data[start_address].to_dictionary()
+            result.append(result_entry)
         return result
 
     def to_json(self):
@@ -808,8 +846,8 @@ def set_process_priority_and_affinity(injection_params, asminject_priority, targ
     log(f"Setting CPU affinity for target process (PID: {injection_params.pid}) to {target_affinity}", ansi=injection_params.ansi)
     injection_params.target_process.cpu_affinity(target_affinity)
 
-def back_up_memory_region(injection_params, map_entry):
-    backup_path = os.path.join(injection_params.temp_file_base_directory, injection_params.memory_region_backup_subdirectory_name, f"{hex(map_entry.start_address)}-{hex(map_entry.end_address)}.bin")
+def back_up_memory_region(injection_params, map_entry, subdirectory_name):
+    backup_path = os.path.join(injection_params.temp_file_base_directory, subdirectory_name, f"0x{map_entry.start_address:016x}-0x{map_entry.end_address:016x}.bin")
     with open(backup_path, "wb") as backup_file:
         with open(f"/proc/{injection_params.pid}/mem", "rb") as mem:
             total_size = map_entry.end_address - map_entry.start_address
@@ -821,49 +859,69 @@ def back_up_memory_region(injection_params, map_entry):
                 if remaining_size < current_block_size:
                     current_block_size = remaining_size
                 region_backup_chunk = mem.read(current_block_size)
-                backup_path.write(region_backup_chunk)
+                backup_file.write(region_backup_chunk)
                 read_size += current_block_size
+            return backup_path
+    return None
 
-def back_up_memory_regions(injection_params, memory_map_data):
+def back_up_memory_regions(injection_params, memory_map_data, subdirectory_name):
     # Create a separate container for only the regions that have been backed up
     # (as opposed to the complete list that asminject.py is using for other purposes)
     backed_up_region_data = asminject_memory_map_data()
     exiting_map_data_array = memory_map_data.to_array()
-    json_path = injection_params.create_empty_temp_file(subdirectory_name = injection_params.memory_region_backup_subdirectory_name, suffix = ".json")
+    json_path = injection_params.create_empty_temp_file(subdirectory_name = subdirectory_name, suffix = ".json")
+    backed_up_region_data.backup_directory = os.path.dirname(json_path)
     
     for arr_entry in exiting_map_data_array:
         new_entry = memory_map_entry.from_dictionary(arr_entry)
         add_entry = False
+        region_description_string = new_entry.get_description_string()
         # Only continue processing the current region
         # if all memory regions are being backed up/restored
         # or its path/name matches a user-supplied regex
         if injection_params.restore_all_memory_regions:
+            if injection_params.enable_debugging_output:
+                log(f"Tenatively including memory region {region_description_string} in backup because the user selected backup/restore for all regions", ansi=injection_params.ansi)
             add_entry = True
 
         if not add_entry:
             for rmr_rex in injection_params.restore_memory_region_regexes:
                 if e.search(rmr_rex, new_entry.path):
+                    if injection_params.enable_debugging_output:
+                        log(f"Tenatively including memory region {region_description_string} in backup because its path matches the regular expression '{rmr_rex}'", ansi=injection_params.ansi)
                     add_entry = True
                     break
 
         # Don't back up/restore anything on the internal ignore list
         if add_entry:
             if new_entry.path in injection_params.internal_memory_region_restore_ignore_list:
+                if injection_params.enable_debugging_output:
+                    log(f"Removing memory region {region_description_string} from backup candidates because its path matches an internal ignore list entry", ansi=injection_params.ansi)
                 add_entry = False
 
         # Don't back up/restore asminject.py's own memory regions
         if add_entry:
-            if new_entry.start_address == injection_params.existing_read_execute_address
+            if new_entry.start_address == injection_params.existing_read_execute_address:
+                if injection_params.enable_debugging_output:
+                    log(f"Removing memory region {region_description_string} from backup candidates because its start address matches the existing read/execute block address", ansi=injection_params.ansi)
                 add_entry = False
-            if new_entry.start_address == injection_params.existing_read_write_address
+            if new_entry.start_address == injection_params.existing_read_write_address:
+                if injection_params.enable_debugging_output:
+                    log(f"Removing memory region {region_description_string} from backup candidates because its start address matches the existing read/write block address", ansi=injection_params.ansi)
                 add_entry = False
 
         if add_entry:
+            if injection_params.enable_debugging_output:
+                log(f"Attempting to back up memory region {region_description_string}", ansi=injection_params.ansi)
             try:
-                back_up_memory_region(injection_params, new_entry)
-                log_success(f"Backed up the memory region {hex(new_entry.start_address)} - {hex(new_entry.end_address)} (Path: '{new_entry.path}'): {e}", ansi=injection_params.ansi)
+                backup_path = back_up_memory_region(injection_params, new_entry, subdirectory_name)
+                if backup_path:
+                    log_success(f"Backed up the memory region {region_description_string}", ansi=injection_params.ansi)
+                    new_entry.backup_path = backup_path
+                else:
+                    log_error(f"Backup of memory region {region_description_string} failed unexpectedly", ansi=injection_params.ansi)
             except Exception as e:
-                log_error(f"Couldn't back up the memory region {hex(new_entry.start_address)} - {hex(new_entry.end_address)} (Path: '{new_entry.path}'): {e}", ansi=injection_params.ansi)
+                log_error(f"Couldn't back up the memory region {region_description_string}: {e}", ansi=injection_params.ansi)
             backed_up_region_data.add_entry(injection_params, new_entry)
     
     # Also save a JSON version of the backed-up region list
@@ -871,6 +929,35 @@ def back_up_memory_regions(injection_params, memory_map_data):
         json_file.write(backed_up_region_data.to_json())
     
     return backed_up_region_data
+
+
+def restore_memory_region(injection_params, region_entry):
+    region_description_string = region_entry.get_description_string()
+    if injection_params.enable_debugging_output:
+        log(f"Attempting to restore memory region {region_description_string}", ansi=injection_params.ansi)
+    with open(region_entry.backup_path, "rb") as backup_file:
+        with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
+            total_size = region_entry.end_address - region_entry.start_address
+            read_size = 0
+            mem.seek(region_entry.start_address)
+            while read_size < total_size:
+                current_block_size = injection_params.backup_chunk_size
+                remaining_size = total_size - read_size
+                if remaining_size < current_block_size:
+                    current_block_size = remaining_size
+                region_backup_chunk = backup_file.read(current_block_size)
+                mem.write(region_backup_chunk)
+                read_size += current_block_size
+
+def restore_memory_regions(injection_params, backed_up_memory_map_data):
+    for mr in backed_up_memory_map_data.to_array():
+        mem_region = memory_map_entry.from_dictionary(mr)
+        region_description_string = mem_region.get_description_string()
+        try:
+            restore_memory_region(injection_params, mem_region)
+        except Exception as e:
+            log_error(f"Couldn't restore the memory region {region_description_string}: {e}", ansi=injection_params.ansi)
+
 
 def asminject(injection_params):
     log(f"Starting at {injection_params.get_timestamp_string()} (UTC)", ansi=injection_params.ansi)
@@ -1074,6 +1161,7 @@ def asminject(injection_params):
     code_backup = b''
     communication_address_backup = b''
     current_state = None
+    memory_region_backup = None
     
     continue_executing = True
     try:
@@ -1087,7 +1175,7 @@ def asminject(injection_params):
             stack_pointer = syscall_check_result[injection_params.stack_pointer_register_name]
             if instruction_pointer == 0 or stack_pointer == 0:
                 log_error("Couldn't get current syscall data", ansi=injection_params.ansi)
-                time.sleep(SLEEP_TIME_WAITING_FOR_SYSCALLS)
+                time.sleep(injection_params.sleep_time_waiting_for_syscalls)
             else:
                 got_initial_syscall_data = True
         log(f"{injection_params.instruction_pointer_register_name}: {hex(instruction_pointer)}", ansi=injection_params.ansi)
@@ -1135,6 +1223,11 @@ def asminject(injection_params):
                 continue_executing = False
                 log_error("Assembly of stage 1 failed - will not attempt to inject into process", ansi=injection_params.ansi)
             else:
+            
+                memory_region_backup = back_up_memory_regions(injection_params, memory_map_data, injection_params.memory_region_backup_subdirectory_name)
+                if injection_params.enable_debugging_output:
+                    log(f"Created the pre-injection memory region backup in '{memory_region_backup.backup_directory}'", ansi=injection_params.ansi)
+                memory_region_backup.backup_directory
                 with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
                     # back up the code we're about to overwrite
                     code_backup_address = instruction_pointer
@@ -1243,6 +1336,7 @@ def asminject(injection_params):
                 if injection_params.pause_before_memory_restore:
                     input("Press Enter to proceed with memory restoration")
                 log("Restoring original memory content", ansi=injection_params.ansi)
+                
                 with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
                     mem.seek(code_backup_address)
                     mem.write(code_backup)
@@ -1265,15 +1359,27 @@ def asminject(injection_params):
                     current_communication_address_backup = mem.read(injection_params.communication_address_backup_size)
                     output_memory_block_data(injection_params, f"Communication address location after shellcode execution ({hex(communication_address)})", current_communication_address_backup)
 
-                    if injection_params.pause_after_memory_restore:
-                        input("Press Enter to restore the communications address backup and allow the inner payload to execute")
+                if injection_params.pause_after_memory_restore:
+                    input("Press Enter to restore the communications address backup and allow the inner payload to execute")
 
+                if injection_params.enable_debugging_output:
+                    memory_region_backup_comparison = back_up_memory_regions(injection_params, memory_map_data, injection_params.memory_region_backup_subdirectory_name + "-post_injection_comparison")
+                    log(f"Created a post-injection memory region backup in '{memory_region_backup_comparison.backup_directory}' for debugging purposes", ansi=injection_params.ansi)
+                    
+                restore_memory_regions(injection_params, memory_region_backup)
+
+                with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
                     mem.seek(communication_address)
                     mem.write(communication_address_backup)
                     
                     mem.seek(communication_address)
                     current_communication_address_backup = mem.read(injection_params.communication_address_backup_size)
                     output_memory_block_data(injection_params, f"Communication address location after memory restore ({hex(communication_address)})", current_communication_address_backup)
+                #restore_memory_regions(injection_params, memory_region_backup)
+                
+                if injection_params.enable_debugging_output:
+                    memory_region_backup_comparison = back_up_memory_regions(injection_params, memory_map_data, injection_params.memory_region_backup_subdirectory_name + "-post_restore_comparison")
+                    log(f"Created a post-restore memory region backup in '{memory_region_backup_comparison.backup_directory}' for debugging purposes", ansi=injection_params.ansi)
                         
     except KeyboardInterrupt as ki:
         log_warning(f"Operator cancelled the injection attempt", ansi=injection_params.ansi)

@@ -84,6 +84,10 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.20 (2022-06-01)
+
+* Added `--restore-memory-region` and `--restore-all-memory-regions` options to allow more of the target process state to be restored after injection.
+
 ### 0.19 (2022-05-26)
 
 * Work in progress version with some internal logic redesigned to support new features in a later release

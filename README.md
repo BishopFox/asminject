@@ -84,6 +84,12 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.21 (2022-06-02)
+
+* Read/write and read/execute memory region sizes are now randomly selected by default to help make detection harder
+* Refactoring some of the inner workings to allow for ongoing improvements
+* Python code execution payload segfaults after execution at the moment
+
 ### 0.20 (2022-06-01)
 
 * Added `--restore-memory-region` and `--restore-all-memory-regions` options to allow more of the target process state to be restored after injection.

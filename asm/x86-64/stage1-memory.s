@@ -18,17 +18,6 @@ _start:
 	push r13
 	push r14
 	push r15
-			
-	# // allocate a new block of memory for read/write data using mmap
-	# mov rax, 9              								# SYS_MMAP
-	# xor rdi, rdi            								# start address
-	# mov rsi, [VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]  	# len
-	# mov rdx, 0x3            								# prot (rw)
-	# mov r10, 0x22           								# flags (MAP_PRIVATE | MAP_ANONYMOUS)
-	# mov r8, -1             									# fd
-	# xor r9, r9              								# offset 0
-	# syscall
-	# mov r11, rax            								# save mmap addr
 	
 	[READ_WRITE_ALLOCATE_OR_REUSE]
 	mov rax, r11
@@ -50,31 +39,6 @@ _start:
 	mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
 	rep movsb
 	
-	# // also copy the pushed register values into the temporary stack
-	# mov rax, r11
-	# add rax, [VARIABLE:NEW_STACK_LOCATION_OFFSET:VARIABLE]
-	# mov rdi, rax
-	# mov rsi, [VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]
-	# mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
-	# rep movsb
-	
-	# // set the stack pointer to be the new stack with the pushed register values already on it
-	# mov rsp, r11
-	# add rsp, [VARIABLE:NEW_STACK_LOCATION_OFFSET:VARIABLE]
-	# sub rsp, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
-	
-	# // allocate a new block of memory for executable instructions using mmap
-	# mov rax, 9              								# SYS_MMAP
-	# xor rdi, rdi            								# start address
-	# mov rsi, [VARIABLE:READ_EXECUTE_BLOCK_SIZE:VARIABLE]  	# len
-	# // mov rdx, 0x7            								# prot (rwx)
-	# mov rdx, 0x5            								# prot (rx)
-	# mov r10, 0x22           								# flags (MAP_PRIVATE | MAP_ANONYMOUS)
-	# mov r8, -1             									# fd
-	# xor r9, r9              								# offset 0
-	# syscall
-	# mov r15, rax            								# save mmap addr
-	
 	[READ_EXECUTE_ALLOCATE_OR_REUSE]
 	mov rax, r15
 	
@@ -91,17 +55,17 @@ _start:
 	push rcx
 	mov r13, rsp
 	
-	// overwrite communications address with [VARIABLE:STATE_READY_FOR_SHELLCODE_WRITE:VARIABLE]
+	// overwrite communications address with [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]
 	// so that the Python script knows it can write stage 2 to memory
 	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
-	mov r12, [VARIABLE:STATE_READY_FOR_SHELLCODE_WRITE:VARIABLE]
+	mov r12, [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]
 	mov [r14], r12
 	
-	// wait for value at communications address to be [VARIABLE:STATE_SHELLCODE_WRITTEN:VARIABLE] before proceeding
+	// wait for value at communications address to be [VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE] before proceeding
 wait_for_script:
 
 	mov rax, [r14]
-	cmp rax, [VARIABLE:STATE_SHELLCODE_WRITTEN:VARIABLE]
+	cmp rax, [VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]
 	je launch_stage2
 	
 	// sleep 1 second

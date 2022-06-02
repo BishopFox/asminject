@@ -64,15 +64,6 @@ cleanup_and_return:
 	fxrstor [rax]
 	pop rax
 
-	# // de-allocate the mmapped r/w block
-	# movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
-	# mov rax, 11              								# SYS_MUNMAP
-	# mov rdi, [r14 + 16]    									# start address
-	# mov rsi, [VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]		# len
-	# syscall
-	
-	# // cannot really de-allocate the r/x block because that is where this code is
-
 [DEALLOCATE_MEMORY]
 
 	// restore regular registers
@@ -111,10 +102,6 @@ read_write_address:
 
 existing_stack_backup_address:
 	.quad [VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]
-	.balign 8
-
-new_stack_address:
-	.quad [VARIABLE:NEW_STACK_ADDRESS:VARIABLE]
 	.balign 8
 
 arbitrary_read_write_data_address:

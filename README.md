@@ -84,6 +84,12 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.22 (2022-06-03)
+
+* Fixed the refactoring bug that had broken Python code execution
+* Added `--write-assembly-source-to-disk` debugging option
+* More internal reworking
+
 ### 0.21 (2022-06-02)
 
 * Read/write and read/execute memory region sizes are now randomly selected by default to help make detection harder

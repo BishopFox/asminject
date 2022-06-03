@@ -32,7 +32,8 @@ _start:
 	fxsave [rax]
 
 	// move the pushed register values into the read/write area now rather than later
-	add rax, [VARIABLE:CPU_STATE_SIZE:VARIABLE]
+	//add rax, [VARIABLE:CPU_STATE_SIZE:VARIABLE]
+	mov rax, r11
 	add rax, [VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]
 	mov rdi, rax
 	mov rsi, [VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]

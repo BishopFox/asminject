@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.21
-Ben Lincoln, Bishop Fox, 2022-06-02
+v0.22
+Ben Lincoln, Bishop Fox, 2022-06-03
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -187,6 +187,9 @@ class asminject_parameters:
         return self.get_region_info_template(self.read_write_region_address, self.rwr_arbitrary_data_offset, self.rwr_arbitrary_data_length, "rw-p")
 
     def __init__(self):
+        # memory regions must be evenly divisible by this amount
+        # (currently only to make sure that memory overwrite doesn't extend 
+    
         # x86-64: 8 bytes * 16 registers
         self.stack_backup_size = 8 * 16
         
@@ -198,14 +201,14 @@ class asminject_parameters:
         self.communication_address_offset = -40
         self.communication_address_backup_size = 24
         # 512 is the minimum for the x86-64 fxsave instruction
-        self.cpu_state_size = 1024
+        #self.cpu_state_size = 1024
         # Might need to make this dynamic based on the stack backup size
-        self.existing_stack_backup_location_size = 2048
-        self.existing_stack_backup_location_offset = 1024
-        self.new_stack_size = 2048
-        self.new_stack_location_offset = 1024
-        self.arbitrary_read_write_data_size = 2048
-        self.arbitrary_read_write_data_location_offset = 0
+        #self.existing_stack_backup_location_size = 2048
+        #self.existing_stack_backup_location_offset = 1024
+        #self.new_stack_size = 2048
+        #self.new_stack_location_offset = 1024
+        #self.arbitrary_read_write_data_size = 2048
+        #self.arbitrary_read_write_data_location_offset = 0
         # When allocating memory, use blocks evenly divisible by this amount:
         self.allocation_unit_size = 0x1000
         
@@ -284,6 +287,7 @@ class asminject_parameters:
         self.precompiled_shellcode = None
         self.custom_replacements = {}
         self.delete_temp_files = True
+        self.write_assembly_source_to_disk = False
         self.freeze_dir = "/sys/fs/cgroup/freezer/" + secrets.token_bytes(8).hex()
         self.fragment_directory_name = "fragments"
         self.payload_assembly_subdirectory_name = "assembly"
@@ -308,6 +312,8 @@ class asminject_parameters:
         
         self.enable_debugging_output = False
         self.clear_payload_memory_after_execution = False
+        # will be expanded or truncated to the CPU register width for the platform
+        self.clear_payload_memory_value = 0x00
         
         self.instruction_pointer_register_name = "RIP"
         self.stack_pointer_register_name = "RSP"
@@ -808,8 +814,7 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
             # os.chmod(out_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
         # except Exception as e:
             # log_warning(f"Couldn't set permissions on '{out_path}': {e}", ansi=injection_params.ansi)
-        if injection_params.enable_debugging_output:
-            log(f"Writing assembled binary to {out_path}", ansi=injection_params.ansi)
+        
         #out_path = f"/tmp/assembled_{os.urandom(8).hex()}.bin"
         #cmd = "gcc -x assembler - -o {0} -nostdlib -Wl,--oformat=binary -m64 -fPIC".format()
         argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-Wl,--oformat=binary", "-m64", "-fPIC"]
@@ -822,6 +827,17 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
             #argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-fPIC", "-pie", "-Wl,--build-id=none", "-s"]
 
         program = formatted_source.encode()
+        if injection_params.write_assembly_source_to_disk:
+            try:
+                in_path = injection_params.create_empty_temp_file(subdirectory_name = injection_params.payload_assembly_subdirectory_name, suffix = ".s")
+                log(f"Writing assembly source to '{in_path}'", ansi=injection_params.ansi)
+                with open(in_path, "w") as source_code_file:
+                    source_code_file.write(formatted_source)
+            except Exception as e:
+                log_error(f"Couldn't write assembly source to '{in_path}': {e}", ansi=injection_params.ansi)
+        if injection_params.enable_debugging_output:
+            log(f"Writing assembled binary to '{out_path}'", ansi=injection_params.ansi)
+        
         pipe = subprocess.PIPE
 
         if injection_params.enable_debugging_output:
@@ -1150,17 +1166,13 @@ def asminject(injection_params):
     # these values will stay the same even for the real assembly
     
     stage2_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
-    #stage2_replacements['[VARIABLE:CODE_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, code_backup))
-    #stage2_replacements['[VARIABLE:STACK_BACKUP_JOIN:VARIABLE]'] = ",".join(map(str, stack_backup))
     stage2_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{communication_address}"
     stage2_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_memory_restore}"
-    stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.cpu_state_size}"
+    stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.rwr_cpu_state_backup_length}"
     stage2_replacements['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{injection_params.stage_sleep_seconds}"
-    stage2_replacements['[VARIABLE:read_write_region_SIZE:VARIABLE]'] = f"{injection_params.read_write_region_size}"
-    stage2_replacements['[VARIABLE:read_execute_region_SIZE:VARIABLE]'] = f"{injection_params.read_execute_region_size}"
-    #stage2_replacements['[VARIABLE:SHELLCODE_SECTION_DELIMITER:VARIABLE]'] = f"{injection_params.shellcode_section_delimiter}"
     stage2_replacements['[VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.precompiled_shellcode_label}"
     stage2_replacements['[VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.post_shellcode_label}"
+    #stage2_replacements['[VARIABLE:CLEAR_PAYLOAD_MEMORY_VALUE:VARIABLE]'] = f"{injection_params.clear_payload_memory_value}"
     # these values are placeholders - real values will be determined by result of stage 1
     stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_variables.state_memory_restored}"
     stage2_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(communication_address-injection_params.stack_backup_size)}"
@@ -1184,6 +1196,11 @@ def asminject(injection_params):
         log_error(f"Couldn't read the stage 2 template source code file '{stage2_template_source_path}': {e}", ansi=injection_params.ansi)
         sys.exit(1)
     
+    if injection_params.clear_payload_memory_after_execution:
+        stage2_source_code = stage2_source_code.replace("[CLEAR_RW_MEMORY]", "[FRAGMENT:stage2-overwrite_read-write.s:FRAGMENT]")
+    else:
+        stage2_source_code = stage2_source_code.replace("[CLEAR_RW_MEMORY]", "")
+
     if injection_params.deallocate_memory:
         stage2_source_code = stage2_source_code.replace("[DEALLOCATE_MEMORY]", "[FRAGMENT:stage2-deallocate.s:FRAGMENT]")
     else:
@@ -1342,10 +1359,9 @@ def asminject(injection_params):
             stage1_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_memory_restore}"
             stage1_replacements['[VARIABLE:READ_EXECUTE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_execute_region_size}"
             stage1_replacements['[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_write_region_size}"
-            stage1_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.cpu_state_size}"
+            stage1_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.rwr_cpu_state_backup_length}"
             stage1_replacements['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{injection_params.stage_sleep_seconds}"
-            stage1_replacements['[VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]'] = f"{injection_params.existing_stack_backup_location_offset}"
-            #stage1_replacements['[VARIABLE:NEW_STACK_LOCATION_OFFSET:VARIABLE]'] = f"{injection_params.cpu_state_size + injection_params.existing_stack_backup_location_size + injection_params.new_stack_location_offset}"
+            stage1_replacements['[VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]'] = f"{injection_params.rwr_stack_backup_offset}"
             if injection_params.existing_read_execute_address:
                 injection_params.read_execute_region_address = injection_params.existing_read_execute_address
                 log_warning(f"Attempting to reuse existing read/execute block at {hex(injection_params.read_execute_region_address)}")
@@ -1360,8 +1376,6 @@ def asminject(injection_params):
                 stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-use_existing_read-write.s:FRAGMENT]")
             else:
                 stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-allocate_read-write.s:FRAGMENT]")
-            #stage1_replacements['[VARIABLE:READ_EXECUTE_BLOCK_SIZE:VARIABLE]'] = f"{injection_params.read_execute_region_size}"
-            #stage1_replacements['[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]'] = f"{injection_params.read_write_region_size}"
             
             stage1 = assemble(stage_1_code, injection_params, memory_map_data, replacements=stage1_replacements)
 
@@ -1526,6 +1540,10 @@ def asminject(injection_params):
                 if injection_params.enable_debugging_output:
                     memory_region_backup_comparison = back_up_memory_regions(injection_params, memory_map_data, injection_params.memory_region_backup_subdirectory_name + "-post_restore_comparison")
                     log(f"Created a post-restore memory region backup in '{memory_region_backup_comparison.backup_directory}' for debugging purposes", ansi=injection_params.ansi)
+                
+                # TKTK: wait for the payload to signal success (not implemented yet)
+                # TKTK: clear R/W memory after the payload has exited
+                # TKTK: clear R/X memory after the payload has exited
                         
     except KeyboardInterrupt as ki:
         log_warning(f"Operator cancelled the injection attempt", ansi=injection_params.ansi)
@@ -1540,6 +1558,12 @@ def asminject(injection_params):
     
     if not injection_params.deallocate_memory and current_state:
         log_success(f"To reuse the existing read/write and read execute memory allocated during this injection attempt, include the following options in your next asminject.py command: --use-read-execute-address {hex(injection_params.read_execute_region_address)} --use-read-execute-size {hex(injection_params.read_execute_region_size)} --use-read-write-address {hex(injection_params.read_write_region_address)} --use-read-write-size {hex(injection_params.read_write_region_size)}", ansi=injection_params.ansi)
+
+def validate_overwrite_data(injection_params):
+    result_temp = struct.pack(injection_params.register_size_format_string, injection_params.clear_payload_memory_value)
+    if len(result_temp) > injection_params.register_size:
+        log_error("The payload memory overwrite value {hex(injection_params.clear_payload_memory_value)} is too large for the target architecture's CPU width of {injection_params.register_size} bytes", ansi=injection_params.ansi)
+        sys.exit(1)
 
 def parse_command_line_numeric_value(v):
     result = None
@@ -1665,9 +1689,12 @@ if __name__ == "__main__":
     parser.add_argument("--precompiled", type=str, 
         help="Path to a precompiled binary shellcode payload to embed and launch (requires use of execute_precompiled.s or execute_precompiled_threaded.s as the stage 2 payload)")
 
-    # parser.add_argument("--clear-memory-on-exit", type=str2bool, nargs='?',
+    # parser.add_argument("--clear-payload-memory", type=str2bool, nargs='?',
         # const=True, default=False,
         # help="Set all bytes in the read/execute and read/write memory to 0x00 after the payload has finished executing")
+
+    # parser.add_argument("--clear-payload-memory-value", type=parse_command_line_numeric_value, 
+        # help="When --clear-payload-memory is selected, used the specified value instead of 0x00 to overwrite memory. The value must be a decimal or hexadecimal integer that can be represented using a number of bytes less than or equal to the CPU register width for the architecture, i.e. 32 bits for 32-bit CPUs, 64 bits for 64-bit CPUs")
 
     # parser.add_argument("--obfuscate", type=str2bool, nargs='?',
         # const=True, default=False,
@@ -1679,6 +1706,10 @@ if __name__ == "__main__":
     parser.add_argument("--preserve-temp-files", type=str2bool, nargs='?',
         const=True, default=False,
         help="Do not delete temporary files created during the assembling and linking process")
+        
+    parser.add_argument("--write-assembly-source-to-disk", type=str2bool, nargs='?',
+        const=True, default=False,
+        help="When assembling the stage 1 and stage 2 payloads, write them to disk for debugging/analysis")
         
     parser.add_argument("--debug", type=str2bool, nargs='?',
         const=True, default=False,
@@ -1730,6 +1761,11 @@ if __name__ == "__main__":
     if args.preserve_temp_files:
         injection_params.delete_temp_files = False
 
+    if args.write_assembly_source_to_disk:
+        injection_params.write_assembly_source_to_disk = True
+        if injection_params.delete_temp_files:
+            log_warning("Operator specified --write-assembly-source-to-disk, but did not specify --preserve-temp-files, so the assembly source will be deleted when asminject.py exits", ansi=injection_params.ansi)
+
     if args.precompiled:
         injection_params.precompiled_shellcode = os.path.abspath(args.precompiled)
     
@@ -1779,6 +1815,14 @@ if __name__ == "__main__":
         injection_params.temp_file_base_directory = os.path.abspath(args.temp_dir)
 
     log(f"Using '{injection_params.temp_file_base_directory}' as the base temporary directory", ansi=injection_params.ansi)
+
+    # if args.clear_payload_memory:
+        # injection_params.clear_payload_memory_after_execution = args.clear_payload_memory
+
+    # if args.clear_payload_memory_value:
+        # injection_params.clear_payload_memory_value = args.clear_payload_memory_value
+
+    validate_overwrite_data(injection_params)
 
     # Create the temporary directory
     asminject_parameters.make_required_directory(injection_params.temp_file_base_directory, injection_params)

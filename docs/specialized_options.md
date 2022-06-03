@@ -197,6 +197,8 @@ The `--restore-all-memory-regions` option will cause `asminject.py` to attempt a
 
 `--preserve-temp-files` prevents `asminject.py` from deleting any of the temporary files it generates.
 
+`--write-assembly-source-to-disk` will cause the generated source code for the payload assembly files to be written to disk instead of just passed to the assembler via standard input. Can be useful for troubleshooting.
+
 ### Pause options
 
 `asminject.py` can be directory to pause before proceeding at certain key points in the injection process. This can make it easier to attach `gdb` to troubleshoot custom payloads. While paused, the payload will be running in a loop with a `nanosleep`-based delay between iterations.

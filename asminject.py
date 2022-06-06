@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.22
-Ben Lincoln, Bishop Fox, 2022-06-03
+v0.23
+Ben Lincoln, Bishop Fox, 2022-06-04
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -214,13 +214,15 @@ class asminject_parameters:
         
         self.read_execute_region_address = None
         self.read_execute_region_size_min = 0x8000
-        self.read_execute_region_size_max = 0x200000
+        #self.read_execute_region_size_max = 0x200000
+        self.read_execute_region_size_max = 0x90000
         #self.read_execute_region_size = 0x8000
         self.read_execute_region_size = asminject_parameters.get_random_memory_block_size(self.read_execute_region_size_min, self.read_execute_region_size_max, self.allocation_unit_size)
 
         self.read_write_region_address = None
         self.read_write_region_size_min = 0x10000
-        self.read_write_region_size_max = 0x200000
+        #self.read_write_region_size_max = 0x200000
+        self.read_write_region_size_max = 0x90000
         #self.read_write_region_size = 0x10000
         self.read_write_region_size = asminject_parameters.get_random_memory_block_size(self.read_write_region_size_min, self.read_write_region_size_max, self.allocation_unit_size)
         

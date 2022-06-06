@@ -86,6 +86,10 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ### 0.22 (2022-06-03)
 
+* Fixed some bugs that crept into the ARM32 code during the rework
+
+### 0.22 (2022-06-03)
+
 * Fixed the refactoring bug that had broken Python code execution
 * Added `--write-assembly-source-to-disk` debugging option
 * More internal reworking

@@ -3,7 +3,7 @@
 	// Thanks Andrea Sindoni! (https://www.exploit-db.com/docs/english/43906-arm-exploitation-for-iot.pdf)
 	mov r7, #192             					@ SYS_MMAP2
 	mov r0, #0	            					@ addr
-	mov r1, #[VARIABLE:READ_WRITE_BLOCK_SIZE:VARIABLE]  	@ len
+	mov r1, #[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]  	@ len
 	mov r2, #0x3            					@ prot (rw-)
 	mov r3, #0x22            					@ flags (MAP_PRIVATE | MAP_ANONYMOUS)
 	mov r4, #-1             					@ fd

@@ -1,11 +1,7 @@
-jmp copy_file_using_libc_main
-// import reusable code fragments 
 [FRAGMENT:asminject_libc_fopen.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fclose.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fread.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fwrite.s:FRAGMENT]
-
-copy_file_using_libc_main:
 
 	// BEGIN: call LIBC fopen against the source file
 	push r11

@@ -41,6 +41,7 @@ execute_python_code_main:
 	mov [rsp], rdi
 	mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
 	call rbx
+	add rsp, 8
 	pop r14
 	// END: call PyRun_SimpleString("arbitrary Python code here")
 	
@@ -67,4 +68,7 @@ SHELLCODE_SECTION_DELIMITER
 
 python_code:
 	.ascii "[VARIABLE:pythoncode:VARIABLE]\0"
+
+
+
 

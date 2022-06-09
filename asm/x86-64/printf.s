@@ -1,8 +1,5 @@
-jmp printf_main
-// import reusable code fragments 
 [FRAGMENT:asminject_libc_printf.s:FRAGMENT]
 
-printf_main:
 	push r14
 	// BEGIN: example of calling a LIBC function from the asm code using template values
 	lea rdi, format_string[rip]

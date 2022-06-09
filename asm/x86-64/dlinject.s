@@ -2,12 +2,7 @@
 # Except it uses the publicly-exported dlopen() from libdl
 # instead of the private _dl_open function that some versions of ld
 # sort of exported
-
-jmp dlinject_main
-// import reusable code fragments 
 [FRAGMENT:asminject_libdl_dlopen.s:FRAGMENT]
-
-dlinject_main:
 
 	// BEGIN: call dlopen() against the specified library
 	push r14

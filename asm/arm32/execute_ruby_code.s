@@ -1,9 +1,7 @@
-b execute_ruby_code_main
+// executes arbitrary Ruby code in an existing Ruby process
 
-// import reusable code fragments
 [FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
 
-execute_ruby_code_main:
 // load a pointer to the Ruby code
 	mov r0, pc
 	b load_destination_address

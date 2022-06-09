@@ -1,8 +1,5 @@
-jmp execute_ruby_code_main
-// import reusable code fragments 
 [FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
 
-execute_ruby_code_main:
 	# // BEGIN: call ruby_sysinit
 	# push rbx
 	# lea rax, ruby_argv[rip]	# fake argv data

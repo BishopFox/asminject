@@ -22,32 +22,37 @@ _start:
 	[READ_WRITE_ALLOCATE_OR_REUSE]
 	mov rax, r11
 	
-	// Store the read/write block address returned by mmap
-	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
-	mov [r14 + 16], r11
-	
 	push r11
 	
 	// store fancy register state now rather than later
 	fxsave [rax]
-
-	// move the pushed register values into the read/write area now rather than later
-	//add rax, [VARIABLE:CPU_STATE_SIZE:VARIABLE]
-	mov rax, r11
-	add rax, [VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]
-	mov rdi, rax
-	mov rsi, [VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]
-	mov rcx, [VARIABLE:STACK_BACKUP_SIZE:VARIABLE]
-	rep movsb
 	
 	[READ_EXECUTE_ALLOCATE_OR_REUSE]
 	mov rax, r15
 	
-	// Store the read/execute block address returned by mmap
-	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
-	mov [r14 + 8], r15
-	
 	pop r11
+
+	// if the old and new communication addresses are not the same, then 
+	// overwrite initial communications address with [VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]
+	// and the address after that with the new communication address 
+	// so that the Python script knows the new location
+	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
+	cmp r11, r14
+	je store_addresses
+	mov r12, [VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]
+	mov [r14], r12
+store_addresses:
+	add r14, 8
+	mov [r14], r15
+	add r14, 8
+	mov [r14], r11
+	
+	// Also store the block addresses in the new communication address offset
+	// Store the read/write block address returned by mmap
+	mov [r11 + 16], r11
+	
+	// Store the read/execute block address returned by mmap
+	mov [r11 + 8], r15
 	
 	// store the sys_nanosleep timer data
 	mov rbx, [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
@@ -58,14 +63,14 @@ _start:
 	
 	// overwrite communications address with [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]
 	// so that the Python script knows it can write stage 2 to memory
-	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
 	mov r12, [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]
-	mov [r14], r12
+	mov [r11], r12
 	
 	// wait for value at communications address to be [VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE] before proceeding
 wait_for_script:
 
-	mov rax, [r14]
+	//mov rax, [r14]
+	mov rax, [r11]
 	cmp rax, [VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]
 	je launch_stage2
 	

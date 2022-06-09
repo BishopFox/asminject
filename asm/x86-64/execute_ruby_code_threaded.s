@@ -1,15 +1,12 @@
 // an attempt to work around Ruby locking up when code is injected
 // does not currently work any better than the unthreaded version
 
-jmp execute_ruby_code_main
-// import reusable code fragments 
 [FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
 [FRAGMENT:asminject_nanosleep.s:FRAGMENT]
 
-execute_ruby_code_inner:
 	# // BEGIN: call ruby_sysinit
 	# push rbx
 	# lea rax, ruby_argv[rip]	# fake argv data

@@ -1,14 +1,11 @@
 # Threaded version of dlinject.s
 # Same caveats as execute_precompiled_threaded.s
 
-jmp dlinject_threaded_main
-// import reusable code fragments 
 [FRAGMENT:asminject_libdl_dlopen.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
 
-dlinject_threaded_main:
 	jmp post_load_library
 
 load_library:

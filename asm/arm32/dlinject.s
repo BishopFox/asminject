@@ -3,11 +3,7 @@
 # instead of the private _dl_open function that some versions of ld
 # sort of exported
 
-b dlinject_main
-// import reusable code fragments
 [FRAGMENT:asminject_libdl_dlopen.s:FRAGMENT]
-
-dlinject_main:	
 
 	mov r0, pc
 	b call_dlopen

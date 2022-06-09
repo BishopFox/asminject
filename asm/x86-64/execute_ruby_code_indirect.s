@@ -3,11 +3,8 @@
 // https://blog.peterzhu.ca/creating-ruby-strings-c/
 // https://blog.peterzhu.ca/ruby-c-ext/
 
-jmp execute_ruby_code_indirect_main
-// import reusable code fragments 
 [FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
 
-execute_ruby_code_indirect_main:	
 	push r13
 
 	// copy the Ruby code string to arbitrary read/write memory

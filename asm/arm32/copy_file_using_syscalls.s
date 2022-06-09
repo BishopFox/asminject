@@ -1,8 +1,5 @@
-	// using GCC's own =relative_reference magic doesn't work when injecting the shellcode
-	// so I rolled my own using this spaghetti code trick that's straight out of the early 80s
-	// the branch instruction in this code is 4 bytes long, so I stash the string immediately after it
-	// then I know that it will be 4 bytes after the program counter when it hits that line, 
-	// which is exactly what the pc register will be set to
+// copy a file using only Linux syscalls
+
 	mov r8, pc
 	b openSourceFile
 

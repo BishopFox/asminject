@@ -2,12 +2,9 @@
 // both on a hardcoded value within this payload
 // as well as after copying it using the asminject_copy_bytes utility function
 
-b printf_with_copy_main
-// import reusable code fragments
 [FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
 [FRAGMENT:asminject_libc_printf.s:FRAGMENT]
 
-printf_with_copy_main:	
 	mov r0, pc
 	b load_debug_message
 

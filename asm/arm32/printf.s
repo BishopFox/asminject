@@ -1,11 +1,8 @@
 // test payload to call printf() from libc
 // --var formatstring "DEBUG: '%s'" --var message 'test123'
 
-b printf_main
-// import reusable code fragments
 [FRAGMENT:asminject_libc_printf.s:FRAGMENT]
 
-printf_main:
 	mov r0, pc
 	b load_debug_message
 

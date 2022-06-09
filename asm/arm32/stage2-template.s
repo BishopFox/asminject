@@ -76,16 +76,7 @@ cleanup_and_return:
 [DEALLOCATE_MEMORY]
 
 	// restore registers
-	//sub sp, r6, #0x4
 	ldmia sp!, {r0-r11}
-
-	// restore stack pointer
-	//ldr r0, [pc]
-	//b restoreStackPointer2
-	
-//old_stack_pointer:
-//	.word [VARIABLE:STACK_POINTER:VARIABLE]
-//	.balign 4
 
 restoreStackPointer2:	
 	
@@ -101,3 +92,5 @@ old_instruction_pointer2:
 	.balign 4
 
 [VARIABLE:SHELLCODE_DATA:VARIABLE]
+
+[FRAGMENTS]

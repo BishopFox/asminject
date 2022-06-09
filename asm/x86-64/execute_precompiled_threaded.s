@@ -8,13 +8,9 @@
 # happily execute in a separate thread, but if you execute the "exit" 
 # command from the Meterpreter shell, it will kill the entire target process
 
-jmp execute_precompiled_threaded_main
-// import reusable code fragments 
 [FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
-
-execute_precompiled_threaded_main:
 
 mov rsi, 0
 mov rdi, arbitrary_read_write_data_address[rip]

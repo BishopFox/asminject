@@ -1,12 +1,7 @@
 // --var formatstring "DEBUG: '%s'" --var message 'test123'
 
-b printf_loop_main
-// import reusable code fragments
 [FRAGMENT:asminject_libc_printf.s:FRAGMENT]
 [FRAGMENT:asminject_nanosleep.s:FRAGMENT]
-
-printf_loop_main:
-
 
 // test payload to call printf() from libc in a loop 10 times with a delay
 	mov r6, #10

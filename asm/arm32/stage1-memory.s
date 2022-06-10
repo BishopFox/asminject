@@ -52,7 +52,7 @@ store_rw_block_address:
 // so that the Python script knows the new location
 
 	cmp r12, r11
-	be ready_for_stage2
+	beq ready_for_stage2
 	ldr r0, [pc]
 	b store_state_switch_to_new_communication_address
 

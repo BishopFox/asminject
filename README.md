@@ -27,7 +27,11 @@ The original `dlinject.py` was designed specifically to load Linux shared librar
 
 ## Generating lists of relative offsets
 
-It's possible to write payloads in pure assembly without referring to libraries. If you're doing that, or using the example payloads that do that, you can skip this section. The payloads included with `asminject.py` include comments describing which binaries they need relative offsets for. The references are handled as regular expressions, to hopefully make them more portable across versions.
+Very basic `asminject.py` payloads can be written in pure assembly without referring to libraries. Some of the included payloads are of that design. Most interesting payloads require references to libraries that are loaded by the target process, so that functions in them can be called. The payloads included with `asminject.py` include comments describing which binaries they need relative offsets for. The references are handled as regular expressions, to hopefully make them more portable across versions.
+
+Starting with version 0.25, `asminject.py` can attempt to load this symbol/offset data automatically from the binaries that are referenced in the memory map. This will *only* work if the target process is not running in a container, or if the container has the exact same library versions as the host OS. If you wish to attempt this, use the `--relative-offsets-from-binaries` option in the command line. Note that this functionality requires the `elftools` Python library, which is not included with a standard Python installation. You'll need to install it via `pip3 install pyelftools` or similar.
+
+If your target process is running in a container, or you need to specify an explicit list of offsets for another reason, use the process below:
 
 To generate a list of offsets, you'll need to examine the list of binaries and libraries that your target process is using, e.g.:
 
@@ -61,7 +65,7 @@ In this case, you could call exported functions in eight different binaries. Mos
 ./get_relative_offsets.sh /usr/bin/python2.7 > relative_offsets-python2.7.txt
 ```
 
-If you are injecting code into a containerized process from outside the container, you'll need to use the copy of each binary *from inside the container*, or you'll get the wrong data. This is why `asminject.py` doesn't just grab the offsets itself, like `dlinject.py` does. A future version of `asminject.py` may include an option to do this as a time-saving shortcut when the target is not in a container.
+If you are injecting code into a containerized process from outside the container, you'll need to use the copy of each binary *from inside the container*, or you'll get the wrong data. This is why `asminject.py` doesn't just grab the offsets itself by default, like `dlinject.py` does.
 
 ## Practice targets
 
@@ -96,10 +100,15 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.25 (2022-06-10)
+
+* Added `--relative-offsets-from-binaries` option to attempt to load symbol/offset data directly from files referenced in the target process memory map, if the target process is *not* running in a container
+* Fixed some bugs in the ARM32 staging code introduced with the rework
+
 ### 0.24 (2022-06-09)
 
 * Reworked the fragment approach so that code fragments are only imported once per payload, and the order is randomized to make payload detection harder
-* The initial script/payload communication area in the stack is now only used briefly, with communication switching to an area in the r/w block allocated by the payload, to make detection harder
+* The initial script/payload communication area in the stack is now only used briefly, with communication switching to an area in the r/w block allocated by the payload, to make detection harder and reduce the chances of destabilizing the target process
 * The location of the initial script/payload communication area is now randomized, to make detection harder
 * Fixed some bugs related to reusing memory between payloads
 

@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.24
-Ben Lincoln, Bishop Fox, 2022-06-09
+v0.25
+Ben Lincoln, Bishop Fox, 2022-06-10
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -175,7 +175,7 @@ class asminject_parameters:
     def get_region_info_template(self, region_base_address, offset, length, perm_string):
         result = memory_map_entry()
         if not region_base_address:
-            print("Missing base address!")
+            #print("Missing base address!")
             return result
         # Can't check these for null because 0 matches "not"
         # if not offset:
@@ -383,6 +383,8 @@ class asminject_parameters:
         timestamp_string = asminject_parameters.get_timestamp_string_for_paths()
         random_string = hex(secrets.randbelow(0xFFFFFFF)).replace("0x", "")
         self.temp_file_base_directory = os.path.join(tempfile.gettempdir(), f"{timestamp_string}{random_string}")
+        
+        self.relative_offsets_from_binaries = False
         
     def set_dynamic_process_info_vars(self):
         self.target_process = psutil.Process(self.pid)
@@ -816,6 +818,34 @@ def get_code_fragment(injection_params, fragment_file_name):
         return None
     return fragment_source
 
+def get_elf_symbol_to_offset_map(elf_path):
+    result = {}
+    # avoid importing this unless explicitly needed, since it's a nonstandard library
+    import elftools.elf.sections
+    from elftools.elf.elffile import ELFFile
+    with open(elf_path, "rb") as elf_file:
+        elf = ELFFile(elf_file)
+        for elf_section in elf.iter_sections():
+            is_symbol_section = False
+            
+            if isinstance(elf_section, elftools.elf.sections.SymbolTableSection):
+                is_symbol_section = True
+            
+            if is_symbol_section:
+                #print(f"{elf_section.name}\t{elf_section}")
+                for symbol in elf_section.iter_symbols():
+                    #print(f"\t{symbol.name}\t{hex(symbol.entry.st_value)}")
+                    result[symbol.name] = symbol.entry.st_value
+    return result
+
+def get_offset_from_map_by_regex(injection_params, symbol_map, regex):
+    for symbol_name in symbol_map.keys():
+        if injection_params.enable_debugging_output:
+            log(f"Checking '{symbol_name}' against relative offset regex placeholder '{regex}' from assembly code", ansi=injection_params.ansi)
+        if re.search(f"^{regex}$", symbol_name):
+            return (symbol_name, symbol_map[symbol_name])
+    return None
+
 def assemble(source, injection_params, memory_map_data, replacements = {}):
     formatted_source = source
     memory_map_path_names = memory_map_data.get_unique_path_names()
@@ -892,6 +922,7 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
     # Replace base address regex matches
     lname_placeholders = []
     lname_placeholders_matches = re.finditer(r'(\[BASEADDRESS:)(.*?)(:BASEADDRESS\])', formatted_source)
+    placeholder_match_binary_paths = []
     for match in lname_placeholders_matches:
         placeholder_regex = match.group(2)
         if placeholder_regex not in lname_placeholders:
@@ -906,14 +937,14 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
             if re.search(lname_regex, lname):
                 log(f"Using '{lname}' for library base address regex placeholder '{lname_regex}' in assembly code", ansi=injection_params.ansi)
                 replacements[f"[BASEADDRESS:{lname_regex}:BASEADDRESS]"] = f"{hex(memory_map_data.get_first_region_for_named_file(lname).get_base_address())}"
+                if lname not in placeholder_match_binary_paths:
+                    placeholder_match_binary_paths.append(lname)
                 found_library_match = True
                 break
         if not found_library_match:
             log_error(f"Could not find a match for the library base address regular expression '{lname_regex}' in the list of libraries loaded by the target process. Make sure you've targeted the correct process, and that it is compatible with the selected payload.", ansi=injection_params.ansi)
             return None
-    #for fname in injection_params.relative_offsets.keys():
-    #    replacements[f"[RELATIVEOFFSET:{fname}:RELATIVEOFFSET]"] = f"{hex(injection_params.relative_offsets[fname])}"   
-    
+
     # Replace relative offset regex matches
     r_offset_placeholders = []
     r_offset_placeholders_matches = re.finditer(r'(\[RELATIVEOFFSET:)(.*?)(:RELATIVEOFFSET\])', formatted_source)
@@ -923,18 +954,23 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
             if injection_params.enable_debugging_output:
                 log(f"Found relative offset regex placeholder '{r_offset_placeholder_regex}' in assembly code", ansi=injection_params.ansi)
             r_offset_placeholders.append(r_offset_placeholder_regex)
-    for r_offset_regex in r_offset_placeholders:
+    for r_symbol_regex in r_offset_placeholders:
         found_offset_match = False
-        for r_offset in injection_params.relative_offsets.keys():
-            #if injection_params.enable_debugging_output:
-            #    log(f"Checking '{r_offset}' against relative offset regex placeholder '{r_offset_regex}' from assembly code", ansi=injection_params.ansi)
-            if re.search(f"^{r_offset_regex}$", r_offset):
-                log(f"Using '{r_offset}' for relative offset regex placeholder '{r_offset_regex}' in assembly code", ansi=injection_params.ansi)
-                replacements[f"[RELATIVEOFFSET:{r_offset_regex}:RELATIVEOFFSET]"] = f"{hex(injection_params.relative_offsets[r_offset])}"
-                found_offset_match = True
-                break
-        if not found_offset_match:
-            log_error(f"Could not find a match for the relative offset regular expression '{r_offset_regex}' in the list of relative offsets provided to asminject.py. Make sure you've targeted the correct process, and provided accurate lists of any necessary relative offsets for the process.", ansi=injection_params.ansi)
+        # check explicitly-specified relative offsets first
+        symbol_search_result = get_offset_from_map_by_regex(injection_params, injection_params.relative_offsets, r_symbol_regex)
+        # if a match wasn't found in an explicitly-referenced list, 
+        # and the option is enabled, check the binary itself for symbols/offsets
+        if not symbol_search_result:
+            if injection_params.relative_offsets_from_binaries:
+                for binary_path in placeholder_match_binary_paths:
+                    if not symbol_search_result:
+                        symbol_search_result = get_offset_from_map_by_regex(injection_params, get_elf_symbol_to_offset_map(binary_path), r_symbol_regex)
+        if symbol_search_result:
+            found_offset_match = True
+            log(f"Using '{symbol_search_result[0]}' for relative offset regex placeholder '{r_symbol_regex}' in assembly code", ansi=injection_params.ansi)
+            replacements[f"[RELATIVEOFFSET:{r_symbol_regex}:RELATIVEOFFSET]"] = f"{hex(symbol_search_result[1])}"
+        else:
+            log_error(f"Could not find a match for the relative offset regular expression '{r_symbol_regex}' in the list of relative offsets provided to asminject.py. Make sure you've targeted the correct process, and provided accurate lists of any necessary relative offsets for the process.", ansi=injection_params.ansi)
             return None
 
 
@@ -1797,9 +1833,9 @@ if __name__ == "__main__":
     parser.add_argument("--relative-offsets", action='append', nargs='*', required=False,
         help="Path to the list of relative offsets referenced in the assembly code. May be specified multiple times to reference several files. Generate on a per-binary basis using the following command, e.g. for libc-2.31: # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d\" \" -f3,9")
 
-    # parser.add_argument("--relative-offsets-from-binaries",type=str2bool, nargs='?',
-    #    const=True, default=False,
-    #    help="Read relative offsets from the binaries referred to in /proc/<pid>/maps instead of a text file. This will *only* work if the target process is not running in a container, or if the container has the exact same executable and library versions as the host or container where asminject.py is running. Requires that the elftools Python library be installed on the system where asminject.py is running.")
+    parser.add_argument("--relative-offsets-from-binaries",type=str2bool, nargs='?',
+        const=True, default=False,
+        help="Read relative offsets from the binaries referred to in /proc/<pid>/maps instead of a text file. This will *only* work if the target process is not running in a container, or if the container has the exact same executable and library versions as the host or container where asminject.py is running. Requires that the elftools Python library be installed on the system where asminject.py is running.")
     
     parser.add_argument("--non-pic-binary", action='append', nargs='*', required=False,
         help="Regular expression identifying one or more executables/libraries that do *not* use position-independent code, such as Python 3.x. May be specified multiple times.")
@@ -1975,7 +2011,10 @@ if __name__ == "__main__":
                                     if injection_params.enable_debugging_output:
                                         log_warning(f"Ignoring offset '{offset_name}' in '{reloff_abs_path}' because it has a value of zero", ansi=injection_params.ansi)
     
-    if len(injection_params.relative_offsets) < 1:
+    if args.relative_offsets_from_binaries:
+        injection_params.relative_offsets_from_binaries = True
+    
+    if not injection_params.relative_offsets_from_binaries and len(injection_params.relative_offsets) < 1:
         log_error("A list of relative offsets was not specified. If the injection fails, check your payload to make sure you're including the offsets of any exported functions it calls.", ansi=injection_params.ansi)
     
     if args.non_pic_binary:

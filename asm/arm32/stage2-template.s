@@ -16,7 +16,7 @@ state_ready_for_memory_restore:
 	.balign 4
 
 store_state_ready_for_memory_restore:
-	str r0, [r12]
+	str r0, [r11]
 	
 // wait for the script to have restored memory, then proceed
 // load the value that indicates memory_restored into r8
@@ -53,7 +53,7 @@ wait_for_script:
 	mov r1, r5
 	swi 0x0										@ syscall
 
-	ldr r7, [r12]
+	ldr r7, [r11]
 	cmp r7, r8
 	beq execute_inner_payload
 	

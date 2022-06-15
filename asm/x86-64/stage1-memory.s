@@ -3,22 +3,24 @@
 _start:
 	// OBFUSCATION_OFF
 	// push all the things
-	pushf
-	push rax
-	push rbx
-	push rcx
-	push rdx
-	push rbp
-	push rsi
-	push rdi
-	push r8
-	push r9
-	push r10
-	push r11
-	push r12
-	push r13
-	push r14
-	push r15
+	pushfq
+[STATE_BACKUP_INSTRUCTIONS]
+	# pushf
+	# push rax
+	# push rbx
+	# push rcx
+	# push rdx
+	# push rbp
+	# push rsi
+	# push rdi
+	# push r8
+	# push r9
+	# push r10
+	# push r11
+	# push r12
+	# push r13
+	# push r14
+	# push r15
 	// OBFUSCATION_ON
 	
 	[READ_WRITE_ALLOCATE_OR_REUSE]

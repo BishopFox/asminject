@@ -2,7 +2,8 @@
 _start:
 	// OBFUSCATION_OFF
 	// Save registers
-	stmdb sp!,{r0-r11}
+	//stmdb sp!,{r0-r11}
+[STATE_BACKUP_INSTRUCTIONS]
 	// OBFUSCATION_ON
 	
 	b beginStager

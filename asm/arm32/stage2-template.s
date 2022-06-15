@@ -73,10 +73,13 @@ cleanup_and_return:
 	pop {r10}
 	pop {r11}
 
+// OBFUSCATION_ALLOCATED_MEMORY_OFF
+
 [DEALLOCATE_MEMORY]
 	// OBFUSCATION_OFF
 	// restore registers
-	ldmia sp!, {r0-r11}
+	// ldmia sp!, {r0-r11}
+[STATE_RESTORE_INSTRUCTIONS]
 
 restoreStackPointer2:	
 	
@@ -86,11 +89,12 @@ restoreStackPointer2:
 old_instruction_pointer:
 	.word [VARIABLE:INSTRUCTION_POINTER:VARIABLE]
 	.balign 4
-	// OBFUSCATION_ON
 
 old_instruction_pointer2:
 	.word [VARIABLE:INSTRUCTION_POINTER:VARIABLE]
 	.balign 4
+
+// OBFUSCATION_ON
 
 [VARIABLE:SHELLCODE_DATA:VARIABLE]
 

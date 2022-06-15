@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.26
-Ben Lincoln, Bishop Fox, 2022-06-14
+v0.27
+Ben Lincoln, Bishop Fox, 2022-06-15
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -257,6 +257,25 @@ class asminject_parameters:
                             return None
         
         self.obfuscation_files_cached = True
+    
+    def populate_randomized_state_backup_restore_list(self, repopulate_existing = False):
+        if repopulate_existing or len(self.randomized_backup_restore_instruction_list) == 0:
+            self.randomized_backup_restore_instruction_list = []
+            for i in range(0, len(self.state_backup_restore_instruction_list)):
+                self.randomized_backup_restore_instruction_list.append(self.state_backup_restore_instruction_list[i])
+            random.shuffle(self.randomized_backup_restore_instruction_list, asminject_parameters.get_random_float_for_shuffle)
+    
+    def get_randomized_state_backup_instruction_list(self):
+        result = ""
+        for i in range(0, len(self.randomized_backup_restore_instruction_list)):
+            result = f"{result}{self.randomized_backup_restore_instruction_list[i][0]}\n"
+        return result
+        
+    def get_randomized_state_restore_instruction_list(self):
+        result = ""
+        for i in range(0, len(self.randomized_backup_restore_instruction_list)):
+            result = f"{result}{self.randomized_backup_restore_instruction_list[(len(self.randomized_backup_restore_instruction_list) - 1) - i][1]}\n"
+        return result
 
     def __init__(self):
         # memory regions must be evenly divisible by this amount
@@ -278,6 +297,11 @@ class asminject_parameters:
         self.initial_communication_address = None
         
         self.general_purpose_register_list = []
+        # set of tuples containing any state backup/restore instructions for the architecture, so that the order can be randomized
+        # replaces the [STATE_BACKUP_INSTRUCTIONS] and [STATE_RESTORE_INSTRUCTIONS] placeholders in stage 1 and 2
+        # each tuple should contain a single equivalent backup/restore instruction pair, since the order is reverse during restoration
+        self.state_backup_restore_instruction_list = []
+        self.randomized_backup_restore_instruction_list = []
         
         # 512 is the minimum for the x86-64 fxsave instruction
         #self.cpu_state_size = 1024
@@ -371,6 +395,9 @@ class asminject_parameters:
         self.custom_replacements = {}
         self.delete_temp_files = True
         self.write_assembly_source_to_disk = False
+        self.existing_stage_1_source = None
+        self.existing_stage_2_source = None
+
         self.freeze_dir = "/sys/fs/cgroup/freezer/" + secrets.token_bytes(8).hex()
         self.fragment_directory_name = "fragments"
         self.payload_assembly_subdirectory_name = "assembly"
@@ -471,6 +498,8 @@ class asminject_parameters:
             self.instruction_pointer_register_name = "RIP"
             self.stack_pointer_register_name = "RSP"
             self.general_purpose_register_list = ["rax", "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
+            #self.state_backup_restore_instruction_list = [ ("pushfq", "popfq"), ("push rax", "pop rax"), ("push rbx", "pop rbx"), ("push rcx", "pop rcx"), ("push rdx", "pop rdx"), ("push rbp", "pop rbp"), ("push rsi", "pop rsi"), ("push rdi", "pop rdi"), ("push r8", "pop r8"), ("push r9", "pop r9"), ("push r10", "pop r10"), ("push r11", "pop r11"), ("push r12", "pop r12"), ("push r13", "pop r13"), ("push r14", "pop r14"), ("push r15", "pop r15") ]
+            self.state_backup_restore_instruction_list = [ ("push rax", "pop rax"), ("push rbx", "pop rbx"), ("push rcx", "pop rcx"), ("push rdx", "pop rdx"), ("push rbp", "pop rbp"), ("push rsi", "pop rsi"), ("push rdi", "pop rdi"), ("push r8", "pop r8"), ("push r9", "pop r9"), ("push r10", "pop r10"), ("push r11", "pop r11"), ("push r12", "pop r12"), ("push r13", "pop r13"), ("push r14", "pop r14"), ("push r15", "pop r15") ]
             self.flag_setting_instructions = [ "cmp" ]
             self.no_obfuscation_after_instructions = [ "leave" ]
         if self.architecture == "arm32":
@@ -487,8 +516,10 @@ class asminject_parameters:
             self.instruction_pointer_register_name = "pc"
             self.stack_pointer_register_name = "sp"
             self.general_purpose_register_list = ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11"]
+            self.state_backup_restore_instruction_list = [ ("stmdb sp!,{r0-r11}", "ldmia sp!, {r0-r11}")   ]
             self.flag_setting_instructions = [ "cmp", "cmn", "tst", "teq" ]
-            self.no_obfuscation_after_instructions = [ "ldr", "b"]
+            self.no_obfuscation_after_instructions = [ "ldr", "b", "bx", "bl", "blx"]
+        self.populate_randomized_state_backup_restore_list()
     
     def get_value_or_placeholder(self, value, placeholder_value):
         if value:
@@ -568,6 +599,10 @@ class asminject_parameters:
         gpr_map = self.get_general_purpose_register_replacement_map()
         for k in gpr_map.keys():
             result[k] = gpr_map[k]
+        
+        # processor state replacements
+        result['[STATE_BACKUP_INSTRUCTIONS]'] = self.get_randomized_state_backup_instruction_list()
+        result['[STATE_RESTORE_INSTRUCTIONS]'] = self.get_randomized_state_restore_instruction_list()
        
         return result
     
@@ -923,7 +958,8 @@ def get_random_obfuscation_fragment(injection_params, use_communications_address
             result = f"{tabs}{rl_strip}\n"        
         else:
             result = f"{result}{tabs}{rl_strip}\n"
-        
+    result = f"{result}\n"
+    
     injection_params.obfuscation_fragment_counter += 1  
     
     return result
@@ -958,16 +994,16 @@ def next_line_can_be_obfuscated(injection_params, lines, current_line_number):
         
     # Do not obfuscate after processor-specific instructions
     if instruction_trimmed in injection_params.no_obfuscation_after_instructions:
-        if injection_params.enable_debugging_output:
-            log(f"Instruction '{instruction_trimmed}' is in the list to not obfuscate after for this architecture", ansi=injection_params.ansi)
+        #if injection_params.enable_debugging_output:
+        #    log(f"Instruction '{instruction_trimmed}' is in the list to not obfuscate after for this architecture", ansi=injection_params.ansi)
         return False
 
     # Do not obfuscate after instructions that set flag values
     flag_setting_instructions = injection_params.flag_setting_instructions
     for fsi in flag_setting_instructions:
         if instruction_trimmed == fsi:
-            if injection_params.enable_debugging_output:
-                log(f"Instruction '{instruction_trimmed}' is in the list of flag-setting instructions for this architecture", ansi=injection_params.ansi)
+            #if injection_params.enable_debugging_output:
+            #    log(f"Instruction '{instruction_trimmed}' is in the list of flag-setting instructions for this architecture", ansi=injection_params.ansi)
             return False
     
     # For ARM32 only, do not obfuscate after instructions that end in "s", 
@@ -1064,7 +1100,17 @@ def get_offset_from_map_by_regex(injection_params, symbol_map, regex):
             return (symbol_name, symbol_map[symbol_name])
     return None
 
-def assemble(source, injection_params, memory_map_data, replacements = {}):
+def write_source_to_file(injection_params, source_code, description, file_name_suffix):
+    if injection_params.write_assembly_source_to_disk:
+        try:
+            out_path = injection_params.create_empty_temp_file(subdirectory_name = injection_params.payload_assembly_subdirectory_name, suffix = f"{file_name_suffix}.s")
+            log(f"Writing {description} assembly source to '{out_path}'", ansi=injection_params.ansi)
+            with open(out_path, "w") as source_code_file:
+                source_code_file.write(source_code)
+        except Exception as e:
+            log_error(f"Couldn't write {description} assembly source to '{out_path}': {e}", ansi=injection_params.ansi)
+
+def assemble(source, injection_params, memory_map_data, file_name_suffix, replacements = {}):
     formatted_source = source
     memory_map_path_names = memory_map_data.get_unique_path_names()
     for lname in memory_map_path_names:
@@ -1192,13 +1238,18 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
             return None
     
     pre_obfuscation_source = formatted_source
+    write_source_to_file(injection_params, pre_obfuscation_source, "pre-obfuscation, pre-variable-replacement", f"{file_name_suffix}-pre-obfuscation-pre-replacement")
+
     obfuscation_iteration = 1
     if injection_params.obfuscate_payloads:
         for i in range(0, injection_params.obfuscation_iterations):
             formatted_source = obfuscate_assembly_source(injection_params, formatted_source, obfuscation_iteration)
+            write_source_to_file(injection_params, formatted_source, f"obfuscation round {i + 1}", f"{file_name_suffix}-obfuscation-{i + 1}")
             if injection_params.enable_debugging_output:
                 if injection_params.obfuscation_iterations > 1:
                     log(f"Formatted assembly code after obfuscation round {i + 1}:\n{formatted_source}", ansi=injection_params.ansi)
+
+    write_source_to_file(injection_params, formatted_source, "post-obfuscation, pre-variable-replacement", f"{file_name_suffix}-post-obfuscation-pre-replacement")
 
     for search_text in replacements.keys():
         formatted_source = formatted_source.replace(search_text, replacements[search_text])
@@ -1215,16 +1266,18 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
             if missing_string not in missing_values:
                 missing_values.append(missing_string)
     
-    if injection_params.enable_debugging_output:
-        log(f"Formatted assembly code:\n{pre_obfuscation_source}", ansi=injection_params.ansi)
+    #if injection_params.enable_debugging_output:
+    #    log(f"Formatted assembly code:\n{pre_obfuscation_source}", ansi=injection_params.ansi)
     
     if injection_params.obfuscate_payloads:
         if injection_params.enable_debugging_output:
             log(f"Formatted assembly code before obfuscation:\n{pre_obfuscation_source}", ansi=injection_params.ansi)
             log(f"Formatted assembly code after obfuscation:\n{formatted_source}", ansi=injection_params.ansi)
+        write_source_to_file(injection_params, pre_obfuscation_source, f"pre-obfuscation, post-variable-replacement", f"{file_name_suffix}-pre-obfuscation-post-replacement")
     else:
         if injection_params.enable_debugging_output:
             log(f"Formatted assembly code:\n{formatted_source}", ansi=injection_params.ansi)
+    write_source_to_file(injection_params, formatted_source, f"finalized", f"{file_name_suffix}-finalized")
     
     if len(missing_values) > 0:
         log_error(f"The following placeholders in the assembly source code code not be found: {missing_values}", ansi=injection_params.ansi)
@@ -1252,16 +1305,16 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
             #argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-fPIC", "-pie", "-Wl,--build-id=none", "-s"]
 
         program = formatted_source.encode()
-        if injection_params.write_assembly_source_to_disk:
-            try:
-                in_path = injection_params.create_empty_temp_file(subdirectory_name = injection_params.payload_assembly_subdirectory_name, suffix = ".s")
-                log(f"Writing assembly source to '{in_path}'", ansi=injection_params.ansi)
-                with open(in_path, "w") as source_code_file:
-                    source_code_file.write(formatted_source)
-            except Exception as e:
-                log_error(f"Couldn't write assembly source to '{in_path}': {e}", ansi=injection_params.ansi)
-        if injection_params.enable_debugging_output:
-            log(f"Writing assembled binary to '{out_path}'", ansi=injection_params.ansi)
+        # if injection_params.write_assembly_source_to_disk:
+            # try:
+                # in_path = injection_params.create_empty_temp_file(subdirectory_name = injection_params.payload_assembly_subdirectory_name, suffix = ".s")
+                # log(f"Writing assembly source to '{in_path}'", ansi=injection_params.ansi)
+                # with open(in_path, "w") as source_code_file:
+                    # source_code_file.write(formatted_source)
+            # except Exception as e:
+                # log_error(f"Couldn't write assembly source to '{in_path}': {e}", ansi=injection_params.ansi)
+        # if injection_params.enable_debugging_output:
+            # log(f"Writing assembled binary to '{out_path}'", ansi=injection_params.ansi)
         
         pipe = subprocess.PIPE
 
@@ -1670,7 +1723,14 @@ def asminject(injection_params):
     stage2_source_code = stage2_source_code.replace('[VARIABLE:SHELLCODE_DATA:VARIABLE]', shellcode_data_section)
 
     log("Validating ability to assemble stage 2 code", ansi=injection_params.ansi)
-    stage2 = assemble(stage2_source_code, injection_params, memory_map_data, replacements=stage2_replacements)
+    if injection_params.existing_stage_2_source:
+        try:
+            with open(injection_params.existing_stage_2_source, "r") as existing_code_file:
+                stage2_source_code = existing_code_file.read()
+        except Exception as e:
+            log_error(f"Couldn't read the existing stage 2 source code file '{injection_params.existing_stage_2_source}': {e}", ansi=injection_params.ansi)
+            sys.exit(1)
+    stage2 = assemble(stage2_source_code, injection_params, memory_map_data, "-stage_2-check_build", replacements=stage2_replacements)
     
     # make sure that the read/execute block will be big enough to hold the payload
     if not stage2:
@@ -1805,7 +1865,15 @@ def asminject(injection_params):
 
             stage1_replacements = injection_params.get_replacement_variable_map()
             
-            stage1 = assemble(stage_1_code, injection_params, memory_map_data, replacements=stage1_replacements)
+            if injection_params.existing_stage_1_source:
+                try:
+                    with open(injection_params.existing_stage_1_source, "r") as existing_code_file:
+                        stage1_code = existing_code_file.read()
+                except Exception as e:
+                    log_error(f"Couldn't read the existing stage 1 source code file '{injection_params.existing_stage_1_source}': {e}", ansi=injection_params.ansi)
+                    sys.exit(1)
+            
+            stage1 = assemble(stage_1_code, injection_params, memory_map_data, "-stage_1", replacements=stage1_replacements)
 
             if not stage1:
                 continue_executing = False
@@ -1815,34 +1883,52 @@ def asminject(injection_params):
                 memory_region_backup = back_up_memory_regions(injection_params, memory_map_data, injection_params.memory_region_backup_subdirectory_name)
                 if injection_params.enable_debugging_output:
                     log(f"Created the pre-injection memory region backup in '{memory_region_backup.backup_directory}'", ansi=injection_params.ansi)
-                with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
-                    # back up the code we're about to overwrite
-                    code_backup_address = injection_params.saved_instruction_pointer_value
-                    mem.seek(code_backup_address)
-                    code_backup = mem.read(len(stage1))
+                try:
+                    mem_file_path = f"/proc/{injection_params.pid}/mem"
+                    with open(mem_file_path, "wb+") as mem:
+                        # back up the code we're about to overwrite
+                        code_backup_address = injection_params.saved_instruction_pointer_value
+                        code_backup = None
+                        try:
+                            mem.seek(code_backup_address)
+                            code_backup = mem.read(len(stage1))
+                        except Exception as e:
+                            log_error(f"Couldn't backup existing code from '{mem_file_path}', address {hex(code_backup_address)}, length {hex(len(stage1))}: {e}", ansi=injection_params.ansi)
+                            continue_executing = False
+                        # back up the part of the stack that the shellcode will clobber
+                        #stack_backup_address = stack_pointer - injection_params.stack_backup_size
+                        #mem.seek(stack_backup_address)
+                        #stack_backup = mem.read(injection_params.stack_backup_size)
+                        #output_memory_block_data(injection_params, f"Stack backup ({hex(stack_backup_address)})", stack_backup)
+                        
+                        
+                        # back up the data at the communication address
+                        try:
+                            mem.seek(injection_params.initial_communication_address)
+                            communication_address_backup = mem.read(injection_params.communication_address_backup_size)
+                            output_memory_block_data(injection_params, f"Communication address backup ({hex(injection_params.initial_communication_address)})", communication_address_backup)
+                        except Exception as e:
+                            log_error(f"Couldn't backup data at communications address from '{mem_file_path}', address {hex(injection_params.initial_communication_address)}, length {hex(injection_params.communication_address_backup_size)}: {e}", ansi=injection_params.ansi)
+                            continue_executing = False
+                            
+                        # Set the "memory restored" state variable to match the first 4 bytes of the backed up communications address data
+                        #injection_params.state_variables.state_memory_restored = struct.unpack('I', communication_address_backup[0:4])[0]
+                        #log(f"Will specify {hex(injection_params.state_variables.state_stage_two_written)} @ {hex(injection_params.initial_communication_address)} as the 'memory restored' value", ansi=injection_params.ansi)
+                        log(f"Using: {hex(injection_params.state_variables.state_ready_for_memory_restore)} for 'ready for memory restore' state value", ansi=injection_params.ansi)
 
-                    # back up the part of the stack that the shellcode will clobber
-                    #stack_backup_address = stack_pointer - injection_params.stack_backup_size
-                    #mem.seek(stack_backup_address)
-                    #stack_backup = mem.read(injection_params.stack_backup_size)
-                    #output_memory_block_data(injection_params, f"Stack backup ({hex(stack_backup_address)})", stack_backup)
-                    
-                    
-                    # back up the data at the communication address
-                    mem.seek(injection_params.initial_communication_address)
-                    communication_address_backup = mem.read(injection_params.communication_address_backup_size)
-                    output_memory_block_data(injection_params, f"Communication address backup ({hex(injection_params.initial_communication_address)})", communication_address_backup)
-                    
-                    # Set the "memory restored" state variable to match the first 4 bytes of the backed up communications address data
-                    #injection_params.state_variables.state_memory_restored = struct.unpack('I', communication_address_backup[0:4])[0]
-                    #log(f"Will specify {hex(injection_params.state_variables.state_stage_two_written)} @ {hex(injection_params.initial_communication_address)} as the 'memory restored' value", ansi=injection_params.ansi)
-                    log(f"Using: {hex(injection_params.state_variables.state_ready_for_memory_restore)} for 'ready for memory restore' state value", ansi=injection_params.ansi)
+                        # write the primary shellcode
+                        try:
+                            mem.seek(injection_params.saved_instruction_pointer_value)
+                            mem.write(stage1)
+                        except Exception as e:
+                            log_error(f"Couldn't write the stage 1 payload to '{mem_file_path}', address {hex(injection_params.saved_instruction_pointer_value)}: {e}", ansi=injection_params.ansi)
+                            continue_executing = False
+                except Exception as e:
+                    log_error(f"Couldn't read '{mem_file_path}': {e}", ansi=injection_params.ansi)
+                    continue_executing = False
 
-                    # write the primary shellcode
-                    mem.seek(injection_params.saved_instruction_pointer_value)
-                    mem.write(stage1)
-
-                log(f"Wrote first stage shellcode at {hex(injection_params.saved_instruction_pointer_value)} in target process {injection_params.pid}", ansi=injection_params.ansi)
+                if continue_executing:
+                    log(f"Wrote first stage shellcode at {hex(injection_params.saved_instruction_pointer_value)} in target process {injection_params.pid}", ansi=injection_params.ansi)
 
         if injection_params.pause_before_resume:
             input("Press Enter to resume the target process")
@@ -1919,9 +2005,16 @@ def asminject(injection_params):
 
             stage2_replacements = injection_params.get_replacement_variable_map()
 
-            stage2 = assemble(stage2_source_code, injection_params, memory_map_data, replacements=stage2_replacements)
+            if injection_params.existing_stage_2_source:
+                try:
+                    with open(injection_params.existing_stage_2_source, "r") as existing_code_file:
+                        stage2_source_code = existing_code_file.read()
+                except Exception as e:
+                    log_error(f"Couldn't read the existing stage 2 source code file '{injection_params.existing_stage_2_source}': {e}", ansi=injection_params.ansi)
+                    sys.exit(1)
+
+            stage2 = assemble(stage2_source_code, injection_params, memory_map_data, "-stage_2", replacements=stage2_replacements)
                 
-            
             if not stage2:
                 continue_executing = False
             else:
@@ -1931,9 +2024,10 @@ def asminject(injection_params):
                     mem.seek(injection_params.read_execute_region_address)
                     mem.write(stage2)
                     
-                    if injection_params.pause_before_launching_stage2:
-                        input("Press Enter to proceed with launching stage 2")
-                    
+                if injection_params.pause_before_launching_stage2:
+                    input("Press Enter to proceed with launching stage 2")
+
+                with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
                     # Give stage 1 the OK to proceed
                     log(f"Writing {hex(injection_params.state_variables.state_stage_two_written)} to {hex(injection_params.get_base_communication_address())} in target memory to indicate stage 2 has been written to memory", ansi=injection_params.ansi)
                     mem.seek(injection_params.get_base_communication_address())
@@ -2178,6 +2272,13 @@ if __name__ == "__main__":
     parser.add_argument("--debug", type=str2bool, nargs='?',
         const=True, default=False,
         help="Enable debugging messages")
+
+    parser.add_argument("--use-stage-1-source", type=str, 
+        help="Debugging option for issue reproduction. Path to a pre-existing stage 1 assembly source code file, e.g. the result of adding --write-assembly-source-to-disk and --preserve-temp-files to a previous run of asminject.py. Note that you *must* use the '-post-obfuscation-pre-replacement.s' version of the file or injection will fail.")
+
+    parser.add_argument("--use-stage-2-source", type=str, 
+        help="Debugging option for issue reproduction. Path to a pre-existing stage 2 assembly source code file, e.g. the result of adding --write-assembly-source-to-disk and --preserve-temp-files to a previous run of asminject.py. Note that you *must* use the '-post-obfuscation-pre-replacement.s' version of the file or injection will fail.")
+
         
     args = parser.parse_args()
     
@@ -2282,6 +2383,12 @@ if __name__ == "__main__":
         injection_params.temp_file_base_directory = os.path.abspath(args.temp_dir)
 
     log(f"Using '{injection_params.temp_file_base_directory}' as the base temporary directory", ansi=injection_params.ansi)
+
+    if args.use_stage_1_source:
+        injection_params.existing_stage_1_source = os.path.abspath(args.use_stage_1_source)
+
+    if args.use_stage_2_source:
+        injection_params.existing_stage_2_source = os.path.abspath(args.use_stage_2_source)
 
     if args.obfuscate:
         injection_params.obfuscate_payloads = True

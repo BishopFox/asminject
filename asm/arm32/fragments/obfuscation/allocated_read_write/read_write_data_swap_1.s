@@ -8,6 +8,7 @@ push {%r5%}
 push {%r6%}
 push {%r7%}
 push {%r8%}
+push {%r9%}
 
 // generate a pseudo-random number based on two random registers
 mov %r8%, %r0%
@@ -30,20 +31,28 @@ rwds1_[VARIABLE:OBFUSCATION_FRAGMENT_NUMBER:VARIABLE]_rwa:
 rwds1_[VARIABLE:OBFUSCATION_FRAGMENT_NUMBER:VARIABLE]_a:
 // first swap
 // OBFUSCATION_OFF
+// %r1% = value at read/write address
 ldr %r1%, [%r9%]
-mov %r2%, %r9%
-add %r2%, %r2%, %r8%
+// %r2% = read/write address + pseudo-random offset
+add %r2%, %r9%, %r8%
+// %r3% = value at r/w address + pseudo-random offset
 ldr %r3%, [%r2%]
+// store %r3% (the value that was originally stored at the pseudo-random offset) to the r/w address
 str %r3%, [%r9%]
+// store %r1% (the value that was originally at the r/w address) to the pseudo-random offset
 str %r1%, [%r2%] 
 
 // second swap to put the data back where it started
 // but using separate registers to make it harder to fingerprint
+// %r5% = value at read/write address
 ldr %r5%, [%r9%]
-mov %r6%, %r9%
-add %r6%, %r6%, %r8%	
+// %r6% = read/write address + pseudo-random offset
+add %r6%, %r9%, %r8%
+// %r7% = value at r/w address + pseudo-random offset
 ldr %r7%, [%r6%]
+// store %r7% (the value that was originally stored at the pseudo-random offset) to the r/w address
 str %r7%, [%r9%]
+// store %r5% (the value that was originally at the r/w address) to the pseudo-random offset
 str %r5%, [%r6%]
 // OBFUSCATION_ON
 

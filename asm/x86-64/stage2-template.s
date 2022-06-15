@@ -74,22 +74,24 @@ cleanup_and_return:
 	// restore regular registers
 	//mov rsp, [existing_stack_backup_address[rip]]
 	
-	pop r15
-	pop r14
-	pop r13
-	pop r12
-	pop r11
-	pop r10
-	pop r9
-	pop r8
-	pop rdi
-	pop rsi
-	pop rbp
-	pop rdx
-	pop rcx
-	pop rbx
-	pop rax
-	popf
+	# pop r15
+	# pop r14
+	# pop r13
+	# pop r12
+	# pop r11
+	# pop r10
+	# pop r9
+	# pop r8
+	# pop rdi
+	# pop rsi
+	# pop rbp
+	# pop rdx
+	# pop rcx
+	# pop rbx
+	# pop rax
+	# popf
+[STATE_RESTORE_INSTRUCTIONS]
+	popfq
 	
 	// reset stack pointer to the original value and jump to the original instruction location
 	//mov rsp, [VARIABLE:STACK_POINTER:VARIABLE]

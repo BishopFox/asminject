@@ -100,9 +100,16 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.27 (2022-06-15)
+
+* Payload obfuscation now works correctly for ARM32 payloads (in addition to x86-64).
+* The order of CPU state save/restore instructions in the stage 1 and 2 code is now randomized to make fingerprinting more difficult.
+* Added `--use-stage-1-source` and `--use-stage-2-source` debugging options.
+* Various bug fixes and improvements
+
 ### 0.26 (2022-06-14)
 
-* Added payload obfuscation options: `--obfuscate`, `--per-line-obfuscation-percentage`, and `--obfuscation-iterations` (x86-64 only for this release)
+* Added payload obfuscation options: `--obfuscate`, `--per-line-obfuscation-percentage`, and `--obfuscation-iterations` (x86-64 only for this release).
 
 ### 0.25 (2022-06-10)
 

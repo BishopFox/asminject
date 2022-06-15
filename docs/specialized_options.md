@@ -209,6 +209,27 @@ Many of `asminject.py`'s parameters are always randomized to help prevent static
 
 `--write-assembly-source-to-disk` will cause the generated source code for the payload assembly files to be written to disk instead of just passed to the assembler via standard input. Can be useful for troubleshooting.
 
+### Debugging obfuscated payloads
+
+Because obfuscation is applied in a truly random, non-deterministic manner, it can make reproducing issues difficult when debugging issues with the target process. `asminject.py` can therefore be configured to save the payload source from one execution and reuse it in another execution.
+
+If the `--write-assembly-source-to-disk` and `--preserve-temp-files` options are specified, several variations of the source code for each payload are written to disk. For purposes of this section, the "post-obfuscation, pre-variable-replacement" variation should be used. E.g.:
+
+```
+# python3 ./asminject.py 21637 execute_python_code.s --arch arm32 --relative-offsets relative_offsets-python3.7.txt --non-pic-binary "/usr/bin/python.*" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --preserve-temp-files --write-assembly-source-to-disk --obfuscate --obfuscation-iterations 4
+
+...omitted for brevity...
+[*] Writing post-obfuscation, pre-variable-replacement assembly source to '/tmp/20220615185024245932478624/assembly/tmpnbg5ju1h-stage_2-post-obfuscation-pre-replacement.s'
+...omitted for brevity...
+```
+
+To reuse the source code for debugging purposes, add the `--use-stage-1-source` and/or `--use-stage-2-source` options when calling `asminject.py` again, e.g.:
+
+```
+# python3 ./asminject.py 21637 execute_python_code.s --arch arm32 --relative-offsets relative_offsets-python3.7.txt --non-pic-binary "/usr/bin/python.*" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --use-stage-2-source '/tmp/20220615185024245932478624/assembly/tmpnbg5ju1h-stage_2-post-obfuscation-pre-replacement.s'
+```
+
+
 ### Pause options
 
 `asminject.py` can be directory to pause before proceeding at certain key points in the injection process. This can make it easier to attach `gdb` to troubleshoot custom payloads. While paused, the payload will be running in a loop with a `nanosleep`-based delay between iterations.
@@ -220,4 +241,5 @@ Many of `asminject.py`'s parameters are always randomized to help prevent static
 `--pause-before-memory-restore` pauses execution after the payload has indicated it is ready for target process memory to be restored, but before that restoration takes place.
 
 `--pause-after-memory-restore` pauses execution after target process memory has been restored, but before stage two restores CPU state and jumps back to the original instruction pointer.
+
 

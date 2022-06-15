@@ -5,9 +5,11 @@
 // r2 = number of bytes to copy
 
 asminject_copy_bytes:
+	//OBFUSCATION_OFF
 	stmdb sp!, {r11,lr}
 	add r11, sp, #0x04
 	sub sp, sp, #0x20
+	//OBFUSCATION_ON
 	push {r3}
 	push {r4}
 	mov r3, #0x0
@@ -32,6 +34,8 @@ asminject_copy_bytes_done:
 	pop {r4}
 	pop {r3}
 
+	//OBFUSCATION_OFF
 	sub sp, r11, #0x04
 	ldmia sp!, {r11,pc}
+	//OBFUSCATION_ON
 // END: asminject_copy_bytes

@@ -100,6 +100,11 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.28 (2022-06-15)
+
+* Added a few more obfuscation fragments for ARM32 to bring it more or less to parity with x86-64
+* Fixed an obfuscation-related bug in the ARM32 stage 2 template
+
 ### 0.27 (2022-06-15)
 
 * Payload obfuscation now works correctly for ARM32 payloads (in addition to x86-64).

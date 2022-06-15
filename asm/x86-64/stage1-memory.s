@@ -1,6 +1,7 @@
 .intel_syntax noprefix
 .globl _start
 _start:
+	// OBFUSCATION_OFF
 	// push all the things
 	pushf
 	push rax
@@ -18,6 +19,7 @@ _start:
 	push r13
 	push r14
 	push r15
+	// OBFUSCATION_ON
 	
 	[READ_WRITE_ALLOCATE_OR_REUSE]
 	mov rax, r11

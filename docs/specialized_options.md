@@ -189,6 +189,16 @@ The `--restore-memory-region` option can be used to specify a regular expression
 
 The `--restore-all-memory-regions` option will cause `asminject.py` to attempt a backup and restore of *all* regions in the target process, with the exception of the kernel interface regions `[vdso]` and `[vvar]`.
 
+## Payload obfuscation
+
+Many of `asminject.py`'s parameters are always randomized to help prevent static fingerprint-based detection of its payloads. In addition, it supports optional payload obfuscation to help make fingerprinting approaches even less practical.
+
+`--obfuscate` enables the payload obfuscation functionality, and causes random assembly code snippets that are effectively no-ops to be inserted at random locations in the payload source before it is passed to the assembler.
+
+`--per-line-obfuscation-percentage` accepts an integer value of `1` to `100`, and controls the likelihood of whether or not obfuscation fragments will be inserted between each line (where such insertion is determined to be valid). If this value is not specified, `asminject.py` defaults to 50% probability.
+
+`--obfuscation-iterations` accepts an integer value of `1` or more, and controls how many times `asminject.py` recursively applies the obfuscation process to payload source code. If this value is not specified, `asminject.py` defaults to only a single iteration. Values of `1` - `4` are suggested. Values greater than `5` are not recommended due to the amount of time the operation will take. A value of `5` will typically increase the size of the payload source file by about 500 - 2,000 times, and the compiled payload by about 250 - 1,500 times.
+
 ## Debugging/troubleshooting options
 
 `--debug` will cause `asminject.py` to log a large amount of additional information, including the generated assembly source code for the first and second stage payloads.

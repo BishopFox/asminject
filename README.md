@@ -100,6 +100,10 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.26 (2022-06-14)
+
+* Added payload obfuscation options: `--obfuscate`, `--per-line-obfuscation-percentage`, and `--obfuscation-iterations` (x86-64 only for this release)
+
 ### 0.25 (2022-06-10)
 
 * Added `--relative-offsets-from-binaries` option to attempt to load symbol/offset data directly from files referenced in the target process memory map, if the target process is *not* running in a container

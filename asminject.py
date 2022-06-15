@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.25
-Ben Lincoln, Bishop Fox, 2022-06-10
+v0.26
+Ben Lincoln, Bishop Fox, 2022-06-14
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -127,8 +127,18 @@ class asminject_parameters:
     @staticmethod
     def get_random_float_for_shuffle():
         internal_range = 1000
-        internal_val = float(secrets.randbelow(internal_range + 1))
-        return internal_val / float(internal_range)
+        # internal_val = float(secrets.randbelow(internal_range + 1))
+        #return internal_val / float(internal_range)
+        # secrets.randbelow is picky
+        #internal_val = float(secrets.randbelow(internal_range + 1)) / float(internal_range)
+        internal_val = float(secrets.randbelow(internal_range)) / float(internal_range)
+        if internal_val > 1.0:
+            internal_val = 1.0
+        if internal_val < 0.0:
+            internal_val = 0.0
+        
+        return internal_val
+            
     
     @staticmethod
     def get_secure_random_not_in_list(max_value, list_of_existing_values):
@@ -220,6 +230,34 @@ class asminject_parameters:
             comms_address_offset = asminject_parameters.get_random_memory_block_size(comms_address_min_offset, comms_address_max_offset, self.register_size)
             self.initial_communication_address = self.stack_region.start_address + comms_address_offset
 
+    def cache_obfuscation_files(self, recreate_existing_cache = False):
+        if recreate_existing_cache or not self.obfuscation_files_cached:
+            self.obfuscation_fragments_general_purpose = []
+            self.obfuscation_fragments_communications_address = []
+            self.obfuscation_fragments_allocated_memory = []
+            
+            base_fragment_file_path = os.path.join(self.base_script_path, "asm", self.architecture, self.fragment_directory_name, "obfuscation")
+            fragment_subdirectory_names = ["general_purpose", "communications_address", "allocated_read_write"]
+            for subdirectory_name in fragment_subdirectory_names:
+                current_fragment_directory_path = os.path.join(base_fragment_file_path, subdirectory_name)
+                for directory_entry in os.listdir(current_fragment_directory_path):
+                    entry_path = os.path.join(current_fragment_directory_path, directory_entry)
+                    if os.path.isfile(entry_path):
+                        try:
+                            with open(entry_path, "r") as fragment_source_file:
+                                fragment_source = fragment_source_file.read()
+                                if subdirectory_name == "general_purpose":
+                                    self.obfuscation_fragments_general_purpose.append(fragment_source)
+                                if subdirectory_name == "communications_address":
+                                    self.obfuscation_fragments_communications_address.append(fragment_source)
+                                if subdirectory_name == "allocated_read_write":
+                                    self.obfuscation_fragments_allocated_memory.append(fragment_source)
+                        except Exception as e:
+                            log_error(f"Could not read assembly obfuscation source code fragment '{entry_path}': {e}", ansi=self.ansi)
+                            return None
+        
+        self.obfuscation_files_cached = True
+
     def __init__(self):
         # memory regions must be evenly divisible by this amount
         # (currently only to make sure that memory overwrite doesn't extend 
@@ -230,6 +268,9 @@ class asminject_parameters:
         # CPU register width in bytes
         self.register_size = 8
         self.register_size_format_string = 'Q'
+        
+        self.flag_setting_instructions = [ "cmp" ]
+        self.no_obfuscation_after_instructions = []
         
         # Temporary communication address for use before stage one allocates the r/w block
         self.communication_address_offset = -40
@@ -385,6 +426,14 @@ class asminject_parameters:
         self.temp_file_base_directory = os.path.join(tempfile.gettempdir(), f"{timestamp_string}{random_string}")
         
         self.relative_offsets_from_binaries = False
+        self.obfuscate_payloads = False
+        self.per_line_obfuscation_percentage = 0.25
+        self.obfuscation_iterations = 1
+        self.obfuscation_fragment_counter = 0
+        self.obfuscation_files_cached = False
+        self.obfuscation_fragments_allocated_memory = []
+        self.obfuscation_fragments_general_purpose = []
+        self.obfuscation_fragments_communications_address = []
         
     def set_dynamic_process_info_vars(self):
         self.target_process = psutil.Process(self.pid)
@@ -422,6 +471,8 @@ class asminject_parameters:
             self.instruction_pointer_register_name = "RIP"
             self.stack_pointer_register_name = "RSP"
             self.general_purpose_register_list = ["rax", "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
+            self.flag_setting_instructions = [ "cmp" ]
+            self.no_obfuscation_after_instructions = [ "leave" ]
         if self.architecture == "arm32":
             self.register_size = 4
             self.register_size_format_string = 'L'
@@ -436,6 +487,8 @@ class asminject_parameters:
             self.instruction_pointer_register_name = "pc"
             self.stack_pointer_register_name = "sp"
             self.general_purpose_register_list = ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11"]
+            self.flag_setting_instructions = [ "cmp", "cmn", "tst", "teq" ]
+            self.no_obfuscation_after_instructions = [ "ldr", "b"]
     
     def get_value_or_placeholder(self, value, placeholder_value):
         if value:
@@ -512,9 +565,9 @@ class asminject_parameters:
         result['[VARIABLE:MESSAGE_TYPE_POINTER_TO_STRING_DATA:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.message_type_pointer_to_string_data, placeholder_value_address)}"
        
         # general purpose register replacements
-        #gpr_map = self.get_general_purpose_register_replacement_map()
-        #for k in gpr_map.keys():
-        #    result[k] = gpr_map[k]
+        gpr_map = self.get_general_purpose_register_replacement_map()
+        for k in gpr_map.keys():
+            result[k] = gpr_map[k]
        
         return result
     
@@ -803,6 +856,171 @@ def log_warning(msg, ansi=True):
 def log_error(msg, ansi=True):
     log(msg, "red", "!", ansi)
     #raise Exception(msg)
+
+def get_random_obfuscation_fragment(injection_params, use_communications_address_fragments, use_allocated_read_write_fragments, obfuscation_iteration):
+    result = None
+    
+    # potential_fragment_paths = []
+    # base_fragment_file_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, injection_params.fragment_directory_name, "obfuscation")
+    # # always add all files from the pre-alloc folder to the list
+    # fragment_subdirectory_names = ["pre-alloc"]
+    # # if read/write memory has already been allocated, add all files from the 
+    # # post-alloc folder to the list
+    # if use_allocated_memory:
+        # fragment_subdirectory_names.append("post-alloc")
+    # for subdirectory_name in fragment_subdirectory_names:
+        # current_fragment_directory_path = os.path.join(base_fragment_file_path, subdirectory_name)
+        # for directory_entry in os.listdir(current_fragment_directory_path):
+            # entry_path = os.path.join(current_fragment_directory_path, directory_entry)
+            # if os.path.isfile(entry_path):
+                # if entry_path not in potential_fragment_paths:
+                    # potential_fragment_paths.append(entry_path)
+    # #random.shuffle(potential_fragment_paths, asminject_parameters.get_random_float_for_shuffle)
+    # #selected_fragment_path = potential_fragment_paths[0]
+    # selected_fragment_path = potential_fragment_paths[secrets.randbelow(len(potential_fragment_paths))]
+    
+    # if not os.path.isfile(selected_fragment_path):
+        # log_error(f"Could not find the assembly obfuscation source code fragment '{selected_fragment_path}'", ansi=injection_params.ansi)
+        # return None
+    # try:
+        # with open(selected_fragment_path, "r") as fragment_source_file:
+            # result = fragment_source_file.read()
+    # except Exception as e:
+        # log_error(f"Could not read assembly obfuscation source code fragment '{selected_fragment_path}': {e}", ansi=injection_params.ansi)
+        # return None
+    
+    injection_params.cache_obfuscation_files()
+    fragment_list = []
+    for frag in injection_params.obfuscation_fragments_general_purpose:
+        fragment_list.append(frag)
+    
+    if use_communications_address_fragments:
+        for frag in injection_params.obfuscation_fragments_communications_address:
+            fragment_list.append(frag)
+    
+    if use_allocated_read_write_fragments:
+        for frag in injection_params.obfuscation_fragments_allocated_memory:
+            fragment_list.append(frag)
+
+    result = fragment_list[secrets.randbelow(len(fragment_list))]
+
+    per_fragment_replacement_map = injection_params.get_general_purpose_register_replacement_map()
+        
+    per_fragment_replacement_map["[VARIABLE:OBFUSCATION_FRAGMENT_NUMBER:VARIABLE]"] = f"{injection_params.obfuscation_fragment_counter}"
+
+    for search_text in per_fragment_replacement_map.keys():
+        result = result.replace(search_text, per_fragment_replacement_map[search_text])
+    
+    # indent by the number of iterations to make debugging easier
+    result_lines = result.splitlines()
+    result = ""
+    tabs = "\t\t"
+    for i in range(0, obfuscation_iteration):
+        tabs = f"{tabs}\t"
+    for rl in result_lines:
+        rl_strip = rl.rstrip()
+        if result == "":
+            result = f"{tabs}{rl_strip}\n"        
+        else:
+            result = f"{result}{tabs}{rl_strip}\n"
+        
+    injection_params.obfuscation_fragment_counter += 1  
+    
+    return result
+    
+def next_line_can_be_obfuscated(injection_params, lines, current_line_number):
+    result = True
+    current_line_trimmed = lines[current_line_number].strip()
+    instruction_trimmed = current_line_trimmed.split()[0].lower()
+    # Do not obfuscate after blank lines - too ambiguous
+    if len(current_line_trimmed) == 0:
+        return False
+    # Do not obfuscate lines beginning with a ., because they're probably data
+    if current_line_trimmed[0:1] == ".":
+        return False
+    # Do not obfuscate lines beginning with a _
+    if current_line_trimmed[0:1] == "_":
+        return False    
+    # Do not obfuscate lines immediately after labels, because they might be data
+    if current_line_trimmed[-1:] == ":":
+        return False
+      # Do not obfuscate lines immediately after comments - just after actual code
+    if current_line_trimmed[-1:] == "//" or current_line_trimmed[-1:] == "#":
+        return False
+        
+    # Do not obfuscate lines ending with "[pc]", because the next real line after that 
+    # is data that needs to stay in the same place
+    if current_line_trimmed[-4:] == "[pc]":
+        return False
+    # same for "pc":
+    if current_line_trimmed[-2:] == "pc":
+        return False
+        
+    # Do not obfuscate after processor-specific instructions
+    if instruction_trimmed in injection_params.no_obfuscation_after_instructions:
+        if injection_params.enable_debugging_output:
+            log(f"Instruction '{instruction_trimmed}' is in the list to not obfuscate after for this architecture", ansi=injection_params.ansi)
+        return False
+
+    # Do not obfuscate after instructions that set flag values
+    flag_setting_instructions = injection_params.flag_setting_instructions
+    for fsi in flag_setting_instructions:
+        if instruction_trimmed == fsi:
+            if injection_params.enable_debugging_output:
+                log(f"Instruction '{instruction_trimmed}' is in the list of flag-setting instructions for this architecture", ansi=injection_params.ansi)
+            return False
+    
+    # For ARM32 only, do not obfuscate after instructions that end in "s", 
+    # as these also typically set flag values
+    if injection_params.architecture == "arm32":
+        if instruction_trimmed[-1:] == "s":
+            return False
+
+    # checks that depend on the previous line
+    if current_line_number > 0:
+        previous_line_trimmed = lines[current_line_number - 1].strip()
+        # some [pc] references are two lines ahead
+        if previous_line_trimmed[-4:] == "[pc]":
+            return False
+    
+    return result
+
+def obfuscate_assembly_source(injection_params, original_source, obfuscation_iteration):
+    result_lines = []
+    for line in original_source.splitlines():
+        if line.strip() != "":
+            result_lines.append(line)
+    
+    result = ""
+    obfuscation_enabled = True
+    # use fragments that require memory allocated by the script
+    use_allocated_memory = False
+    # use fragments that require a communications address
+    use_communications_address = True
+    for line_num in range(0, len(result_lines)):
+        current_line = result_lines[line_num]
+        if result == "":
+            result = current_line
+        else:
+            result = f"{result}\n{current_line}"
+        if "OBFUSCATION_OFF" in current_line.strip():
+            obfuscation_enabled = False
+        if "OBFUSCATION_ON" in current_line.strip():
+            obfuscation_enabled = True
+        if "OBFUSCATION_ALLOCATED_MEMORY_OFF" in current_line.strip():
+            use_allocated_memory = False
+        if "OBFUSCATION_ALLOCATED_MEMORY_ON" in current_line.strip():
+            use_allocated_memory = True
+        if "OBFUSCATION_COMMUNICATIONS_ADDRESS_OFF" in current_line.strip():
+            use_communications_address = False
+        if "OBFUSCATION_COMMUNICATIONS_ADDRESS_ON" in current_line.strip():
+            use_communications_address = True
+        if obfuscation_enabled:
+            if next_line_can_be_obfuscated(injection_params, result_lines, line_num):
+                if asminject_parameters.get_random_float_for_shuffle() <= injection_params.per_line_obfuscation_percentage:
+                    fragment_source = get_random_obfuscation_fragment(injection_params, use_communications_address, use_allocated_memory, obfuscation_iteration)
+                    result = f"{result}\n{fragment_source}"
+    return result
     
 def get_code_fragment(injection_params, fragment_file_name):
     fragment_file_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, injection_params.fragment_directory_name, fragment_file_name)
@@ -972,10 +1190,20 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
         else:
             log_error(f"Could not find a match for the relative offset regular expression '{r_symbol_regex}' in the list of relative offsets provided to asminject.py. Make sure you've targeted the correct process, and provided accurate lists of any necessary relative offsets for the process.", ansi=injection_params.ansi)
             return None
-
+    
+    pre_obfuscation_source = formatted_source
+    obfuscation_iteration = 1
+    if injection_params.obfuscate_payloads:
+        for i in range(0, injection_params.obfuscation_iterations):
+            formatted_source = obfuscate_assembly_source(injection_params, formatted_source, obfuscation_iteration)
+            if injection_params.enable_debugging_output:
+                if injection_params.obfuscation_iterations > 1:
+                    log(f"Formatted assembly code after obfuscation round {i + 1}:\n{formatted_source}", ansi=injection_params.ansi)
 
     for search_text in replacements.keys():
         formatted_source = formatted_source.replace(search_text, replacements[search_text])
+        if injection_params.obfuscate_payloads:
+            pre_obfuscation_source = pre_obfuscation_source.replace(search_text, replacements[search_text])
     
     # check for any remaining placeholders in the formatted source code
     placeholder_types = ['BASEADDRESS', 'RELATIVEOFFSET', 'VARIABLE']
@@ -986,9 +1214,17 @@ def assemble(source, injection_params, memory_map_data, replacements = {}):
             missing_string = match.group(0)
             if missing_string not in missing_values:
                 missing_values.append(missing_string)
-                
+    
     if injection_params.enable_debugging_output:
-        log(f"Formatted assembly code:\n{formatted_source}", ansi=injection_params.ansi)
+        log(f"Formatted assembly code:\n{pre_obfuscation_source}", ansi=injection_params.ansi)
+    
+    if injection_params.obfuscate_payloads:
+        if injection_params.enable_debugging_output:
+            log(f"Formatted assembly code before obfuscation:\n{pre_obfuscation_source}", ansi=injection_params.ansi)
+            log(f"Formatted assembly code after obfuscation:\n{formatted_source}", ansi=injection_params.ansi)
+    else:
+        if injection_params.enable_debugging_output:
+            log(f"Formatted assembly code:\n{formatted_source}", ansi=injection_params.ansi)
     
     if len(missing_values) > 0:
         log_error(f"The following placeholders in the assembly source code code not be found: {missing_values}", ansi=injection_params.ansi)
@@ -1918,9 +2154,15 @@ if __name__ == "__main__":
     # parser.add_argument("--clear-payload-memory-value", type=parse_command_line_numeric_value, 
         # help="When --clear-payload-memory is selected, used the specified value instead of 0x00 to overwrite memory. The value must be a decimal or hexadecimal integer that can be represented using a number of bytes less than or equal to the CPU register width for the architecture, i.e. 32 bits for 32-bit CPUs, 64 bits for 64-bit CPUs")
 
-    # parser.add_argument("--obfuscate", type=str2bool, nargs='?',
-        # const=True, default=False,
-        # help="Enable code obfuscation")
+    parser.add_argument("--obfuscate", type=str2bool, nargs='?',
+        const=True, default=False,
+        help="Enable code obfuscation")
+
+    parser.add_argument("--per-line-obfuscation-percentage", type=parse_command_line_numeric_value, 
+        help="If a given line of payload source is a valid location for obfuscation to be added, use this likelihood (1-100) when determining if the obfuscation *will* be added there")
+
+    parser.add_argument("--obfuscation-iterations", type=parse_command_line_numeric_value, 
+        help="Perform the obfuscation routine this many times over each payload")
 
     parser.add_argument("--temp-dir", type=str, 
         help="Path to use for writing temporary files instead of the default (a dynamically-created directory underneath the default temporary directory for the OS)")
@@ -2040,6 +2282,15 @@ if __name__ == "__main__":
         injection_params.temp_file_base_directory = os.path.abspath(args.temp_dir)
 
     log(f"Using '{injection_params.temp_file_base_directory}' as the base temporary directory", ansi=injection_params.ansi)
+
+    if args.obfuscate:
+        injection_params.obfuscate_payloads = True
+
+    if args.per_line_obfuscation_percentage:
+        injection_params.per_line_obfuscation_percentage = float(args.per_line_obfuscation_percentage) / 100.0
+        
+    if args.obfuscation_iterations:
+        injection_params.obfuscation_iterations = args.obfuscation_iterations
 
     # if args.clear_payload_memory:
         # injection_params.clear_payload_memory_after_execution = args.clear_payload_memory

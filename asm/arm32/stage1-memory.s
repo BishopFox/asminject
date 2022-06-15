@@ -1,7 +1,9 @@
 .globl _start
 _start:
+	// OBFUSCATION_OFF
 	// Save registers
 	stmdb sp!,{r0-r11}
+	// OBFUSCATION_ON
 	
 	b beginStager
 

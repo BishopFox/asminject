@@ -1,9 +1,9 @@
 .intel_syntax noprefix
 .globl _start
 _start:
-
 // Based on the stage 2 code included with dlinject.py
 // and in part on https://github.com/lmacken/pyrasite/blob/d0c90ab38a8986527c9c1f24e222323494ab17a2/pyrasite/injector.py
+// OBFUSCATION_ALLOCATED_MEMORY_ON
 cld
 	// let the script know it can restore the previous data
 	mov r14, r11
@@ -23,10 +23,12 @@ cld
 	
 wait_for_script:
 
+// OBFUSCATION_OFF
 	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
 	mov rax, [r14]
 	cmp rax, [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]
 	je execute_inner_payload
+// OBFUSCATION_ON
 	
 	// sleep [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE] second(s)
 	mov rax, 35
@@ -64,8 +66,11 @@ cleanup_and_return:
 	fxrstor [rax]
 	pop rax
 
+// OBFUSCATION_ALLOCATED_MEMORY_OFF
+// OBFUSCATION_COMMUNICATIONS_ADDRESS_OFF
 [DEALLOCATE_MEMORY]
 
+// OBFUSCATION_OFF
 	// restore regular registers
 	//mov rsp, [existing_stack_backup_address[rip]]
 	
@@ -89,6 +94,7 @@ cleanup_and_return:
 	// reset stack pointer to the original value and jump to the original instruction location
 	//mov rsp, [VARIABLE:STACK_POINTER:VARIABLE]
 	jmp old_instruction_pointer[rip]
+	// OBFUSCATION_ON
 
 old_instruction_pointer:
 	.quad [VARIABLE:INSTRUCTION_POINTER:VARIABLE]

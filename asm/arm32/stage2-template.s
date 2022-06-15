@@ -2,7 +2,7 @@ b _start
 
 .globl _start
 _start:
-
+// OBFUSCATION_ALLOCATED_MEMORY_ON
 // Based on the stage 2 code included with dlinject.py
 // no relative offsets required, because everything is done using syscalls
 
@@ -74,7 +74,7 @@ cleanup_and_return:
 	pop {r11}
 
 [DEALLOCATE_MEMORY]
-
+	// OBFUSCATION_OFF
 	// restore registers
 	ldmia sp!, {r0-r11}
 
@@ -86,6 +86,7 @@ restoreStackPointer2:
 old_instruction_pointer:
 	.word [VARIABLE:INSTRUCTION_POINTER:VARIABLE]
 	.balign 4
+	// OBFUSCATION_ON
 
 old_instruction_pointer2:
 	.word [VARIABLE:INSTRUCTION_POINTER:VARIABLE]

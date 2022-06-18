@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.28
-Ben Lincoln, Bishop Fox, 2022-06-15
+v0.29
+Ben Lincoln, Bishop Fox, 2022-06-17
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -44,86 +44,125 @@ class asminject_state_codes:
 
     def randomize_state_variables(self):
         # randomize state values
-        self.state_switch_to_new_communication_address = secrets.randbelow(self.state_variable_max)
-        comparison_list = [self.state_switch_to_new_communication_address]
-        self.state_ready_for_stage_two_write = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_ready_for_stage_two_write)
-        self.state_stage_two_written = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_stage_two_written)
-        self.state_ready_for_memory_restore = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_ready_for_memory_restore)
-        self.state_memory_restored = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_memory_restored)
-        self.state_payload_to_script_message = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_payload_to_script_message)
-        self.state_script_to_payload_message = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_script_to_payload_message)
-        self.state_message_received = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_message_received)
-        self.state_payload_should_exit = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_payload_should_exit)
-        self.state_payload_exiting = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_payload_exiting)
-        self.state_payload_awaiting_string = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_payload_awaiting_string)
-        self.state_payload_awaiting_binary_data = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_payload_awaiting_binary_data)
-        self.state_payload_awaiting_signed_integer = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_payload_awaiting_signed_integer)
-        self.state_payload_awaiting_unsigned_integer = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.state_payload_awaiting_unsigned_integer)
+        self.state_map["switch_to_new_communication_address"] = secrets.randbelow(self.state_variable_max)
+        comparison_list = [self.state_map["switch_to_new_communication_address"]]
+        self.state_map["ready_for_stage_two_write"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["ready_for_stage_two_write"])
+        self.state_map["stage_two_written"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["stage_two_written"])
+        self.state_map["ready_for_memory_restore"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["ready_for_memory_restore"])
+        self.state_map["memory_restored"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["memory_restored"])
+        self.state_map["payload_to_script_message"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["payload_to_script_message"])
+        self.state_map["script_to_payload_message"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["script_to_payload_message"])
+        self.state_map["message_received"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["message_received"])
+        self.state_map["payload_ready_for_script_cleanup"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["payload_ready_for_script_cleanup"])
+        self.state_map["script_cleanup_complete"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["script_cleanup_complete"])
+        self.state_map["payload_should_exit"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["payload_should_exit"])
+        self.state_map["payload_exiting"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["payload_exiting"])
+        self.state_map["payload_awaiting_string"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["payload_awaiting_string"])
+        self.state_map["payload_awaiting_binary_data"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["payload_awaiting_binary_data"])
+        self.state_map["payload_awaiting_signed_integer"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["payload_awaiting_signed_integer"])
+        self.state_map["payload_awaiting_unsigned_integer"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.state_map["payload_awaiting_unsigned_integer"])
         
         # randomize message type indicators
-        self.message_type_signed_integer = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.message_type_signed_integer)
-        self.message_type_unsigned_integer = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.message_type_unsigned_integer)
-        self.message_type_pointer_to_binary_data = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.message_type_pointer_to_binary_data)
-        self.message_type_pointer_to_string_data = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
-        comparison_list.append(self.message_type_pointer_to_string_data)
+        self.message_type_map["signed_integer"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.message_type_map["signed_integer"])
+        self.message_type_map["unsigned_integer"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.message_type_map["unsigned_integer"])
+        self.message_type_map["pointer_to_binary_data"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.message_type_map["pointer_to_binary_data"])
+        self.message_type_map["pointer_to_string_data"] = asminject_parameters.get_secure_random_not_in_list(self.state_variable_max, comparison_list)
+        comparison_list.append(self.message_type_map["pointer_to_string_data"])
+    
+    def get_state_name_from_value(self, val):
+        for k in self.state_map.keys():
+            if val == self.state_map[k]:
+                return f"{k} ({hex(val)})"
+        #return None
+        result_text = "[null]"
+        if val:
+            result_text = hex(val)
+        return f"unknown state {result_text}"
+    
+    def get_message_type_name_from_value(self, val):
+        for k in self.message_type_map.keys():
+            if val == self.message_type_map[k]:
+                return k
+        #return None
+        result_text = "[null]"
+        if val:
+            result_text = hex(val)
+        return f"unknown message type {result_text}"
         
     def __init__(self):
         self.state_variable_max = 0xFFFFFF
+        self.state_map = {}
+        self.message_type_map = {}
+        
         # state values
-    
         # stage 1 has allocated memory and is ready to switch to a new communication address
-        self.state_switch_to_new_communication_address = 47
+        self.state_map["switch_to_new_communication_address"] = 47
         # stage 1 is ready for stage 2 to be written
-        self.state_ready_for_stage_two_write = self.state_switch_to_new_communication_address * 2
+        self.state_map["ready_for_stage_two_write"] = self.state_map["switch_to_new_communication_address"] * 2
         # the script has written stage 2 and is ready for stage 1 to launch stage 2
-        self.state_stage_two_written = self.state_switch_to_new_communication_address * 3
+        self.state_map["stage_two_written"] = self.state_map["switch_to_new_communication_address"] * 3
         # the payload is ready for the script to restore target process memory to its pre-injection state
-        self.state_ready_for_memory_restore = self.state_switch_to_new_communication_address * 4
+        self.state_map["ready_for_memory_restore"] = self.state_map["switch_to_new_communication_address"] * 4
         # the script has restored target process memory
-        self.state_memory_restored = self.state_switch_to_new_communication_address * 5
+        self.state_map["memory_restored"] = self.state_map["switch_to_new_communication_address"] * 5
         # the payload has data to send back to the script
-        self.state_payload_to_script_message = self.state_switch_to_new_communication_address * 6
+        self.state_map["payload_to_script_message"] = self.state_map["switch_to_new_communication_address"] * 6
         # the script has data to send to the payload
-        self.state_script_to_payload_message = self.state_switch_to_new_communication_address * 7
+        self.state_map["script_to_payload_message"] = self.state_map["switch_to_new_communication_address"] * 7
         # the current message has been received, and the waiting party can proceed
-        self.state_message_received = self.state_switch_to_new_communication_address * 8#
+        self.state_map["message_received"] = self.state_map["switch_to_new_communication_address"] * 8#
         # the script wants the payload to stop executing (for persistent/looping payloads, etc.)
-        self.state_payload_should_exit = self.state_switch_to_new_communication_address * 9
+        self.state_map["payload_should_exit"] = self.state_map["switch_to_new_communication_address"] * 9
         # the payload is exiting (either because it completed or because the script told it to exit)
-        self.state_payload_exiting = self.state_switch_to_new_communication_address * 10
+        self.state_map["payload_exiting"] = self.state_map["switch_to_new_communication_address"] * 10
         # the payload wants the script to send a string
-        self.state_payload_awaiting_string = self.state_switch_to_new_communication_address * 11
+        self.state_map["payload_awaiting_string"] = self.state_map["switch_to_new_communication_address"] * 11
         # the payload wants the script to send raw binary data
-        self.state_payload_awaiting_binary_data = self.state_switch_to_new_communication_address * 11
+        self.state_map["payload_awaiting_binary_data"] = self.state_map["switch_to_new_communication_address"] * 11
         # the payload wants the script to send an immediate integer value
-        self.state_payload_awaiting_signed_integer = self.state_switch_to_new_communication_address * 13
-        self.state_payload_awaiting_unsigned_integer = self.state_switch_to_new_communication_address * 14
+        self.state_map["payload_awaiting_signed_integer"] = self.state_map["switch_to_new_communication_address"] * 13
+        self.state_map["payload_awaiting_unsigned_integer"] = self.state_map["switch_to_new_communication_address"] * 14
         
         # message type indicators
-        # immediate values of whatever the word length is for the platform
-        self.message_type_signed_integer = self.state_switch_to_new_communication_address * 100
-        self.message_type_unsigned_integer = self.state_switch_to_new_communication_address * 101
-        # pointers to data in memory
-        self.message_type_pointer_to_binary_data = self.state_switch_to_new_communication_address * 102
-        self.message_type_pointer_to_string_data = self.state_switch_to_new_communication_address * 103
+        # immediate values of whatever the word length is for the platform - only data 1 used
+        self.message_type_map["signed_integer"] = self.state_map["switch_to_new_communication_address"] * 101
+        self.message_type_map["unsigned_integer"] = self.state_map["switch_to_new_communication_address"] * 102
+        # pointers to data in memory - pointer in data 1, number of bytes in data 2
+        self.message_type_map["pointer_to_binary_data"] = self.state_map["switch_to_new_communication_address"] * 103
+        self.message_type_map["pointer_to_string_data"] = self.state_map["switch_to_new_communication_address"] * 104
 
 class asminject_parameters:
+    # because random.shuffle with a random function is deprecrated in Python 3.9
+    @staticmethod
+    def get_securely_shuffled_array(arr):
+        result = []
+        temp_array_1 = []
+        for i in range(0, len(arr)):
+            temp_array_1.append(arr[i])
+        while len(temp_array_1) > 0:
+            rand_index = secrets.randbelow(len(temp_array_1))
+            result.append(temp_array_1.pop(rand_index))
+        
+        return result
+
     @staticmethod
     def get_random_float_for_shuffle():
         internal_range = 1000
@@ -263,7 +302,7 @@ class asminject_parameters:
             self.randomized_backup_restore_instruction_list = []
             for i in range(0, len(self.state_backup_restore_instruction_list)):
                 self.randomized_backup_restore_instruction_list.append(self.state_backup_restore_instruction_list[i])
-            random.shuffle(self.randomized_backup_restore_instruction_list, asminject_parameters.get_random_float_for_shuffle)
+            self.randomized_backup_restore_instruction_list = asminject_parameters.get_securely_shuffled_array(self.randomized_backup_restore_instruction_list)
     
     def get_randomized_state_backup_instruction_list(self):
         result = ""
@@ -276,6 +315,39 @@ class asminject_parameters:
         for i in range(0, len(self.randomized_backup_restore_instruction_list)):
             result = f"{result}{self.randomized_backup_restore_instruction_list[(len(self.randomized_backup_restore_instruction_list) - 1) - i][1]}\n"
         return result
+
+    def set_communications_address_config(self):
+        value_count = 0
+        
+        self.communication_address_offset_payload_state = self.register_size * value_count
+        value_count += 1
+        
+        self.communication_address_offset_script_state = self.register_size * value_count
+        value_count += 1
+        
+        # Addresses of read/execute and read/write memory - dedicated storage because they're referred to so frequently
+        self.communication_address_offset_read_execute_base_address = self.register_size * value_count
+        value_count += 1
+        self.communication_address_offset_read_write_base_address = self.register_size * value_count
+        value_count += 1
+        
+        # One message type and two arbitrary words for the payload to send data to the script
+        self.communication_address_offset_payload_data_type = self.register_size * value_count
+        value_count += 1
+        self.communication_address_offset_payload_data_1 = self.register_size * value_count
+        value_count += 1
+        self.communication_address_offset_payload_data_2 = self.register_size * value_count
+        value_count += 1
+        
+        # One message type and two arbitrary words for the script to send data to the payload
+        self.communication_address_offset_script_data_type = self.register_size * value_count
+        value_count += 1
+        self.communication_address_offset_script_data_1 = self.register_size * value_count
+        value_count += 1
+        self.communication_address_offset_script_data_2 = self.register_size * value_count
+        value_count += 1
+        
+        self.communication_address_backup_size = self.register_size * value_count
 
     def __init__(self):
         # memory regions must be evenly divisible by this amount
@@ -292,8 +364,10 @@ class asminject_parameters:
         self.no_obfuscation_after_instructions = []
         
         # Temporary communication address for use before stage one allocates the r/w block
-        self.communication_address_offset = -40
-        self.communication_address_backup_size = 24
+        #self.communication_address_offset = -40
+        #self.communication_address_backup_size = 24
+        self.set_communications_address_config()
+        
         self.initial_communication_address = None
         
         self.general_purpose_register_list = []
@@ -371,10 +445,10 @@ class asminject_parameters:
         
         # Randomized from initial state to make detection more challenging
         # self.state_variable_max = 0xFFFFFF
-        # self.state_ready_for_stage_two_write = 47
-        # self.state_stage_two_written = self.state_ready_for_stage_two_write * 2
-        # self.state_ready_for_memory_restore = self.state_ready_for_stage_two_write * 3
-        # self.state_memory_restored = self.state_ready_for_stage_two_write * 4
+        # self.state_map["ready_for_stage_two_write"] = 47
+        # self.state_map["stage_two_written"] = self.state_map["ready_for_stage_two_write"] * 2
+        # self.state_map["ready_for_memory_restore"] = self.state_map["ready_for_stage_two_write"] * 3
+        # self.state_map["memory_restored"] = self.state_map["ready_for_stage_two_write"] * 4
         # self.randomize_state_variables()
         self.state_variables = asminject_state_codes()
         self.state_variables.randomize_state_variables()
@@ -495,6 +569,7 @@ class asminject_parameters:
             # 8 bytes * 16 registers
             self.stage_sleep_seconds = 2
             self.stack_backup_size = 8 * 16
+            self.communication_address_backup_size = 32
             self.instruction_pointer_register_name = "RIP"
             self.stack_pointer_register_name = "RSP"
             self.general_purpose_register_list = ["rax", "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
@@ -508,6 +583,7 @@ class asminject_parameters:
             # 4 bytes * 13 registers
             #self.stack_backup_size = 4 * 12
             self.stack_backup_size = 8 * 16
+            self.communication_address_backup_size = 16
             # ARM32 doesn't seem to trigger the Linux "in a syscall" state
             # for long enough for the script to catch unless this value is 
             # around 5 seconds.
@@ -520,16 +596,17 @@ class asminject_parameters:
             self.flag_setting_instructions = [ "cmp", "cmn", "tst", "teq" ]
             self.no_obfuscation_after_instructions = [ "ldr", "b", "bx", "bl", "blx"]
         self.populate_randomized_state_backup_restore_list()
+        self.set_communications_address_config()
     
     def get_value_or_placeholder(self, value, placeholder_value):
-        if value:
+        if value or value == 0:
             return value
         else:
             return placeholder_value
     
     def get_hex_value_or_placeholder(self, value, placeholder_value):
         result_temp = self.get_value_or_placeholder(value, placeholder_value)
-        if result_temp:
+        if result_temp or result_temp == 0:
             return hex(result_temp)
         return '____BUG_IN_CODE____'
         
@@ -538,7 +615,8 @@ class asminject_parameters:
         gpr_list = []
         for i in range(0, len(self.general_purpose_register_list)):
             gpr_list.append(self.general_purpose_register_list[i])
-        random.shuffle(gpr_list, asminject_parameters.get_random_float_for_shuffle)
+        #random.shuffle(gpr_list, asminject_parameters.get_random_float_for_shuffle)
+        gpr_list = asminject_parameters.get_securely_shuffled_array(gpr_list)
         for i in range(0, len(self.general_purpose_register_list)):
             result[f"%r{i}%"] = gpr_list[i]
         return result
@@ -551,49 +629,64 @@ class asminject_parameters:
         for k in self.custom_replacements.keys():
             result[k] = self.custom_replacements[k]
     
-        result['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.get_region_info_arbitrary_data().start_address, placeholder_value_address)}"
-        #result['[VARIABLE:CLEAR_PAYLOAD_MEMORY_VALUE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.clear_payload_memory_value, placeholder_value_address)}"
-        result['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.get_base_communication_address(), placeholder_value_address)}"
-        result['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.rwr_cpu_state_backup_length, placeholder_value_address)}"
-        result['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.get_region_info_stack_backup().start_address, placeholder_value_address)}"
-        result['[VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.rwr_stack_backup_offset, placeholder_value_address)}"
-        result['[VARIABLE:INSTRUCTION_POINTER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.saved_instruction_pointer_value, placeholder_value_address)}"
-        result['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.code_backup_length, placeholder_value_address)}"
+        result['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = self.get_hex_value_or_placeholder(self.get_region_info_arbitrary_data().start_address, placeholder_value_address)
+        #result['[VARIABLE:CLEAR_PAYLOAD_MEMORY_VALUE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.clear_payload_memory_value, placeholder_value_address)
+        result['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = self.get_hex_value_or_placeholder(self.get_base_communication_address(), placeholder_value_address)
+        result['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.rwr_cpu_state_backup_length, placeholder_value_address)
+        result['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = self.get_hex_value_or_placeholder(self.get_region_info_stack_backup().start_address, placeholder_value_address)
+        result['[VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]'] = self.get_hex_value_or_placeholder(self.rwr_stack_backup_offset, placeholder_value_address)
+        result['[VARIABLE:INSTRUCTION_POINTER:VARIABLE]'] = self.get_hex_value_or_placeholder(self.saved_instruction_pointer_value, placeholder_value_address)
+        result['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = self.get_hex_value_or_placeholder(self.code_backup_length, placeholder_value_address)
         result['[VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]'] = f"{self.post_shellcode_label}"
         result['[VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE]'] = f"{self.precompiled_shellcode_label}"
-        result['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.read_execute_region_address, placeholder_value_address)}"
-        result['[VARIABLE:READ_EXECUTE_REGION_SIZE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.read_execute_region_size, placeholder_value_address)}"
-        result['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.read_write_region_address, placeholder_value_address)}"
+        result['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = self.get_hex_value_or_placeholder(self.read_execute_region_address, placeholder_value_address)
+        result['[VARIABLE:READ_EXECUTE_REGION_SIZE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.read_execute_region_size, placeholder_value_address)
+        result['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = self.get_hex_value_or_placeholder(self.read_write_region_address, placeholder_value_address)
+        result['[VARIABLE:RWR_CPU_STATE_BACKUP_OFFSET:VARIABLE]'] = self.get_hex_value_or_placeholder(self.rwr_cpu_state_backup_offset, placeholder_value_address)
         rw_region_address = None
         if self.read_write_region_address and self.read_write_region_size:
             rw_region_address = self.read_write_region_address + self.read_write_region_size
-        result['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(rw_region_address, placeholder_value_address)}"
-        result['[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.read_write_region_size, placeholder_value_address)}"
-        result['[VARIABLE:STACK_POINTER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.saved_stack_pointer_value, placeholder_value_address)}"
+        result['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = self.get_hex_value_or_placeholder(rw_region_address, placeholder_value_address)
+        result['[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.read_write_region_size, placeholder_value_address)
+        result['[VARIABLE:STACK_POINTER:VARIABLE]'] = self.get_hex_value_or_placeholder(self.saved_stack_pointer_value, placeholder_value_address)
         result['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{self.stage_sleep_seconds}"
         
+        # communications address offsets
+        offset_placeholder = None
+        result['[VARIABLE:COMMUNICATION_ADDRESS_OFFSET_PAYLOAD_STATE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.communication_address_offset_payload_state, offset_placeholder)
+        result['[VARIABLE:COMMUNICATION_ADDRESS_OFFSET_SCRIPT_STATE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.communication_address_offset_script_state, offset_placeholder)
+        result['[VARIABLE:COMMUNICATION_ADDRESS_OFFSET_READ_EXECUTE_BASE_ADDRESS:VARIABLE]'] = self.get_hex_value_or_placeholder(self.communication_address_offset_read_execute_base_address, offset_placeholder)
+        result['[VARIABLE:COMMUNICATION_ADDRESS_OFFSET_READ_WRITE_BASE_ADDRESS:VARIABLE]'] = self.get_hex_value_or_placeholder(self.communication_address_offset_read_write_base_address, offset_placeholder)
+        result['[VARIABLE:COMMUNICATION_ADDRESS_OFFSET_PAYLOAD_DATA_TYPE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.communication_address_offset_payload_data_type, offset_placeholder)
+        result['[VARIABLE:COMMUNICATION_ADDRESS_OFFSET_PAYLOAD_DATA_1:VARIABLE]'] = self.get_hex_value_or_placeholder(self.communication_address_offset_payload_data_1, offset_placeholder)
+        result['[VARIABLE:COMMUNICATION_ADDRESS_OFFSET_PAYLOAD_DATA_2:VARIABLE]'] = self.get_hex_value_or_placeholder(self.communication_address_offset_payload_data_2, offset_placeholder)
+        result['[VARIABLE:COMMUNICATION_ADDRESS_OFFSET_SCRIPT_DATA_TYPE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.communication_address_offset_script_data_type, offset_placeholder)
+        result['[VARIABLE:COMMUNICATION_ADDRESS_OFFSET_SCRIPT_DATA_1:VARIABLE]'] = self.get_hex_value_or_placeholder(self.communication_address_offset_script_data_1, offset_placeholder)
+        result['[VARIABLE:COMMUNICATION_ADDRESS_OFFSET_SCRIPT_DATA_2:VARIABLE]'] = self.get_hex_value_or_placeholder(self.communication_address_offset_script_data_2, offset_placeholder)
         
         # state variables
-        result['[VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_switch_to_new_communication_address, placeholder_value_address)}"
-        result['[VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_ready_for_stage_two_write, placeholder_value_address)}"
-        result['[VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_stage_two_written, placeholder_value_address)}"
-        result['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_ready_for_memory_restore, placeholder_value_address)}"
-        result['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_memory_restored, placeholder_value_address)}"
-        result['[VARIABLE:STATE_PAYLOAD_TO_SCRIPT_MESSAGE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_to_script_message, placeholder_value_address)}"
-        result['[VARIABLE:STATE_SCRIPT_TO_PAYLOAD_MESSAGE:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_script_to_payload_message, placeholder_value_address)}"
-        result['[VARIABLE:STATE_MESSAGE_RECEIVED:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_message_received, placeholder_value_address)}"
-        result['[VARIABLE:STATE_PAYLOAD_SHOULD_EXIT:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_should_exit, placeholder_value_address)}"
-        result['[VARIABLE:STATE_PAYLOAD_EXITING:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_exiting, placeholder_value_address)}"
-        result['[VARIABLE:STATE_PAYLOAD_AWAITING_STRING:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_awaiting_string, placeholder_value_address)}"
-        result['[VARIABLE:STATE_PAYLOAD_AWAITING_BINARY_DATA:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_awaiting_binary_data, placeholder_value_address)}"
-        result['[VARIABLE:STATE_PAYLOAD_AWAITING_SIGNED_INTEGER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_awaiting_signed_integer, placeholder_value_address)}"
-        result['[VARIABLE:STATE_PAYLOAD_AWAITING_UNSIGNED_INTEGER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.state_payload_awaiting_unsigned_integer, placeholder_value_address)}"
+        result['[VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["switch_to_new_communication_address"], placeholder_value_address)
+        result['[VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["ready_for_stage_two_write"], placeholder_value_address)
+        result['[VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["stage_two_written"], placeholder_value_address)
+        result['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["ready_for_memory_restore"], placeholder_value_address)
+        result['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["memory_restored"], placeholder_value_address)
+        result['[VARIABLE:STATE_PAYLOAD_TO_SCRIPT_MESSAGE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["payload_to_script_message"], placeholder_value_address)
+        result['[VARIABLE:STATE_SCRIPT_TO_PAYLOAD_MESSAGE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["script_to_payload_message"], placeholder_value_address)
+        result['[VARIABLE:STATE_MESSAGE_RECEIVED:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["message_received"], placeholder_value_address)
+        result['[VARIABLE:PAYLOAD_READY_FOR_SCRIPT_CLEANUP:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["payload_ready_for_script_cleanup"], placeholder_value_address)
+        result['[VARIABLE:SCRIPT_CLEANUP_COMPLETE:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["script_cleanup_complete"], placeholder_value_address)
+        result['[VARIABLE:STATE_PAYLOAD_SHOULD_EXIT:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["payload_should_exit"], placeholder_value_address)
+        result['[VARIABLE:STATE_PAYLOAD_EXITING:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["payload_exiting"], placeholder_value_address)
+        result['[VARIABLE:STATE_PAYLOAD_AWAITING_STRING:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["payload_awaiting_string"], placeholder_value_address)
+        result['[VARIABLE:STATE_PAYLOAD_AWAITING_BINARY_DATA:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["payload_awaiting_binary_data"], placeholder_value_address)
+        result['[VARIABLE:STATE_PAYLOAD_AWAITING_SIGNED_INTEGER:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["payload_awaiting_signed_integer"], placeholder_value_address)
+        result['[VARIABLE:STATE_PAYLOAD_AWAITING_UNSIGNED_INTEGER:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.state_map["payload_awaiting_unsigned_integer"], placeholder_value_address)
         
         # state message type indicators
-        result['[VARIABLE:MESSAGE_TYPE_SIGNED_INTEGER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.message_type_signed_integer, placeholder_value_address)}"
-        result['[VARIABLE:MESSAGE_TYPE_UNSIGNED_INTEGER:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.message_type_unsigned_integer, placeholder_value_address)}"
-        result['[VARIABLE:MESSAGE_TYPE_POINTER_TO_BINARY_DATA:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.message_type_pointer_to_binary_data, placeholder_value_address)}"
-        result['[VARIABLE:MESSAGE_TYPE_POINTER_TO_STRING_DATA:VARIABLE]'] = f"{self.get_hex_value_or_placeholder(self.state_variables.message_type_pointer_to_string_data, placeholder_value_address)}"
+        result['[VARIABLE:MESSAGE_TYPE_SIGNED_INTEGER:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.message_type_map["signed_integer"], placeholder_value_address)
+        result['[VARIABLE:MESSAGE_TYPE_UNSIGNED_INTEGER:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.message_type_map["unsigned_integer"], placeholder_value_address)
+        result['[VARIABLE:MESSAGE_TYPE_POINTER_TO_BINARY_DATA:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.message_type_map["pointer_to_binary_data"], placeholder_value_address)
+        result['[VARIABLE:MESSAGE_TYPE_POINTER_TO_STRING_DATA:VARIABLE]'] = self.get_hex_value_or_placeholder(self.state_variables.message_type_map["pointer_to_string_data"], placeholder_value_address)
        
         # general purpose register replacements
         gpr_map = self.get_general_purpose_register_replacement_map()
@@ -640,9 +733,72 @@ class asminject_parameters:
 
 class communication_variables:
     def __init__(self):
-        self.state_value = None
+        self.payload_state_value = None
+        self.script_state_value = None
         self.read_execute_address = None
         self.read_write_address = None
+        self.payload_data_type = None
+        self.payload_data_1 = None
+        self.payload_data_2 = None
+        self.script_data_type = None
+        self.script_data_1 = None
+        self.script_data_2 = None
+    
+    def read_word(self, injection_params, memory_handle):
+        return struct.unpack(injection_params.register_size_format_string, memory_handle.read(injection_params.register_size))[0]
+    
+    def read_current_values(self, injection_params, process_memory_path, communication_address):
+        with open(process_memory_path, "rb") as mem:
+            try:
+                mem.seek(communication_address + injection_params.communication_address_offset_payload_state)
+                self.payload_state_value = self.read_word(injection_params, mem)
+                
+                mem.seek(communication_address + injection_params.communication_address_offset_script_state)
+                self.script_state_value = self.read_word(injection_params, mem)
+                
+                mem.seek(communication_address + injection_params.communication_address_offset_read_execute_base_address)
+                self.read_execute_address = self.read_word(injection_params, mem)
+                
+                mem.seek(communication_address + injection_params.communication_address_offset_read_write_base_address)
+                self.read_write_address = self.read_word(injection_params, mem)
+                
+                mem.seek(communication_address + injection_params.communication_address_offset_payload_data_type)
+                self.payload_data_type = self.read_word(injection_params, mem)
+                
+                mem.seek(communication_address + injection_params.communication_address_offset_payload_data_1)
+                self.payload_data_1 = self.read_word(injection_params, mem)
+                
+                mem.seek(communication_address + injection_params.communication_address_offset_payload_data_2)
+                self.payload_data_2 = self.read_word(injection_params, mem)
+                
+                mem.seek(communication_address + injection_params.communication_address_offset_script_data_type)
+                self.script_data_type = self.read_word(injection_params, mem)
+                
+                mem.seek(communication_address + injection_params.communication_address_offset_script_data_1)
+                self.script_data_1 = self.read_word(injection_params, mem)
+                
+                mem.seek(communication_address + injection_params.communication_address_offset_script_data_2)
+                self.script_data_2 = self.read_word(injection_params, mem)
+                
+            except FileNotFoundError as e:
+                log_error(f"Process {pid} disappeared during injection attempt - exiting", ansi=injection_params.ansi)
+                sys.exit(1)
+            except Exception as e:
+                log_error(f"Couldn't get target process information: {e}", ansi=injection_params.ansi)
+        if injection_params.enable_debugging_output:
+            current_state_log_output = f"Communications address data at {hex(communication_address)}:\n"
+            current_state_log_output += f"\tPayload state: {injection_params.state_variables.get_state_name_from_value(self.payload_state_value)}\n"
+            current_state_log_output += f"\tScript state: {injection_params.state_variables.get_state_name_from_value(self.script_state_value)}\n"
+            current_state_log_output += f"\tRead/execute block base address: {hex(self.read_execute_address)}\n"
+            current_state_log_output += f"\tRead/write block base address: {hex(self.read_write_address)}\n"
+            current_state_log_output += f"\tPayload data type: {hex(self.payload_data_type)}\n"
+            current_state_log_output += f"\tPayload data 1: {hex(self.payload_data_1)}\n"
+            current_state_log_output += f"\tPayload data 2: {hex(self.payload_data_2)}\n"
+            current_state_log_output += f"\tScript data type: {hex(self.script_data_type)}\n"
+            current_state_log_output += f"\tScript data 1: {hex(self.script_data_1)}\n"
+            current_state_log_output += f"\tScript data 2: {hex(self.script_data_2)}\n"
+        
+            log(current_state_log_output, ansi=injection_params.ansi)
 
 class memory_map_permissions:
     def set_default_values(self):
@@ -895,35 +1051,6 @@ def log_error(msg, ansi=True):
 def get_random_obfuscation_fragment(injection_params, use_communications_address_fragments, use_allocated_read_write_fragments, obfuscation_iteration):
     result = None
     
-    # potential_fragment_paths = []
-    # base_fragment_file_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, injection_params.fragment_directory_name, "obfuscation")
-    # # always add all files from the pre-alloc folder to the list
-    # fragment_subdirectory_names = ["pre-alloc"]
-    # # if read/write memory has already been allocated, add all files from the 
-    # # post-alloc folder to the list
-    # if use_allocated_memory:
-        # fragment_subdirectory_names.append("post-alloc")
-    # for subdirectory_name in fragment_subdirectory_names:
-        # current_fragment_directory_path = os.path.join(base_fragment_file_path, subdirectory_name)
-        # for directory_entry in os.listdir(current_fragment_directory_path):
-            # entry_path = os.path.join(current_fragment_directory_path, directory_entry)
-            # if os.path.isfile(entry_path):
-                # if entry_path not in potential_fragment_paths:
-                    # potential_fragment_paths.append(entry_path)
-    # #random.shuffle(potential_fragment_paths, asminject_parameters.get_random_float_for_shuffle)
-    # #selected_fragment_path = potential_fragment_paths[0]
-    # selected_fragment_path = potential_fragment_paths[secrets.randbelow(len(potential_fragment_paths))]
-    
-    # if not os.path.isfile(selected_fragment_path):
-        # log_error(f"Could not find the assembly obfuscation source code fragment '{selected_fragment_path}'", ansi=injection_params.ansi)
-        # return None
-    # try:
-        # with open(selected_fragment_path, "r") as fragment_source_file:
-            # result = fragment_source_file.read()
-    # except Exception as e:
-        # log_error(f"Could not read assembly obfuscation source code fragment '{selected_fragment_path}': {e}", ansi=injection_params.ansi)
-        # return None
-    
     injection_params.cache_obfuscation_files()
     fragment_list = []
     for frag in injection_params.obfuscation_fragments_general_purpose:
@@ -1129,7 +1256,8 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
             formatted_source = formatted_source.replace(match_text, "")
     
     # randomize initial fragment order
-    random.shuffle(initial_fragment_list, asminject_parameters.get_random_float_for_shuffle)
+    #random.shuffle(initial_fragment_list, asminject_parameters.get_random_float_for_shuffle)
+    initial_fragment_list = asminject_parameters.get_securely_shuffled_array(initial_fragment_list)
     fragment_source = ""
     for i in range (0, len(initial_fragment_list)):
         fragment_source = f"{fragment_source}{os.linesep}{os.linesep}{initial_fragment_list[i]}"
@@ -1152,11 +1280,11 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
                     log(f"Found code fragment placeholder '{fragment_file_name}' in assembly code", ansi=injection_params.ansi)
                 fragment_placeholders.append(fragment_file_name)
         for fragment_file_name in fragment_placeholders:
-            fragment_source = get_code_fragment(injection_params, fragment_file_name)
+            new_fragment_source = get_code_fragment(injection_params, fragment_file_name)
             string_to_replace = f"[FRAGMENT:{fragment_file_name}:FRAGMENT]"
             if injection_params.enable_debugging_output:
                 log(f"Replacing '{string_to_replace}' with the content of file '{fragment_file_name}' in assembly code", ansi=injection_params.ansi)
-            fragment_source = fragment_source.replace(string_to_replace, fragment_source)
+            fragment_source = fragment_source.replace(string_to_replace, new_fragment_source)
         if len(fragment_placeholders) == 0:
             fragment_refs_found = False
         else:
@@ -1423,49 +1551,36 @@ def get_syscall_values(injection_params, pid):
         log_error(f"Couldn't retrieve current syscall values: {e}", ansi=injection_params.ansi)
     return result
 
-def wait_for_communication_state(injection_params, pid, communication_address, wait_for_value):
+def wait_for_payload_communication_state(injection_params, pid, communication_address, wait_for_value):
     done_waiting = False
     data = communication_variables()
+    payload_state_communication_address = communication_address + injection_params.communication_address_offset_payload_state
+    waiting_for_state_name = injection_params.state_variables.get_state_name_from_value(wait_for_value)
     if injection_params.enable_debugging_output:
-        log(f"Waiting for value {hex(wait_for_value)} at communication address {hex(communication_address)}", ansi=injection_params.ansi)
+        log(f"Waiting for payload state {waiting_for_state_name} at address {hex(payload_state_communication_address)}", ansi=injection_params.ansi)
     while not done_waiting:
-        try:
-            with open(f"/proc/{pid}/mem", "rb") as mem:
-                syscall_data = ""
-                try:
-                    # check to see if stage 1 has given the OK to proceed
-                    syscall_check_result = get_syscall_values(injection_params, pid)
-                    instruction_pointer = syscall_check_result[injection_params.instruction_pointer_register_name]
-                    stack_pointer = syscall_check_result[injection_params.stack_pointer_register_name]
-                    sleep_this_iteration = True
-                    if instruction_pointer != 0 and stack_pointer != 0:
-                        if injection_params.enable_debugging_output:
-                            log(f"{injection_params.stack_pointer_register_name} is {hex(stack_pointer)}", ansi=injection_params.ansi)
-                        mem.seek(communication_address)
-                        data.state_value = struct.unpack(injection_params.register_size_format_string, mem.read(injection_params.register_size))[0]
-                        #mem.seek(communication_address + injection_params.register_size)
-                        data.read_execute_address = struct.unpack(injection_params.register_size_format_string, mem.read(injection_params.register_size))[0]
-                        data.read_write_address = struct.unpack(injection_params.register_size_format_string, mem.read(injection_params.register_size))[0]
-                        if injection_params.enable_debugging_output:
-                            log(f"State value at communication address {hex(communication_address)} is {hex(data.state_value)}", ansi=injection_params.ansi)
-                            log(f"Read/execute block address at communication address {hex(communication_address)} + {hex(injection_params.register_size)} is {hex(data.read_execute_address)}", ansi=injection_params.ansi)
-                            log(f"Read/write block address at communication address {hex(communication_address)} + {hex(injection_params.register_size * 2)} is {hex(data.read_write_address)}", ansi=injection_params.ansi)
-                        
-                        if data.state_value == wait_for_value:
-                            if injection_params.enable_debugging_output:
-                                log(f"Communications address value matches wait value {hex(wait_for_value)}", ansi=injection_params.ansi)
-                            sleep_this_iteration = False
-                            done_waiting = True
-                        
-                    if sleep_this_iteration:
-                        log("Waiting for injected code to update the state value", ansi=injection_params.ansi)
-                        time.sleep(injection_params.wait_delay)
-                except Exception as e:
-                    log_error(f"Couldn't get target process information: {e}, {syscall_data}", ansi=injection_params.ansi)
-        except FileNotFoundError as e:
-            log_error(f"Process {pid} disappeared during injection attempt - exiting", ansi=injection_params.ansi)
-            sys.exit(1)
+        process_memory_path = f"/proc/{pid}/mem"
+        sleep_this_iteration = True
+        data.read_current_values(injection_params, process_memory_path, communication_address)
+        
+        if data.payload_state_value == wait_for_value:
+            if injection_params.enable_debugging_output:
+                log(f"Payload state value matches state {waiting_for_state_name}", ansi=injection_params.ansi)
+            sleep_this_iteration = False
+            done_waiting = True
+            
+        if sleep_this_iteration:
+            log(f"Waiting for payload to update the state value to {waiting_for_state_name} at address {hex(payload_state_communication_address)}", ansi=injection_params.ansi)
+            time.sleep(injection_params.wait_delay)
     return data
+
+def set_script_communication_state(injection_params, pid, communication_address, new_value):
+    script_state_communication_address = communication_address + injection_params.communication_address_offset_script_state
+    with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
+        log(f"Setting script state to {injection_params.state_variables.get_state_name_from_value(new_value)} at {hex(script_state_communication_address)} in target memory", ansi=injection_params.ansi)
+        mem.seek(script_state_communication_address)
+        packed_val = struct.pack('I', new_value)
+        mem.write(packed_val)
 
 def output_process_priority_and_affinity(injection_params, state_name):
     log(f"{state_name} process priority for asminject.py (PID: {injection_params.asminject_pid}) is {injection_params.asminject_priority}", ansi=injection_params.ansi)
@@ -1637,33 +1752,7 @@ def asminject(injection_params):
     # Do basic setup first to perform a validation on the stage 2 code
     # (Avoids injecting stage 1 only to have stage 2 fail)
     injection_params.stack_region = memory_map_data.get_first_region_for_named_file("[stack]")
-    #injection_params.initial_communication_address = stack_region.end_address + injection_params.communication_address_offset
     injection_params.set_initial_communication_address()
-
-    # stage2_replacements = injection_params.custom_replacements
-    # # these values will stay the same even for the real assembly
-    
-    # stage2_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
-    # stage2_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    # stage2_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_memory_restore}"
-    # stage2_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.rwr_cpu_state_backup_length}"
-    # stage2_replacements['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{injection_params.stage_sleep_seconds}"
-    # stage2_replacements['[VARIABLE:PRECOMPILED_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.precompiled_shellcode_label}"
-    # stage2_replacements['[VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]'] = f"{injection_params.post_shellcode_label}"
-    # #stage2_replacements['[VARIABLE:CLEAR_PAYLOAD_MEMORY_VALUE:VARIABLE]'] = f"{injection_params.clear_payload_memory_value}"
-    # # these values are placeholders - real values will be determined by result of stage 1
-    # stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_variables.state_memory_restored}"
-    # stage2_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(communication_address-injection_params.stack_backup_size)}"
-    # stage2_replacements['[VARIABLE:INSTRUCTION_POINTER:VARIABLE]'] = f"{communication_address}"
-    # stage2_replacements['[VARIABLE:STACK_POINTER:VARIABLE]'] = f"{communication_address}"
-    # stage2_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    # stage2_replacements['[VARIABLE:READ_EXECUTE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_execute_region_size}"
-    # stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    # stage2_replacements['[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_write_region_size}"
-    # stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    # stage2_replacements['[VARIABLE:NEW_STACK_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    # stage2_replacements['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{communication_address}"
-    # stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{communication_address}"
 
     stage2_replacements = injection_params.get_replacement_variable_map(placeholder_value_address = injection_params.get_base_communication_address())
 
@@ -1826,39 +1915,22 @@ def asminject(injection_params):
         log(f"{injection_params.stack_pointer_register_name}: {hex(injection_params.saved_stack_pointer_value)}", ansi=injection_params.ansi)
         
         if continue_executing:
-            log(f"Using: {hex(injection_params.state_variables.state_ready_for_stage_two_write)} for 'ready for stage two write' state value", ansi=injection_params.ansi)
-            log(f"Using: {hex(injection_params.state_variables.state_stage_two_written)} for 'stage two written' state value", ansi=injection_params.ansi)
-            #log(f"Using: {hex(injection_params.state_variables.state_ready_for_memory_restore)} for 'ready for memory restore' state value", ansi=injection_params.ansi)
+            log(f"Using: {hex(injection_params.state_variables.state_map['ready_for_stage_two_write'])} for 'ready for stage two write' state value", ansi=injection_params.ansi)
+            log(f"Using: {hex(injection_params.state_variables.state_map['stage_two_written'])} for 'stage two written' state value", ansi=injection_params.ansi)
             
             stage_1_code = ""
             with open(stage1_path, "r") as stage1_code:
                 stage_1_code = stage1_code.read()
             
-            # stage1_replacements = {}
-            # stage1_replacements['[VARIABLE:STACK_BACKUP_SIZE:VARIABLE]'] = f"{injection_params.stack_backup_size}"
-            # stage1_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(injection_params.saved_stack_pointer_value - injection_params.stack_backup_size)}"
-            # stage1_replacements['[VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]'] = f"{injection_params.get_base_communication_address()}"
-            # stage1_replacements['[VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_stage_two_write}"
-            # stage1_replacements['[VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]'] = f"{injection_params.state_variables.state_stage_two_written}"
-            # stage1_replacements['[VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]'] = f"{injection_params.state_variables.state_ready_for_memory_restore}"
-            # stage1_replacements['[VARIABLE:READ_EXECUTE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_execute_region_size}"
-            # stage1_replacements['[VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]'] = f"{injection_params.read_write_region_size}"
-            # stage1_replacements['[VARIABLE:CPU_STATE_SIZE:VARIABLE]'] = f"{injection_params.rwr_cpu_state_backup_length}"
-            # stage1_replacements['[VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]'] = f"{injection_params.stage_sleep_seconds}"
-            # stage1_replacements['[VARIABLE:EXISTING_STACK_BACKUP_LOCATION_OFFSET:VARIABLE]'] = f"{injection_params.rwr_stack_backup_offset}"
-            
-            
             if injection_params.existing_read_execute_address:
                 injection_params.read_execute_region_address = injection_params.existing_read_execute_address
                 log_warning(f"Attempting to reuse existing read/execute block at {hex(injection_params.read_execute_region_address)}")
-                #stage1_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{hex(injection_params.read_execute_region_address)}"
                 stage_1_code = stage_1_code.replace("[READ_EXECUTE_ALLOCATE_OR_REUSE]", get_code_fragment(injection_params, "stage1-use_existing_read-execute.s"))
             else:
                 stage_1_code = stage_1_code.replace("[READ_EXECUTE_ALLOCATE_OR_REUSE]", get_code_fragment(injection_params, "stage1-allocate_read-execute.s"))
             if injection_params.existing_read_write_address:
                 injection_params.read_write_region_address = injection_params.existing_read_write_address
                 log_warning(f"Attempting to reuse existing read/write block at {hex(injection_params.read_write_region_address)}")
-                #stage1_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{injection_params.read_write_region_address}"
                 stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", get_code_fragment(injection_params, "stage1-use_existing_read-write.s"))
             else:
                 stage_1_code = stage_1_code.replace("[READ_WRITE_ALLOCATE_OR_REUSE]", get_code_fragment(injection_params, "stage1-allocate_read-write.s"))
@@ -1895,12 +1967,6 @@ def asminject(injection_params):
                         except Exception as e:
                             log_error(f"Couldn't backup existing code from '{mem_file_path}', address {hex(code_backup_address)}, length {hex(len(stage1))}: {e}", ansi=injection_params.ansi)
                             continue_executing = False
-                        # back up the part of the stack that the shellcode will clobber
-                        #stack_backup_address = stack_pointer - injection_params.stack_backup_size
-                        #mem.seek(stack_backup_address)
-                        #stack_backup = mem.read(injection_params.stack_backup_size)
-                        #output_memory_block_data(injection_params, f"Stack backup ({hex(stack_backup_address)})", stack_backup)
-                        
                         
                         # back up the data at the communication address
                         try:
@@ -1912,9 +1978,9 @@ def asminject(injection_params):
                             continue_executing = False
                             
                         # Set the "memory restored" state variable to match the first 4 bytes of the backed up communications address data
-                        #injection_params.state_variables.state_memory_restored = struct.unpack('I', communication_address_backup[0:4])[0]
-                        #log(f"Will specify {hex(injection_params.state_variables.state_stage_two_written)} @ {hex(injection_params.initial_communication_address)} as the 'memory restored' value", ansi=injection_params.ansi)
-                        log(f"Using: {hex(injection_params.state_variables.state_ready_for_memory_restore)} for 'ready for memory restore' state value", ansi=injection_params.ansi)
+                        #injection_params.state_variables.state_map["memory_restored"] = struct.unpack('I', communication_address_backup[0:4])[0]
+                        #log(f"Will specify {hex(injection_params.state_variables.state_map["stage_two_written"])} @ {hex(injection_params.initial_communication_address)} as the 'memory restored' value", ansi=injection_params.ansi)
+                        log(f"Using: {hex(injection_params.state_variables.state_map['ready_for_memory_restore'])} for 'ready for memory restore' state value", ansi=injection_params.ansi)
 
                         # write the primary shellcode
                         try:
@@ -1963,7 +2029,7 @@ def asminject(injection_params):
             stage2 = None
             if not injection_params.existing_read_write_address:
                 log(f"Waiting for stage 1 to indicate that it is ready to switch to a new communication address", ansi=injection_params.ansi)
-                current_state = wait_for_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_switch_to_new_communication_address)
+                current_state = wait_for_payload_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_map["switch_to_new_communication_address"])
             if injection_params.existing_read_execute_address:
                 log_success(f"Existing read/execute base address: {hex(injection_params.read_execute_region_address)}", ansi=injection_params.ansi)
             else:
@@ -1977,13 +2043,8 @@ def asminject(injection_params):
             
             log_success(f"New communication address: {hex(injection_params.get_base_communication_address())}", ansi=injection_params.ansi) 
             
-            # stage2_replacements['[VARIABLE:INSTRUCTION_POINTER:VARIABLE]'] = f"{injection_params.saved_instruction_pointer_value}"
-            # stage2_replacements['[VARIABLE:STACK_POINTER:VARIABLE]'] = f"{injection_params.saved_stack_pointer_value}"
-            # stage2_replacements['[VARIABLE:LEN_CODE_BACKUP:VARIABLE]'] = f"{len(code_backup)}"
-            # stage2_replacements['[VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]'] = f"{injection_params.state_variables.state_memory_restored}"
-            # stage2_replacements['[VARIABLE:STACK_POINTER_MINUS_STACK_BACKUP_SIZE:VARIABLE]'] = f"{(injection_params.saved_stack_pointer_value - injection_params.stack_backup_size)}"
             log(f"Waiting for stage 1 to indicate that it has allocated additional memory and is ready for the script to write stage 2", ansi=injection_params.ansi)
-            current_state = wait_for_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_ready_for_stage_two_write)
+            current_state = wait_for_payload_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_map["ready_for_stage_two_write"])
             
             # restore the data at the original communication address now that communication has migrated\
             log(f"Restoring data at original communications address {hex(injection_params.initial_communication_address)}", ansi=injection_params.ansi)
@@ -1995,12 +2056,6 @@ def asminject(injection_params):
                 current_communication_address_backup = mem.read(injection_params.communication_address_backup_size)
                 output_memory_block_data(injection_params, f"Communication address location after memory restore ({hex(injection_params.initial_communication_address)})", current_communication_address_backup)
             
-            # stage2_replacements['[VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]'] = f"{injection_params.read_execute_region_address}"
-            # stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS:VARIABLE]'] = f"{injection_params.read_write_region_address}"
-            # stage2_replacements['[VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]'] = f"{injection_params.get_region_info_stack_backup().start_address}"
-            # stage2_replacements['[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]'] = f"{injection_params.get_region_info_arbitrary_data().start_address}"
-            # stage2_replacements['[VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]'] = f"{injection_params.read_write_region_address + injection_params.read_write_region_size}"
-
             injection_params.code_backup_length = len(code_backup)
 
             stage2_replacements = injection_params.get_replacement_variable_map()
@@ -2027,19 +2082,21 @@ def asminject(injection_params):
                 if injection_params.pause_before_launching_stage2:
                     input("Press Enter to proceed with launching stage 2")
 
-                with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
-                    # Give stage 1 the OK to proceed
-                    log(f"Writing {hex(injection_params.state_variables.state_stage_two_written)} to {hex(injection_params.get_base_communication_address())} in target memory to indicate stage 2 has been written to memory", ansi=injection_params.ansi)
-                    mem.seek(injection_params.get_base_communication_address())
-                    ok_val = struct.pack('I', injection_params.state_variables.state_stage_two_written)
-                    mem.write(ok_val)
-                    log_success("Stage 2 proceeding", ansi=injection_params.ansi)
+                # with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
+                    # # Give stage 1 the OK to proceed
+                    # log(f"Writing {hex(injection_params.state_variables.state_map["stage_two_written"])} to {hex(injection_params.get_base_communication_address())} in target memory to indicate stage 2 has been written to memory", ansi=injection_params.ansi)
+                    # mem.seek(injection_params.get_base_communication_address())
+                    # ok_val = struct.pack('I', injection_params.state_variables.state_map["stage_two_written"])
+                    # mem.write(ok_val)
+                    # log_success("Stage 2 proceeding", ansi=injection_params.ansi)
+                set_script_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_map["stage_two_written"])
+                log_success("Payload has been instructed to launch stage 2", ansi=injection_params.ansi)
                 
                 if injection_params.restore_delay > 0.0:
                     log(f"Waiting {injection_params.restore_delay} second(s) before starting memory restore check", ansi=injection_params.ansi)
                     time.sleep(injection_params.restore_delay)
                 log(f"Waiting for stage 2 to indicate that it is ready for process memory to be restored", ansi=injection_params.ansi)
-                current_state = wait_for_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_ready_for_memory_restore)
+                current_state = wait_for_payload_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_map["ready_for_memory_restore"])
                 if injection_params.pause_before_memory_restore:
                     input("Press Enter to proceed with memory restoration")
                 log("Restoring original memory content", ansi=injection_params.ansi)
@@ -2069,33 +2126,33 @@ def asminject(injection_params):
                 if injection_params.pause_after_memory_restore:
                     input("Press Enter to allow the inner payload to execute")
 
-                with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
-                    mem.seek(injection_params.get_base_communication_address())
-                    ok_val = struct.pack('I', injection_params.state_variables.state_memory_restored)
-                    mem.write(ok_val)
+                # with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
+                    # mem.seek(injection_params.get_base_communication_address())
+                    # ok_val = struct.pack('I', injection_params.state_variables.state_map["memory_restored"])
+                    # mem.write(ok_val)
+                set_script_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_map["memory_restored"])
 
                 if injection_params.enable_debugging_output:
                     memory_region_backup_comparison = back_up_memory_regions(injection_params, memory_map_data, injection_params.memory_region_backup_subdirectory_name + "-post_injection_comparison")
                     log(f"Created a post-injection memory region backup in '{memory_region_backup_comparison.backup_directory}' for debugging purposes", ansi=injection_params.ansi)
                     
                 restore_memory_regions(injection_params, memory_region_backup)
-
-                # with open(f"/proc/{injection_params.pid}/mem", "wb+") as mem:
-                    # mem.seek(injection_params.initial_communication_address)
-                    # mem.write(communication_address_backup)
-                    
-                    # mem.seek(injection_params.initial_communication_address)
-                    # current_communication_address_backup = mem.read(injection_params.communication_address_backup_size)
-                    # output_memory_block_data(injection_params, f"Communication address location after memory restore ({hex(injection_params.initial_communication_address)})", current_communication_address_backup)
-                # #restore_memory_regions(injection_params, memory_region_backup)
                 
                 if injection_params.enable_debugging_output:
                     memory_region_backup_comparison = back_up_memory_regions(injection_params, memory_map_data, injection_params.memory_region_backup_subdirectory_name + "-post_restore_comparison")
                     log(f"Created a post-restore memory region backup in '{memory_region_backup_comparison.backup_directory}' for debugging purposes", ansi=injection_params.ansi)
                 
-                # TKTK: wait for the payload to signal success (not implemented yet)
-                # TKTK: clear R/W memory after the payload has exited
+                log(f"Waiting for payload that it is ready for cleanup", ansi=injection_params.ansi)
+                current_state = wait_for_payload_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_map["payload_ready_for_script_cleanup"])
+
+                # TKTK: clear R/W memory
+                
+                log(f"Notifying payload that cleanup is complete", ansi=injection_params.ansi)
+                set_script_communication_state(injection_params, injection_params.pid, injection_params.get_base_communication_address(), injection_params.state_variables.state_map["script_cleanup_complete"])
+
+                # TKTK: wait for payload to finish exiting
                 # TKTK: clear R/X memory after the payload has exited
+                
                         
     except KeyboardInterrupt as ki:
         log_warning(f"Operator cancelled the injection attempt", ansi=injection_params.ansi)

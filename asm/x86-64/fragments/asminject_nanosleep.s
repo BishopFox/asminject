@@ -8,10 +8,17 @@ asminject_nanosleep:
 	mov rbp, rsp
 	sub rsp, 0x20
 	
+	push rax
+
+	// push rsi and rdi onto the stack and then use the resulting stack pointer
+	// as the value to pass to sys_nanosleep, to avoid having to refer to an 
+	// offset or allocate memory
 	push rsi
 	push rdi
-	
+		
 	mov rdi, rsp	# pointer to the two values just pushed onto the stack
+	// clearing rsi is important
+	xor rsi, rsi
 	
 	// call sys_nanosleep
 	mov rax, 35
@@ -19,6 +26,8 @@ asminject_nanosleep:
 	
 	pop rdi
 	pop rsi
+	
+	pop rax
 	
 	leave
 	ret

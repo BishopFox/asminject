@@ -3,98 +3,86 @@
 _start:
 // Based on the stage 2 code included with dlinject.py
 // and in part on https://github.com/lmacken/pyrasite/blob/d0c90ab38a8986527c9c1f24e222323494ab17a2/pyrasite/injector.py
+[FRAGMENT:asminject_wait_for_script_state.s:FRAGMENT]
+[FRAGMENT:asminject_set_payload_state.s:FRAGMENT]
 // OBFUSCATION_ALLOCATED_MEMORY_ON
 cld
 	// let the script know it can restore the previous data
-	mov r14, r11
-	mov r11, [VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]
-	mov [r14], r11
-	
-	mov rax, 0
-	
-	# wait for the script to have restored memory, then proceed
-	// wait for value at communications address to be [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE] before proceeding
-	// store the sys_nanosleep timer data
-	mov rbx, [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
-	mov rcx, [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
-	push rbx
-	push rcx
-	mov r13, rsp
-	
-wait_for_script:
 
-// OBFUSCATION_OFF
-	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
-	mov rax, [r14]
-	cmp rax, [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]
-	je execute_inner_payload
-// OBFUSCATION_ON
-	
-	// sleep [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE] second(s)
-	mov rax, 35
-
-	push r15
-	push r14
-	push r13
+	mov rsi, r11
+	mov rdi, [VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]	
 	push r11
-	
-	mov rdi, r13
-
-	lea rsi, [rbp]
-	xor rsi, rsi
-	syscall
-	
-	pop r11
-	pop r13
-	pop r14
+	push r14
+	push r15
+	call asminject_set_payload_state
 	pop r15
+	pop r14
+	pop r11
 	
-	jmp wait_for_script
+	// wait for the script to have restored memory, then proceed
+	mov rsi, r11
+	mov rdi, [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]
+	push r11
+	push r14
+	push r15
+	call asminject_wait_for_script_state
+	pop r15
+	pop r14
+	pop r11
 
 execute_inner_payload:
-
-	pop rbx
-	pop rcx
+	
+	push r11
+	push r14
+	push r15
 	
 	[VARIABLE:SHELLCODE_SOURCE:VARIABLE]
+
+	pop r15
+	pop r14
+	pop r11
 
 cleanup_and_return:
 
 	// restore fancy registers
 	push rax
 	mov rax, read_write_address[rip]
+	add rax, [VARIABLE:RWR_CPU_STATE_BACKUP_OFFSET:VARIABLE]
 	fxrstor [rax]
 	pop rax
 
+// let the script know that the payload is ready for cleanup
+	mov rsi, r11
+	mov rdi, [VARIABLE:PAYLOAD_READY_FOR_SCRIPT_CLEANUP:VARIABLE]
+	push r11
+	push r14
+	push r15
+	call asminject_set_payload_state
+	pop r15
+	pop r14
+	pop r11
+
+// wait for cleanup
+	mov rsi, r11
+	mov rdi, [VARIABLE:SCRIPT_CLEANUP_COMPLETE:VARIABLE]
+	push r11
+	push r14
+	push r15
+	call asminject_wait_for_script_state
+	pop r15
+	pop r14
+	pop r11
+	
 // OBFUSCATION_ALLOCATED_MEMORY_OFF
 // OBFUSCATION_COMMUNICATIONS_ADDRESS_OFF
 [DEALLOCATE_MEMORY]
 
 // OBFUSCATION_OFF
-	// restore regular registers
-	//mov rsp, [existing_stack_backup_address[rip]]
 	
-	# pop r15
-	# pop r14
-	# pop r13
-	# pop r12
-	# pop r11
-	# pop r10
-	# pop r9
-	# pop r8
-	# pop rdi
-	# pop rsi
-	# pop rbp
-	# pop rdx
-	# pop rcx
-	# pop rbx
-	# pop rax
-	# popf
 [STATE_RESTORE_INSTRUCTIONS]
 	popfq
 	
-	// reset stack pointer to the original value and jump to the original instruction location
-	//mov rsp, [VARIABLE:STACK_POINTER:VARIABLE]
+	// jump back to the original instruction address
 	jmp old_instruction_pointer[rip]
 	// OBFUSCATION_ON
 

@@ -15,11 +15,11 @@
 `asminject.py` supports four methods for pre/post-injection handling of the target process. Three of those methods are borrowed from the original [dlinject.py](https://github.com/DavidBuchanan314/dlinject):
 
 * Send a suspend (SIGSTOP) signal before injection, and a resume (SIGCONT) message after injection
-** This is reliable, but is somewhat intrusive. Very paranoid software might use it as an indication of tampering
+  * This is reliable, but is somewhat intrusive. Very paranoid software might use it as an indication of tampering
 * For containerized systems, using *cgroups* "freezing"
-** Reliable, but not an option for non-containerized systems
+  * Reliable, but not an option for non-containerized systems
 * Do nothing and hope the target process doesn't step on the injected code while it's being written
-** Unreliable
+  * Unreliable
 
 `asminject.py` adds a fourth option: increasing the priority of its own process and decreasing the priority of the target process. This "slow" mode (the default) generally allows it to act like [Quicksilver in _X-Men: Days of Future Past_](https://youtu.be/T9GFyZ5LREQ?t=32), making its changes to the target process at lightning speed. The target process is still running, but so slowly relative to `asminject.py` that it may as well be suspended.
 

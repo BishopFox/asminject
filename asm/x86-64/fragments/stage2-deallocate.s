@@ -1,8 +1,9 @@
 	// de-allocate the mmapped r/w block
 
-	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
+	//movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
+	movabsq rdi, [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
 	mov rax, 11              								# SYS_MUNMAP
-	mov rdi, [r14 + 16]    									# start address
+	//mov rdi, [r14 + 16]    									# start address
 	mov rsi, [VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]		# len
 	syscall
 	

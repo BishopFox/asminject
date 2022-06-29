@@ -100,6 +100,11 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.29 (2022-06-29)
+
+* Updated the staging code for both x86-64 and ARM32 to take better advantage of reusable functions
+* Added ``--clear-payload-memory``, ``--clear-payload-memory-value``, and ``--clear-payload-memory-delay`` anti-forensics options
+
 ### 0.28 (2022-06-15)
 
 * Added a few more obfuscation fragments for ARM32 to bring it more or less to parity with x86-64

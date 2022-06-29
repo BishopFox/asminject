@@ -1,3 +1,4 @@
+// for Python target processes that refer to functions in libpython instead of the main binary
 jmp execute_python_code_main
 // import reusable code fragments 
 [FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
@@ -6,7 +7,7 @@ execute_python_code_main:
 
 	# // BEGIN: call Py_Initialize()
 	# push r14
-	# mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:Py_Initialize:RELATIVEOFFSET]
+	# mov rbx, [BASEADDRESS:.+/libpython[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:Py_Initialize:RELATIVEOFFSET]
 	# pop r14
 	# // END: call Py_Initialize()
 	
@@ -27,7 +28,7 @@ execute_python_code_main:
 	xor rax, rax
 	xor rdi, rdi
 	xor rsi, rsi
-	mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/libpython[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
 	call rbx
 	mov rbx, arbitrary_read_write_data_address[rip]
 	mov [rbx], rax
@@ -41,7 +42,7 @@ execute_python_code_main:
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 32
 	xor rcx, rcx
-	mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/libpython[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
 	call rbx
 	pop rcx
 	//pop r14
@@ -54,7 +55,7 @@ execute_python_code_main:
 	//mov rax, [rbx]
 	//mov rdi, rax
 	xor rsi, rsi
-	mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Release:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/libpython[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Release:RELATIVEOFFSET]
 	call rbx
 	//pop r14
 	// END: call PyGILState_Release(handle)
@@ -63,7 +64,7 @@ execute_python_code_main:
 	# push r14
 	# mov rax, 0
 	# mov rdi, rax
-	# mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:Py_Finalize:RELATIVEOFFSET]
+	# mov rbx, [BASEADDRESS:.+/libpython[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:Py_Finalize:RELATIVEOFFSET]
 	# call rbx
 	# pop r14
 	# // END: call Py_Finalize()

@@ -3,8 +3,11 @@
 * [Process suspension methods](#process-suspension-methods)
 * [Specifying non-PIC code](#specifying-non-pic-code)
 * [Multi-architecture support](#multi-architecture-support)
+* [Specifying memory allocation size](#specifying-memory-allocation-size)
 * [Memory reuse](#memory-reuse)
+* [Anti-forensics](#anti-forensics)
 * [Restoring more of the target process's memory](#restoring-more-of-the-target-processs-memory)
+* [Payload obfuscation](#payload-obfuscation)
 * [Debugging/troubleshooting options](#debuggingtroubleshooting-options)
 
 ## Process suspension methods
@@ -180,6 +183,35 @@ i.e. to inject the same code into the same process again:
 ```
 # python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-usr-bin-python3.9.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate --use-read-execute-address 0x7ffff7faf000 --use-read-execute-size 0x8000 --use-read-write-address 0x7ffff7fb7000 --use-read-write-size 0x8000
 ```
+
+## Anti-forensics
+
+Security software or a very determined investigator could theoretically look for traces of `asminject.py` payloads in the read/write and read/execute memory blocks discussed above. To wipe those blocks after the payload has finished, include the ``--clear-payload-memory`` option. This will overwrite all of the payload's read/execute memory, and all of the payload's read/write memory *except* for the block used for script/payload communication.
+
+By default, this feature will write null bytes (`0x00`), but any integer that can be represented using a number of bytes equal to the word length of the CPU can be used by including the ``--clear-payload-memory-value`` option. For example:
+
+~~~
+# python3 ./asminject.py 1494 printf_with_copy.s --arch arm32 --relative-offsets relative_offsets-libc-2.28.txt --stop-method "slow" --var message "ABCDEFGHIJKLMNOPQRSTUVWXYZ" --debug --clear-payload-memory --clear-payload-memory-value 0x00c651e0 --use-read-execute-address 0xb6618000 --use-read-execute-size 0x6e000 --use-read-write-address 0xb6686000 --use-read-write-size 0x29000 --do-not-deallocate
+
+...omitted for brevity...
+[*] Waiting 2.0 second(s) before clearing payload read/write memory
+[*] Overwriting payload read/write block starting at CPU state backup address (0xb6687000) in target process memory with 0x28000 bytes
+[*] Notifying payload that cleanup is complete
+[*] Setting script state to script_cleanup_complete (0xd64b04) at 0xb6686004 in target memory
+[*] Waiting 2.0 second(s) before clearing payload read/execute memory
+[*] Overwriting payload read/execute block (0xb6618000) in target process memory with 0x6e000 bytes
+[*] Finished at 2022-06-29T21:18:54.783319 (UTC)
+...omitted for brevity...
+
+(gdb) x/8x 0xb6618000
+0xb6618000:	0x00c651e0	0x00c651e0	0x00c651e0	0x00c651e0
+0xb6618010:	0x00c651e0	0x00c651e0	0x00c651e0	0x00c651e0
+(gdb) x/8x 0xb6686000
+0xb6686000:	0x00c651e0	0x00180914	0x00c651e0	0x00c651e0
+0xb6686010:	0x00c651e0	0x00c651e0	0x00c651e0	0x00c651e0
+~~~
+
+By default, `asminject.py` will perform the memory-clearing operation after a brief delay, to help avoid crashes where a thread was spawned that keeps referring to the object in payload memory. You can adjust the delay by specifying the `--clear-payload-memory-delay <SECONDS>` option.
 
 ## Restoring more of the target process's memory
 

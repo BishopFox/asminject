@@ -2,109 +2,119 @@
 .globl _start
 _start:
 	// OBFUSCATION_OFF
+[FRAGMENT:asminject_wait_for_script_state.s:FRAGMENT]
+[FRAGMENT:asminject_set_payload_state.s:FRAGMENT]
+[FRAGMENT:asminject_set_memory_addresses.s:FRAGMENT]
 	// push all the things
 	pushfq
 [STATE_BACKUP_INSTRUCTIONS]
-	# pushf
-	# push rax
-	# push rbx
-	# push rcx
-	# push rdx
-	# push rbp
-	# push rsi
-	# push rdi
-	# push r8
-	# push r9
-	# push r10
-	# push r11
-	# push r12
-	# push r13
-	# push r14
-	# push r15
 	// OBFUSCATION_ON
 	
 	[READ_WRITE_ALLOCATE_OR_REUSE]
+	// r11 is now the address of the read/write block
 	mov rax, r11
 	
 	push r11
 	
 	// store fancy register state now rather than later
+	add rax, [VARIABLE:RWR_CPU_STATE_BACKUP_OFFSET:VARIABLE]
 	fxsave [rax]
 	
 	[READ_EXECUTE_ALLOCATE_OR_REUSE]
-	mov rax, r15
+	// r15 is now the address of the read/execute block
 	
+	pop r11
+
+store_addresses:
+
+	// store block addresses at original communications address
+	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
+	mov rsi, r14
+	mov rdi, r15
+	mov rcx, r11
+	push r11
+	push r14
+	push r15
+	call asminject_set_memory_addresses
+	pop r15
+	pop r14
+	pop r11
+	
+	// Also store the block addresses in the new communication address offset
+	mov rsi, r11
+	mov rdi, r15
+	mov rcx, r11
+	push r11
+	push r14
+	push r15
+	call asminject_set_memory_addresses
+	pop r15
+	pop r14
 	pop r11
 
 	// if the old and new communication addresses are not the same, then 
 	// overwrite initial communications address with [VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]
 	// and the address after that with the new communication address 
 	// so that the Python script knows the new location
-	movabsq r14, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
 	cmp r11, r14
-	je store_addresses
-	mov r12, [VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]
-	mov [r14], r12
-store_addresses:
-	add r14, 8
-	mov [r14], r15
-	add r14, 8
-	mov [r14], r11
+	//je store_addresses
+	je ready_for_stage_2
+	mov rsi, r14
+	mov rdi, [VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]	
+	call asminject_set_payload_state
+# store_addresses:
+
+	# // store values at original communications address
+	# mov rsi, r14
+	# mov rdi, r15
+	# mov rcx, r11
+	# push r11
+	# push r14
+	# push r15
+	# call asminject_set_memory_addresses
+	# pop r15
+	# pop r14
+	# pop r11
 	
-	// Also store the block addresses in the new communication address offset
-	// Store the read/write block address returned by mmap
-	mov [r11 + 16], r11
-	
-	// Store the read/execute block address returned by mmap
-	mov [r11 + 8], r15
-	
-	// store the sys_nanosleep timer data
-	mov rbx, [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
-	mov rcx, [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
-	push rbx
-	push rcx
-	mov r13, rsp
-	
+	# // Also store the block addresses in the new communication address offset
+	# mov rsi, r11
+	# mov rdi, r15
+	# mov rcx, r11
+	# push r11
+	# push r14
+	# push r15
+	# call asminject_set_memory_addresses
+	# pop r15
+	# pop r14
+	# pop r11
+ready_for_stage_2:
+
 	// overwrite communications address with [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]
 	// so that the Python script knows it can write stage 2 to memory
-	mov r12, [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]
-	mov [r11], r12
-	
-	// wait for value at communications address to be [VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE] before proceeding
-wait_for_script:
-
-	//mov rax, [r14]
-	mov rax, [r11]
-	cmp rax, [VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]
-	je launch_stage2
-	
-	// sleep 1 second
-	mov rax, 35
-
-	push r15
-	push r14
-	push r13
+	mov rsi, r11
+	mov rdi, [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]	
 	push r11
-	
-	mov rdi, r13
-
-	lea rsi, [rbp]
-	xor rsi, rsi
-	syscall
-	
-	pop r11
-	pop r13
-	pop r14
+	push r14
+	push r15
+	call asminject_set_payload_state
 	pop r15
+	pop r14
+	pop r11
 	
-	jmp wait_for_script
-
+	// wait for script to signal [VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE] before proceeding
+	mov rsi, r11
+	mov rdi, [VARIABLE:STATE_STAGE_TWO_WRITTEN:VARIABLE]
+	push r11
+	push r14
+	push r15
+	call asminject_wait_for_script_state
+	pop r15
+	pop r14
+	pop r11
+	
 launch_stage2:
-	
-	// discard the nanosleep-related data
-	pop rcx
-	pop rbx
 	
 	// jump to stage2
 	jmp r15
 
+[FRAGMENTS]

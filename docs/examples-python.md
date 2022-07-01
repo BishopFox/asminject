@@ -104,7 +104,6 @@ In this case, the container is using a version of Python 3 that places most of i
 
 ```
 # python3 ./asminject.py 2378331 execute_python_code-libpython.s --arch x86-64 --relative-offsets relative-offsets-docker-fedora-libpython3.10.txt --stop-method "slow" --var pythoncode 'import os; print(os.environ);'
-
 ```
 
 This should generate output in the terminal where the container was launched, e.g.:

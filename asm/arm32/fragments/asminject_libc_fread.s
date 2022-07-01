@@ -30,7 +30,7 @@ asminject_libc_fread_load_fread_offset:
 	b asminject_libc_fread_call_fread
 
 asminject_libc_fread_fread_offset:
-	.word [RELATIVEOFFSET:fread@@GLIBC.+:RELATIVEOFFSET]
+	.word [RELATIVEOFFSET:^fread($|@@.+):RELATIVEOFFSET]
 	.balign 4
 
 asminject_libc_fread_call_fread:

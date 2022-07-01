@@ -26,7 +26,7 @@ asminject_libdl_dlopen_load_dlopen_offset:
 	b asminject_libdl_dlopen_call_dlopen
 
 asminject_libdl_dlopen_dlopen_offset:
-	.word [RELATIVEOFFSET:dlopen@@GLIBC.+:RELATIVEOFFSET]
+	.word [RELATIVEOFFSET:^dlopen($|@@.+):RELATIVEOFFSET]
 	.balign 4
 
 asminject_libdl_dlopen_call_dlopen:

@@ -28,7 +28,7 @@ asminject_libc_fopen_load_fopen_offset:
 	b asminject_libc_fopen_call_fopen
 
 asminject_libc_fopen_fopen_offset:
-	.word [RELATIVEOFFSET:fopen@@GLIBC.+:RELATIVEOFFSET]
+	.word [RELATIVEOFFSET:^fopen($|@@.+):RELATIVEOFFSET]
 	.balign 4
 
 asminject_libc_fopen_call_fopen:

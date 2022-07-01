@@ -14,7 +14,7 @@ asminject_libc_fopen:
 	push r9
 	push r14
 	
-	mov r9, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:fopen@@GLIBC.+:RELATIVEOFFSET]
+	mov r9, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:^fopen($|@@.+):RELATIVEOFFSET]
 	call r9
 	
 	pop r14

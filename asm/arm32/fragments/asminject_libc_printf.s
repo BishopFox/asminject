@@ -28,7 +28,7 @@ asminject_libc_printf_load_printf_offset:
 	b asminject_libc_printf_call_printf
 
 asminject_libc_printf_printf_offset:
-	.word [RELATIVEOFFSET:printf@@GLIBC.+:RELATIVEOFFSET]
+	.word [RELATIVEOFFSET:^printf($|@@.+):RELATIVEOFFSET]
 	.balign 4
 
 asminject_libc_printf_call_printf:

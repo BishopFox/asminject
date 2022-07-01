@@ -26,7 +26,7 @@ asminject_libc_fclose_load_fclose_offset:
 	b asminject_libc_fclose_call_fclose
 
 asminject_libc_fclose_fclose_offset:
-	.word [RELATIVEOFFSET:fclose@@GLIBC.+:RELATIVEOFFSET]
+	.word [RELATIVEOFFSET:^fclose($|@@.+):RELATIVEOFFSET]
 	.balign 4
 
 asminject_libc_fclose_call_fclose:

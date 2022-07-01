@@ -12,7 +12,7 @@ asminject_libdl_dlopen:
 	push r9
 	
 	mov rsi, 2              # mode (RTLD_NOW)
-	mov r9, [BASEADDRESS:.+/libdl-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:dlopen@@GLIBC.+:RELATIVEOFFSET]
+	mov r9, [BASEADDRESS:.+/libdl-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:^dlopen($|@@.+):RELATIVEOFFSET]
 	call r9
 	
 	pop r9

@@ -30,7 +30,7 @@ asminject_libc_fwrite_load_fwrite_offset:
 	b asminject_libc_fwrite_call_fwrite
 
 asminject_libc_fwrite_fwrite_offset:
-	.word [RELATIVEOFFSET:fwrite@@GLIBC.+:RELATIVEOFFSET]
+	.word [RELATIVEOFFSET:^fwrite($|@@.+):RELATIVEOFFSET]
 	.balign 4
 
 asminject_libc_fwrite_call_fwrite:

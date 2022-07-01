@@ -1,6 +1,8 @@
 # asminject.py examples - PHP
 * [Write all variables to standard out](#write-all-variables-to-standard-out)
 
+*note: All of these examples may be broken for some versions of PHP*
+
 ## Write all variables to standard out
 
 Use [the following PHP code, which was based on this Stack Overflow discussion](https://stackoverflow.com/questions/1005021/in-php-is-there-a-way-to-dump-all-variable-names-with-their-corresponding-valu)

@@ -27,6 +27,8 @@ The original `dlinject.py` was designed specifically to load Linux shared librar
 
 ## Getting started
 
+Make sure you have `gcc` installed.
+
 In one terminal window, start a Python script that will not exit immediately. For example:
 
 ```
@@ -238,6 +240,12 @@ This section was getting too lengthy for the main `README.md`, so it's been move
 If you are an authorized administrator of a Linux system where someone has accidentally set `/proc/sys/kernel/yama/ptrace_scope` to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
 ## Version history
+
+### 0.31 (2022-07-01)
+
+* Updated `libdl` fragments to make them work across a wider variety of configurations for that library
+* Updated `libc` fragments to make them work across a wider variety of configurations for that library
+* Some PHP and Ruby injection is currently broken, maybe due to patches to recent versions of those binaries
 
 ### 0.30 (2022-07-01)
 

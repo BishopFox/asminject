@@ -27,7 +27,7 @@ asminject_libpthread_pthread_create_load_pthread_create_offset:
 	b asminject_libpthread_pthread_create_call_pthread_create
 
 asminject_libpthread_pthread_create_pthread_create_offset:
-	.word [RELATIVEOFFSET:pthread_create@@GLIBC.+:RELATIVEOFFSET]
+	.word [RELATIVEOFFSET:^pthread_create($|@@.+):RELATIVEOFFSET]
 	.balign 4
 
 asminject_libpthread_pthread_create_call_pthread_create:

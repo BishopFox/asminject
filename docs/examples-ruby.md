@@ -13,7 +13,10 @@ global_variables.sort.each do |name|; puts "#{name}: #{eval "#{name}.inspect"}
 e.g.
 
 ```
-# python3 ./asminject.py 84955 execute_ruby_code.s --arch x86-64 --relative-offsets relative_offsets-libruby-2.7.4.txt  --stop-method "slow" --var rubycode "global_variables.sort.each do |name|; puts \\\"#{name}: #{eval \\\"#{name}.inspect\\\"}\\\"; 
+# python3 ./asminject.py 84955 execute_ruby_code.s --arch x86-64 \
+   --relative-offsets-from-binaries \
+   --stop-method "slow" \
+   --var rubycode "global_variables.sort.each do |name|; puts \\\"#{name}: #{eval \\\"#{name}.inspect\\\"}\\\"; 
 end
 ```
 
@@ -44,5 +47,7 @@ $obj_dump_counter = 0; ObjectSpace.each_object{|e| File.open("/tmp/rubydump-#{$o
 e.g.
 
 ```
-python3 ./asminject.py 163017 execute_ruby_code.s --arch x86-64 --relative-offsets relative_offsets-libruby-2.7.4.txt  --stop-method "slow" --var rubycode '$obj_dump_counter = 0; ObjectSpace.each_object{|e| File.open(\"/tmp/rubydump-#{$obj_dump_counter}.dat\", \"wb\") { |file| file.write(e); $obj_dump_counter += 1; }}' --debug
+python3 ./asminject.py 163017 execute_ruby_code.s --arch x86-64 \
+   --relative-offsets-from-binaries --stop-method "slow" \
+   --var rubycode '$obj_dump_counter = 0; ObjectSpace.each_object{|e| File.open(\"/tmp/rubydump-#{$obj_dump_counter}.dat\", \"wb\") { |file| file.write(e); $obj_dump_counter += 1; }}'
 ```

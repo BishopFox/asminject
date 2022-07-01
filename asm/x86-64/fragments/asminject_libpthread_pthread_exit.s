@@ -11,7 +11,7 @@ asminject_libpthread_pthread_exit:
 	sub rsp, 0x10
 	push r9
 	
-	mov r9, [BASEADDRESS:.+/libpthread-[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:pthread_exit@@.+:RELATIVEOFFSET]
+	mov r9, [BASEADDRESS:.+/libpthread-[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:^pthread_exit($|@@.+):RELATIVEOFFSET]
 	call r9
 	
 	pop r9

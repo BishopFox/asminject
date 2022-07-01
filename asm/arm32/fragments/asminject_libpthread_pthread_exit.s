@@ -26,7 +26,7 @@ asminject_libpthread_pthread_exit_load_pthread_exit_offset:
 	b asminject_libpthread_pthread_exit_call_pthread_exit
 
 asminject_libpthread_pthread_exit_pthread_exit_offset:
-	.word [RELATIVEOFFSET:pthread_exit@@GLIBC.+:RELATIVEOFFSET]
+	.word [RELATIVEOFFSET:^pthread_exit($|@@.+):RELATIVEOFFSET]
 	.balign 4
 
 asminject_libpthread_pthread_exit_call_pthread_exit:

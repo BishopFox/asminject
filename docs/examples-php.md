@@ -12,7 +12,10 @@ var_dump(get_defined_vars());
 e.g.
 
 ```
-python3 ./asminject.py 249986 execute_php_code.s --arch x86-64 --relative-offsets relative_offsets-php8.1.txt  --stop-method "slow" --var phpcode "var_dump(get_defined_vars());" --var phpname PHP
+python3 ./asminject.py 249986 execute_php_code.s --arch x86-64 \
+   --relative-offsets-from-binaries --stop-method "slow" \
+   --var phpcode "var_dump(get_defined_vars());" \
+   --var phpname PHP
 ```
 
 

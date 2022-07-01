@@ -26,7 +26,7 @@ asminject_libpthread_pthread_detach_load_pthread_detach_offset:
 	b asminject_libpthread_pthread_detach_call_pthread_detach
 
 asminject_libpthread_pthread_detach_pthread_detach_offset:
-	.word [RELATIVEOFFSET:pthread_detach@@GLIBC.+:RELATIVEOFFSET]
+	.word [RELATIVEOFFSET:^pthread_detach($|@@.+):RELATIVEOFFSET]
 	.balign 4
 
 asminject_libpthread_pthread_detach_call_pthread_detach:

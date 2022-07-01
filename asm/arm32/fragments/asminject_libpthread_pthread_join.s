@@ -27,7 +27,7 @@ asminject_libpthread_pthread_join_load_pthread_join_offset:
 	b asminject_libpthread_pthread_join_call_pthread_join
 
 asminject_libpthread_pthread_join_pthread_join_offset:
-	.word [RELATIVEOFFSET:pthread_join@@GLIBC.+:RELATIVEOFFSET]
+	.word [RELATIVEOFFSET:^pthread_join($|@@.+):RELATIVEOFFSET]
 	.balign 4
 
 asminject_libpthread_pthread_join_call_pthread_join:

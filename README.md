@@ -73,7 +73,7 @@ Finally, if you're injecting into the main process executable instead of a share
 
 /usr/bin/python3.9: ELF 64-bit LSB executable [...]
                                ^^^^^^^^^^^^^^
-                                                                                                                                    
+
 # file /usr/bin/python3.10
 
 /usr/bin/python3.10: ELF 64-bit LSB pie executable [...]
@@ -168,7 +168,7 @@ injected python code
 
 Very basic `asminject.py` payloads can be written in pure assembly without referring to libraries. Some of the included payloads are of that design. Most interesting payloads require references to libraries that are loaded by the target process, so that functions in them can be called. The payloads included with `asminject.py` include comments describing which binaries they need relative offsets for. The references are handled as regular expressions, to hopefully make them more portable across versions.
 
-Starting with version 0.25, `asminject.py` can attempt to load this symbol/offset data automatically from the binaries that are referenced in the memory map, by including the `--relative-offsets-from-binaries` option in the command line. This will *only* work if the target process is not running in a container, or if the container has the exact same library versions as the host OS. Note that this functionality requires the `elftools` Python library, which is not included with a standard Python installation. You'll need to install it via `pip3 install pyelftools` or similar.
+Starting with version 0.25, `asminject.py` can attempt to load this symbol/offset data automatically from the binaries that are referenced in the memory map, by including the `--relative-offsets-from-binaries` option in the command line. This will *only* work if the target process is not running in a container, or if the container has the exact same library versions as the host OS. Note that this functionality requires the `elftools` Python library, which is not included with a standard Python installation. You'll need to install it via `pip3 install -r requirements.txt` or similar.
 
 If your target process is running in a container, or you need to specify an explicit list of offsets for another reason, use the process below:
 
@@ -181,21 +181,21 @@ user     2144330  0.2  0.1  13908  7864 pts/2    S+   15:30   0:00 python2 ./cal
                                                                                                                                     
 # cat /proc/2144330/maps
 
-560a14849000-560a14896000 r--p 00000000 08:01 3024520                    /usr/bin/python2.7
+560a14849000-560a14896000 r--p [...] /usr/bin/python2.7
 ...omitted for brevity...
-7fc63884b000-7fc638870000 r--p 00000000 08:01 3032318                    /usr/lib/x86_64-linux-gnu/libc-2.31.so
+7fc63884b000-7fc638870000 r--p [...] /usr/lib/x86_64-linux-gnu/libc-2.31.so
 ...omitted for brevity...
-7fc638a10000-7fc638a1f000 r--p 00000000 08:01 3032320                    /usr/lib/x86_64-linux-gnu/libm-2.31.so
+7fc638a10000-7fc638a1f000 r--p [...] /usr/lib/x86_64-linux-gnu/libm-2.31.so
 ...omitted for brevity...
-7fc638b54000-7fc638b57000 r--p 00000000 08:01 3016732                    /usr/lib/x86_64-linux-gnu/libz.so.1.2.11
+7fc638b54000-7fc638b57000 r--p [...] /usr/lib/x86_64-linux-gnu/libz.so.1.2.11
 ...omitted for brevity...
-7fc638b71000-7fc638b72000 r--p 00000000 08:01 3032333                    /usr/lib/x86_64-linux-gnu/libutil-2.31.so
+7fc638b71000-7fc638b72000 r--p [...] /usr/lib/x86_64-linux-gnu/libutil-2.31.so
 ...omitted for brevity...
-7fc638b76000-7fc638b77000 r--p 00000000 08:01 3032319                    /usr/lib/x86_64-linux-gnu/libdl-2.31.so
+7fc638b76000-7fc638b77000 r--p [...] /usr/lib/x86_64-linux-gnu/libdl-2.31.so
 ...omitted for brevity...
-7fc638b7c000-7fc638b83000 r--p 00000000 08:01 3032329                    /usr/lib/x86_64-linux-gnu/libpthread-2.31.so
+7fc638b7c000-7fc638b83000 r--p [...] /usr/lib/x86_64-linux-gnu/libpthread-2.31.so
 ...omitted for brevity...
-7fc638bc3000-7fc638bc4000 r--p 00000000 08:01 3031631                    /usr/lib/x86_64-linux-gnu/ld-2.31.so                                                                                                               
+7fc638bc3000-7fc638bc4000 r--p [...] /usr/lib/x86_64-linux-gnu/ld-2.31.so                                                                                                               
 ```
 
 In this case, you could call exported functions in eight different binaries. Most of the example payloads will only use one or two, and will match their names based on regexes, but you'll still need to generate a list of the offsets for `asminject.py` to use. E.g. for this specific copy of `/usr/bin/python2.7`:

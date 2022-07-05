@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.31
-Ben Lincoln, Bishop Fox, 2022-07-01
+v0.32
+Ben Lincoln, Bishop Fox, 2022-07-05
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -750,43 +750,45 @@ class communication_variables:
         return struct.unpack(injection_params.register_size_format_string, memory_handle.read(injection_params.register_size))[0]
     
     def read_current_values(self, injection_params, process_memory_path, communication_address):
-        with open(process_memory_path, "rb") as mem:
-            try:
-                mem.seek(communication_address + injection_params.communication_address_offset_payload_state)
-                self.payload_state_value = self.read_word(injection_params, mem)
+        try:
+            with open(process_memory_path, "rb") as mem:
+                try:
+                    mem.seek(communication_address + injection_params.communication_address_offset_payload_state)
+                    self.payload_state_value = self.read_word(injection_params, mem)
+                    
+                    mem.seek(communication_address + injection_params.communication_address_offset_script_state)
+                    self.script_state_value = self.read_word(injection_params, mem)
+                    
+                    mem.seek(communication_address + injection_params.communication_address_offset_read_execute_base_address)
+                    self.read_execute_address = self.read_word(injection_params, mem)
+                    
+                    mem.seek(communication_address + injection_params.communication_address_offset_read_write_base_address)
+                    self.read_write_address = self.read_word(injection_params, mem)
+                    
+                    mem.seek(communication_address + injection_params.communication_address_offset_payload_data_type)
+                    self.payload_data_type = self.read_word(injection_params, mem)
+                    
+                    mem.seek(communication_address + injection_params.communication_address_offset_payload_data_1)
+                    self.payload_data_1 = self.read_word(injection_params, mem)
+                    
+                    mem.seek(communication_address + injection_params.communication_address_offset_payload_data_2)
+                    self.payload_data_2 = self.read_word(injection_params, mem)
+                    
+                    mem.seek(communication_address + injection_params.communication_address_offset_script_data_type)
+                    self.script_data_type = self.read_word(injection_params, mem)
+                    
+                    mem.seek(communication_address + injection_params.communication_address_offset_script_data_1)
+                    self.script_data_1 = self.read_word(injection_params, mem)
+                    
+                    mem.seek(communication_address + injection_params.communication_address_offset_script_data_2)
+                    self.script_data_2 = self.read_word(injection_params, mem)
+                    
                 
-                mem.seek(communication_address + injection_params.communication_address_offset_script_state)
-                self.script_state_value = self.read_word(injection_params, mem)
-                
-                mem.seek(communication_address + injection_params.communication_address_offset_read_execute_base_address)
-                self.read_execute_address = self.read_word(injection_params, mem)
-                
-                mem.seek(communication_address + injection_params.communication_address_offset_read_write_base_address)
-                self.read_write_address = self.read_word(injection_params, mem)
-                
-                mem.seek(communication_address + injection_params.communication_address_offset_payload_data_type)
-                self.payload_data_type = self.read_word(injection_params, mem)
-                
-                mem.seek(communication_address + injection_params.communication_address_offset_payload_data_1)
-                self.payload_data_1 = self.read_word(injection_params, mem)
-                
-                mem.seek(communication_address + injection_params.communication_address_offset_payload_data_2)
-                self.payload_data_2 = self.read_word(injection_params, mem)
-                
-                mem.seek(communication_address + injection_params.communication_address_offset_script_data_type)
-                self.script_data_type = self.read_word(injection_params, mem)
-                
-                mem.seek(communication_address + injection_params.communication_address_offset_script_data_1)
-                self.script_data_1 = self.read_word(injection_params, mem)
-                
-                mem.seek(communication_address + injection_params.communication_address_offset_script_data_2)
-                self.script_data_2 = self.read_word(injection_params, mem)
-                
-            except FileNotFoundError as e:
-                log_error(f"Process {pid} disappeared during injection attempt - exiting", ansi=injection_params.ansi)
-                sys.exit(1)
-            except Exception as e:
-                log_error(f"Couldn't get target process information: {e}", ansi=injection_params.ansi)
+                except Exception as e:
+                    log_error(f"Couldn't get target process information: {e}", ansi=injection_params.ansi)
+        except FileNotFoundError as e:
+            log_error(f"Target process disappeared during injection attempt - exiting", ansi=injection_params.ansi)
+            sys.exit(1)
         if injection_params.enable_debugging_output:
             current_state_log_output = f"Communications address data at {hex(communication_address)}:\n"
             current_state_log_output += f"\tPayload state: {injection_params.state_variables.get_state_name_from_value(self.payload_state_value)}\n"

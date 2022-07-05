@@ -2,8 +2,6 @@
 * [Write all global variables to standard out](#write-all-global-variables-to-standard-out)
 * [Write a text representation of all objects in memory to disk](#write-a-text-representation-of-all-objects-in-memory-to-disk)
 
-*note: All of these examples may be broken for some versions of Ruby*
-
 ## Write all global variables to standard out
 
 Use [the following Ruby code, which was borrowed from this Gist by Dmitry Yakimenko](https://gist.github.com/detunized/1620634)

@@ -96,8 +96,6 @@ If you're targeting a legacy Python 2 process instead of Python 3, you'll most l
 
 ## Execute arbitrary PHP code inside an existing PHP process
 
-*note: this may be broken for some versions of PHP 8.1*
-
 PHP has a similar "compile and execute this sequence of source code" method.
 
 This payload requires two variables: `phpcode`, which should contain the PHP code that should be executed in the existing PHP process, and `phpname`, which can generally be set to any string.
@@ -137,8 +135,6 @@ Injected PHP code
 ```
 
 ## Execute arbitrary Ruby code inside an existing Ruby process
-
-*note: this may be broken at present*
 
 Ruby has a similar "compile and execute this sequence of Ruby source code" method. The current code for it in `asminject.py` has a few limitations, but it does work:
 

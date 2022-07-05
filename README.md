@@ -241,6 +241,12 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.32 (2022-07-05)
+
+* Fixed Ruby injection
+* Fixed PHP injection
+* Additional minor bug fixes
+
 ### 0.31 (2022-07-01)
 
 * Updated `libdl` fragments to make them work across a wider variety of configurations for that library

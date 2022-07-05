@@ -37,22 +37,28 @@
 	// copy the Ruby string to arbitrary read/write memory
 	push r14
 	mov rdi, arbitrary_read_write_data_address[rip]
-	add rdi, 32
 	lea rsi, ruby_code[rip]
 	mov rcx, [VARIABLE:rubycode.length:VARIABLE]
 	add rcx, 2												# null terminator
-	call asminject_copy_bytes
+	//call asminject_copy_bytes
+	rep movsb
 	pop r14
 	// END: copy the Ruby string to arbitrary read/write memory
 	
 	// BEGIN: call rb_eval_string
 	push r14
+	push rdx
 	push rbx
+	//mov rdi, arbitrary_read_write_data_address[rip]
+	//add rdi, 32
+	//xor rsi, rsi
+	//lea rdi, ruby_code[rip]
 	mov rdi, arbitrary_read_write_data_address[rip]
-	add rdi, 32
-	mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:rb_eval_string:RELATIVEOFFSET]
+	xor rsi, rsi
+	mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:^rb_eval_string$:RELATIVEOFFSET]
 	call rbx
 	pop rbx
+	pop rdx
 	pop r14
 	// END: call rb_eval_string
 	

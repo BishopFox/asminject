@@ -24,7 +24,10 @@
 `asminject.py` adds a fourth option: increasing the priority of its own process and decreasing the priority of the target process. This "slow" mode (the default) generally allows it to act like [Quicksilver in _X-Men: Days of Future Past_](https://youtu.be/T9GFyZ5LREQ?t=32), making its changes to the target process at lightning speed. The target process is still running, but so slowly relative to `asminject.py` that it may as well be suspended.
 
 ```
-# python3 ./asminject.py 1470158 asm/x86-64/execute_python_code.s --relative-offsets relative_offsets-python2.7.txt --relative-offsets a--var pythoncode "print('OK');" --stop-method "slow"
+# python3 ./asminject.py 1470158 execute_python_code.s \
+    --relative-offsets-from-binaries \
+    --var pythoncode "print('OK');" \
+	--stop-method "slow"
 
 ...omitted for brevity...
 [*] Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...
@@ -49,13 +52,18 @@
 Some binaries are compiled without the position-independent code build option (including, strangely enough, x86-64 builds of Python 3.x, even though 2.x for x86-64 had it enabled). This means that the offsets in the corresponding ELF are absolute instead of relative to the base address. If `asminject.py` detects a low base address (typically indicative of this condition), it will include a warning:
 
 ```
-[*] '/usr/bin/python3.9' has a base address of 4194304, which is very low for position-independent code. If the exploit attempt fails, try adding --non-pic-binary "/usr/bin/python3.9" to your asminject.py options.
+[*] '/usr/bin/python3.9' has a base address of 4194304, which is very low 
+    for position-independent code. If the exploit attempt fails, try adding 
+	--non-pic-binary "/usr/bin/python3.9" to your asminject.py options.
 ```
 
 As the message indicates, this type of binary can be manually flagged using one or more `--non-pic-binary` options, which are parsed as regular expressions. e.g.:
 
 ```
-# python3 ./asminject.py 1470214 asm/x86-64/execute_python_code.s --relative-offsets asminject/relative_offsets-python3.9.txt --var pythoncode "print('OK');" --non-pic-binary "/usr/bin/python3\\.[0-9]+"
+# python3 ./asminject.py 1470214 execute_python_code.s \
+    --relative-offsets-from-binaries \
+	--var pythoncode "print('OK');" \
+	--non-pic-binary "/usr/bin/python3\\.[0-9]+"
 
 ...omitted for brevity...
 [*] Handling '/usr/bin/python3.9' as non-PIC binary
@@ -69,11 +77,11 @@ If in doubt, the `file` command can sometimes identify whether the code is posit
 ```
 # file /usr/bin/python2.7
 
-/usr/bin/python2.7: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=2e424007a240d090ed9d3965398d9d79298f0a37, for GNU/Linux 3.2.0, stripped
+/usr/bin/python2.7: ELF 64-bit LSB pie executable, x86-64 [...]
 
 # file /usr/bin/python3.9
 
-/usr/bin/python3.9: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=18e54a049c2ca8e609eaea044df101effead3b23, for GNU/Linux 3.2.0, stripped
+/usr/bin/python3.9: ELF 64-bit LSB executable, x86-64 [...]
 ```
 
 On the other hand, on ARM32 Linux running on a Raspberry Pi, neither Python 2.7 and 3.7 are position-independent, but `libc` is.
@@ -81,11 +89,11 @@ On the other hand, on ARM32 Linux running on a Raspberry Pi, neither Python 2.7 
 ```
 # file /usr/bin/python2.7
 
-/usr/bin/python2.7: ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-armhf.so.3, for GNU/Linux 3.2.0, BuildID[sha1]=2ab8406bc7cc1bef1e255e4e20a5b1f15758cacf, stripped
+/usr/bin/python2.7: ELF 32-bit LSB executable, ARM [...]
 
 # file /usr/bin/python3.7
 
-/usr/bin/python3.7: ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-armhf.so.3, for GNU/Linux 3.2.0, BuildID[sha1]=fd15ce8be633e2667c780b770eec5ecf01641017, stripped
+/usr/bin/python3.7: ELF 32-bit LSB executable, ARM [...]
 ```
 
 However, just to be confusing, x86-64 Linux describes `libc` as a "shared object", without indicating that it's position-independent:
@@ -93,15 +101,15 @@ However, just to be confusing, x86-64 Linux describes `libc` as a "shared object
 ```
 # file /usr/lib/x86_64-linux-gnu/libc-2.33.so
 
-/usr/lib/x86_64-linux-gnu/libc-2.33.so: ELF 64-bit LSB shared object, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=d0bea38a0bc75e09b36838f9b6680de85ba65f15, for GNU/Linux 3.2.0, stripped
+/usr/lib/x86_64-linux-gnu/libc-2.33.so: ELF 64-bit LSB shared object, x86-64 [...]
 ```
 
-...but ARM2 Linux describes `libc` as a "pie executable"
+...but ARM32 Linux describes `libc` as a "pie executable"
 
 ```
 # file /lib/arm-linux-gnueabihf/libc-2.28.so
 
-/lib/arm-linux-gnueabihf/libc-2.28.so: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-armhf.so.3, BuildID[sha1]=efdd27c16f5283e5c53dcbd1bbc3ef136e312d1b, for GNU/Linux 3.2.0, stripped
+/lib/arm-linux-gnueabihf/libc-2.28.so: ELF 32-bit LSB pie executable, ARM [...]
 ```
 
 If you want to be sure, run a copy of the target in `gdb`, and check whether the offsets of known functions are relative to the base address or not. For example, the following shell output indicates that the base address for `/usr/bin/python2.7` is 0x00010000, and the list of offsets indicates that the `PyGILState_Ensure` function is as 0x0018b428:
@@ -159,7 +167,14 @@ In this case (Python 2.7 on ARM32 Linux), the binary was *not* position-independ
 By default, `asminject.py` selects random amounts of memory to allocate for its read/execute and read/write blocks. These blocks should be more than large enough for all of the payloads included with the tool. If you are using custom payloads that require more space, or wish to control the values for reproducibility, the `--use-read-execute-size` `--use-read-write-size` options can be used to select fixed sizes. For example:
 
 ```
-# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-usr-bin-python3.9.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate --use-read-execute-size 0x100000  --use-read-write-size 0x100000
+# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 \
+    --relative-offsets-from-binaries \
+	--non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" \
+	--var pythoncode "print('injected python code');" \
+	--debug \
+	--do-not-deallocate \
+	--use-read-execute-size 0x100000 \
+	--use-read-write-size 0x100000
 ```
 
 ## Memory reuse
@@ -171,17 +186,33 @@ When executed without any memory-related options, the first stage of `asminject.
 If you add the `--do-not-deallocate` option when calling `asminject.py`, it will leave both blocks allocated in the target process when it exits, and indicate how to reuse them the next time you inject code into the same process, e.g.:
 
 ```
-# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-usr-bin-python3.9.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate
+# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 \
+    --relative-offsets-from-binaries \
+	--non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" \
+	--var pythoncode "print('injected python code');" \
+	--do-not-deallocate
 
 ...omitted for brevity...
 [+] Done!
-[+] To reuse the existing read/write and read execute memory allocated during this injection attempt, include the following options in your next asminject.py command: --use-read-execute-address 0x7ffff7faf000 --use-read-execute-size 0x8000 --use-read-write-address 0x7ffff7fb7000 --use-read-write-size 0x8000
+[+] To reuse the existing read/write and read execute memory allocated during 
+    this injection attempt, include the following options in your next 
+	asminject.py command: --use-read-execute-address 0x7ffff7faf000 
+	--use-read-execute-size 0x8000 --use-read-write-address 0x7ffff7fb7000 
+	--use-read-write-size 0x8000
 ```
 
 i.e. to inject the same code into the same process again:
 
 ```
-# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 --relative-offsets relative_offsets-usr-bin-python3.9.txt --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --do-not-deallocate --use-read-execute-address 0x7ffff7faf000 --use-read-execute-size 0x8000 --use-read-write-address 0x7ffff7fb7000 --use-read-write-size 0x8000
+# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 \
+    --relative-offsets-from-binaries \
+	--non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" \
+	--var pythoncode "print('injected python code');" \
+	--do-not-deallocate \
+	--use-read-execute-address 0x7ffff7faf000 \
+	--use-read-execute-size 0x8000 \
+	--use-read-write-address 0x7ffff7fb7000 \
+	--use-read-write-size 0x8000
 ```
 
 ## Anti-forensics
@@ -191,7 +222,16 @@ Security software or a very determined investigator could theoretically look for
 By default, this feature will write null bytes (`0x00`), but any integer that can be represented using a number of bytes equal to the word length of the CPU can be used by including the ``--clear-payload-memory-value`` option. For example:
 
 ~~~
-# python3 ./asminject.py 1494 printf_with_copy.s --arch arm32 --relative-offsets relative_offsets-libc-2.28.txt --stop-method "slow" --var message "ABCDEFGHIJKLMNOPQRSTUVWXYZ" --debug --clear-payload-memory --clear-payload-memory-value 0x00c651e0 --use-read-execute-address 0xb6618000 --use-read-execute-size 0x6e000 --use-read-write-address 0xb6686000 --use-read-write-size 0x29000 --do-not-deallocate
+# python3 ./asminject.py 1494 printf_with_copy.s --arch arm32 \
+    --relative-offsets relative_offsets-libc-2.28.txt --stop-method "slow" \
+	--var message "ABCDEFGHIJKLMNOPQRSTUVWXYZ" --debug \
+	--clear-payload-memory \
+	--clear-payload-memory-value 0x00c651e0 \
+	--use-read-execute-address 0xb6618000 \
+	--use-read-execute-size 0x6e000 \
+	--use-read-write-address 0xb6686000 \
+	--use-read-write-size 0x29000 \
+	--do-not-deallocate
 
 ...omitted for brevity...
 [*] Waiting 2.0 second(s) before clearing payload read/write memory
@@ -248,7 +288,12 @@ Because obfuscation is applied in a truly random, non-deterministic manner, it c
 If the `--write-assembly-source-to-disk` and `--preserve-temp-files` options are specified, several variations of the source code for each payload are written to disk. For purposes of this section, the "post-obfuscation, pre-variable-replacement" variation should be used. E.g.:
 
 ```
-# python3 ./asminject.py 21637 execute_python_code.s --arch arm32 --relative-offsets relative_offsets-python3.7.txt --non-pic-binary "/usr/bin/python.*" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --preserve-temp-files --write-assembly-source-to-disk --obfuscate --obfuscation-iterations 4
+# python3 ./asminject.py 21637 execute_python_code.s --arch arm32 \
+    --relative-offsets-from-binaries \
+	--non-pic-binary "/usr/bin/python.*" --stop-method "slow" \
+	--var pythoncode "print('injected python code');" --debug \
+	--preserve-temp-files --write-assembly-source-to-disk \
+	--obfuscate --obfuscation-iterations 4
 
 ...omitted for brevity...
 [*] Writing post-obfuscation, pre-variable-replacement assembly source to '/tmp/20220615185024245932478624/assembly/tmpnbg5ju1h-stage_2-post-obfuscation-pre-replacement.s'
@@ -258,7 +303,12 @@ If the `--write-assembly-source-to-disk` and `--preserve-temp-files` options are
 To reuse the source code for debugging purposes, add the `--use-stage-1-source` and/or `--use-stage-2-source` options when calling `asminject.py` again, e.g.:
 
 ```
-# python3 ./asminject.py 21637 execute_python_code.s --arch arm32 --relative-offsets relative_offsets-python3.7.txt --non-pic-binary "/usr/bin/python.*" --stop-method "slow" --var pythoncode "print('injected python code');" --debug --use-stage-2-source '/tmp/20220615185024245932478624/assembly/tmpnbg5ju1h-stage_2-post-obfuscation-pre-replacement.s'
+# python3 ./asminject.py 21637 execute_python_code.s --arch arm32 \
+    --relative-offsets-from-binaries \
+	--non-pic-binary "/usr/bin/python.*" --stop-method "slow" \
+	--var pythoncode "print('injected python code');" \
+	--debug \
+	--use-stage-2-source '/tmp/20220615185024245932478624/assembly/tmpnbg5ju1h-stage_2-post-obfuscation-pre-replacement.s'
 ```
 
 

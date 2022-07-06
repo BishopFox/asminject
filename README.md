@@ -231,6 +231,10 @@ These examples cover very specific uses of `asminject.py` for different language
 * <a href="docs/examples-python.md">Python examples</a>
 * <a href="docs/examples-php.md">PHP examples</a>
 
+### Other specific example categories
+
+* <a href="docs/examples-sliver.md">Sliver examples</a> using [Bishop Fox's Sliver C2 framework](https://github.com/BishopFox/sliver)
+
 ## Specialized options
 
 This section was getting too lengthy for the main `README.md`, so it's been moved into a separate <a href="docs/specialized_options.md">specialized options document</a>.

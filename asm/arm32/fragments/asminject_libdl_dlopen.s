@@ -17,7 +17,7 @@ asminject_libdl_dlopen:
 	b asminject_libdl_dlopen_load_dlopen_offset
 
 asminject_libdl_dlopen_base_address:
-	.word [BASEADDRESS:.+/libdl-[0-9\.]+.so$:BASEADDRESS]
+	.word [BASEADDRESS:.+/libdl[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	.balign 4
 	
 // Store the relative offset of dlopen in r9

@@ -18,7 +18,7 @@ asminject_libpthread_pthread_create:
 	b asminject_libpthread_pthread_create_load_pthread_create_offset
 
 asminject_libpthread_pthread_create_base_address:
-	.word [BASEADDRESS:.+/libpthread-[0-9\.]+.so$:BASEADDRESS]
+	.word [BASEADDRESS:.+/libpthread[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	.balign 4
 	
 // Load the relative offset of pthread_create into r9

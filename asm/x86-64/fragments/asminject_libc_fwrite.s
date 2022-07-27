@@ -15,7 +15,7 @@ asminject_libc_fwrite:
 	push r9
 	push r14
 	
-	mov r9, [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS] + [RELATIVEOFFSET:^fwrite($|@@.+):RELATIVEOFFSET]
+	mov r9, [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS] + [RELATIVEOFFSET:^fwrite($|@@.+):RELATIVEOFFSET]
 	call r9
 
 	pop r14

@@ -19,7 +19,7 @@ asminject_libc_printf_load_base_address:
 	b asminject_libc_printf_load_printf_offset
 
 asminject_libc_printf_base_address:
-	.word [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS]
+	.word [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	.balign 4
 	
 // Store the relative offset of printf in r9

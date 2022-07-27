@@ -17,7 +17,7 @@ asminject_libc_fclose:
 	b asminject_libc_fclose_load_fclose_offset
 
 asminject_libc_fclose_base_address:
-	.word [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS]
+	.word [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	.balign 4
 	
 // Store the relative offset of fclose in r9

@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.32
-Ben Lincoln, Bishop Fox, 2022-07-05
+v0.33
+Ben Lincoln, Bishop Fox, 2022-07-26
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -568,8 +568,8 @@ class asminject_parameters:
         if self.architecture == "x86-64":
             self.register_size = 8
             self.register_size_format_string = 'Q'
-            # 8 bytes * 16 registers
             self.stage_sleep_seconds = 2
+            # 8 bytes * 16 registers
             self.stack_backup_size = 8 * 16
             self.communication_address_backup_size = 32
             self.instruction_pointer_register_name = "RIP"
@@ -577,6 +577,21 @@ class asminject_parameters:
             self.general_purpose_register_list = ["rax", "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
             #self.state_backup_restore_instruction_list = [ ("pushfq", "popfq"), ("push rax", "pop rax"), ("push rbx", "pop rbx"), ("push rcx", "pop rcx"), ("push rdx", "pop rdx"), ("push rbp", "pop rbp"), ("push rsi", "pop rsi"), ("push rdi", "pop rdi"), ("push r8", "pop r8"), ("push r9", "pop r9"), ("push r10", "pop r10"), ("push r11", "pop r11"), ("push r12", "pop r12"), ("push r13", "pop r13"), ("push r14", "pop r14"), ("push r15", "pop r15") ]
             self.state_backup_restore_instruction_list = [ ("push rax", "pop rax"), ("push rbx", "pop rbx"), ("push rcx", "pop rcx"), ("push rdx", "pop rdx"), ("push rbp", "pop rbp"), ("push rsi", "pop rsi"), ("push rdi", "pop rdi"), ("push r8", "pop r8"), ("push r9", "pop r9"), ("push r10", "pop r10"), ("push r11", "pop r11"), ("push r12", "pop r12"), ("push r13", "pop r13"), ("push r14", "pop r14"), ("push r15", "pop r15") ]
+            self.flag_setting_instructions = [ "cmp" ]
+            self.no_obfuscation_after_instructions = [ "leave" ]
+        if self.architecture == "x86":
+            self.register_size = 4
+            self.register_size_format_string = 'L'
+            self.stage_sleep_seconds = 2
+            # 4 bytes * 16 registers
+            self.stack_backup_size = 4 * 16
+            self.communication_address_backup_size = 32
+            self.instruction_pointer_register_name = "EIP"
+            self.stack_pointer_register_name = "ESP"
+            self.general_purpose_register_list = ["eax", "ebx", "ecx", "edx"]
+
+            #self.state_backup_restore_instruction_list = [ ("push eax", "pop eax"), ("push ebx", "pop ebx"), ("push ecx", "pop ecx"), ("push edx", "pop edx"), ("push ebp", "pop ebp"), ("push esi", "pop esi"), ("push edi", "pop edi"), ("push cs", "pop cs"), ("push ds", "pop ds"), ("push es", "pop es"), ("push fs", "pop fs"), ("push gs", "pop gs"), ("push ss", "pop ss") ]
+            self.state_backup_restore_instruction_list = [ ("push eax", "pop eax"), ("push ebx", "pop ebx"), ("push ecx", "pop ecx"), ("push edx", "pop edx"), ("push ebp", "pop ebp"), ("push esi", "pop esi"), ("push edi", "pop edi")]
             self.flag_setting_instructions = [ "cmp" ]
             self.no_obfuscation_after_instructions = [ "leave" ]
         if self.architecture == "arm32":
@@ -1427,14 +1442,23 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
         
         #out_path = f"/tmp/assembled_{os.urandom(8).hex()}.bin"
         #cmd = "gcc -x assembler - -o {0} -nostdlib -Wl,--oformat=binary -m64 -fPIC".format()
+        use_objcopy_workaround = False
+        
         argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-Wl,--oformat=binary", "-m64", "-fPIC"]
-        # ARM gcc doesn't support the raw binary output format, and it's necessary to pass -Wl,--build-id=none so 
+        
+        # ARM gcc doesn't support the raw binary output format, and there is a similar issue with x86
+        # it's necessary to pass -Wl,--build-id=none so 
         # that the linker doesn't include metadata that objcopy will misinterpret later
         # same for the -s option: including the debugging metadata causes objcopy to output a file with a huge
         # amount of empty space in it
+        if injection_params.architecture == "x86":
+            argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-fPIC", "-Wl,--build-id=none", "-m32", "-s"]
+            use_objcopy_workaround = True
+            
         if injection_params.architecture == "arm32":
             argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-fPIC", "-Wl,--build-id=none", "-s"]
             #argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-fPIC", "-pie", "-Wl,--build-id=none", "-s"]
+            use_objcopy_workaround = True
 
         program = formatted_source.encode()
         # if injection_params.write_assembly_source_to_disk:
@@ -1459,8 +1483,11 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
             log_error("Assembler command failed:\n\t" + emsg.replace("\n", "\n\t"), ansi=injection_params.ansi)
             return None
         
-        # ld for ARM won't emit raw binaries like it will for x86-32
-        if injection_params.architecture == "arm32":
+        # ld for ARM won't emit raw binaries like it will for x86-64
+        # and a similar issues needs to be worked around for x86
+        if use_objcopy_workaround:
+            argv = []
+        
             try:
                 obj_out_path = injection_params.create_empty_temp_file(subdirectory_name = injection_params.payload_assembly_subdirectory_name, suffix = ".o")
                 try:
@@ -1468,7 +1495,12 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
                 except Exception as e:
                     log_warning(f"Couldn't set permissions on '{obj_out_path}': {e}", ansi=injection_params.ansi)
                 log(f"Converting executable '{out_path}' to raw binary file {obj_out_path}", ansi=injection_params.ansi)
-                argv = ["objcopy", "-O", "binary", out_path, obj_out_path]
+                
+                if injection_params.architecture == "arm32":
+                    argv = ["objcopy", "-O", "binary", out_path, obj_out_path]
+                if injection_params.architecture == "x86":
+                    argv = ["objcopy", "-O", "binary", "--only-section=.text", out_path, obj_out_path]
+                
                 if injection_params.enable_debugging_output:
                     log(f"objdump command: {argv}", ansi=injection_params.ansi)
                 result = subprocess.run(argv, stdout=pipe, stderr=pipe)
@@ -2296,8 +2328,8 @@ if __name__ == "__main__":
               # Default: wait-syscall.")
     
     parser.add_argument("--arch",
-        #choices=["x86-32", "x86-64", "arm32", "aarch64"], default="x86-64",
-        choices=["x86-64", "arm32"], default="x86-64",
+        #choices=["x86-64", "x86", "arm32", "aarch64"], default="x86-64",
+        choices=["x86-64", "x86", "arm32"], default="x86-64",
         help="Processor architecture for the injected code. \
               Default: x86-64.")
             

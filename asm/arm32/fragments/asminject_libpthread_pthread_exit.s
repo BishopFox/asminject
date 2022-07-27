@@ -17,7 +17,7 @@ asminject_libpthread_pthread_exit:
 	b asminject_libpthread_pthread_exit_load_pthread_exit_offset
 
 asminject_libpthread_pthread_exit_base_address:
-	.word [BASEADDRESS:.+/libpthread-[0-9\.]+.so$:BASEADDRESS]
+	.word [BASEADDRESS:.+/libpthread[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	.balign 4
 	
 // Load the relative offset of pthread_exit into r9

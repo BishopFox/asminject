@@ -21,7 +21,7 @@ asminject_libc_fread:
 	b asminject_libc_fread_load_fread_offset
 
 asminject_libc_fread_base_address:
-	.word [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS]
+	.word [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	.balign 4
 	
 // Store the relative offset of fopen in r9

@@ -245,6 +245,11 @@ If you are an authorized administrator of a Linux system where someone has accid
 
 ## Version history
 
+### 0.33 (2022-07-26)
+
+* Added initial support for 32-bit x86 architecture (only the `printf.s` payload has been ported at this time)
+* More flexible regexes for identifying `libc`, `libpthread`, and `libdl`
+
 ### 0.32 (2022-07-05)
 
 * Fixed Ruby injection

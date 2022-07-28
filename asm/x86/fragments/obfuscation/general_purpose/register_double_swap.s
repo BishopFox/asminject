@@ -1,5 +1,5 @@
 // BEGIN: swap the contents of two registers, then swap them back
-pushfq
+pushf
 push %r0%
 push %r1%
 push %r2%
@@ -16,5 +16,5 @@ mov %r0%, %r2%
 pop %r2%
 pop %r1%
 pop %r0%
-popfq
+popf
 // END: swap the contents of two registers, then swap them back

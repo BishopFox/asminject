@@ -4,129 +4,144 @@
 [FRAGMENT:asminject_libc_fwrite.s:FRAGMENT]
 
 	// BEGIN: call LIBC fopen against the source file
-	push r11
-	push r14
-	push ebx
-	lea edi, sourcefile[eip]
-    lea esi, read_only_string[eip]
+	// like all of the other 32-bit x86 code, this uses the inline-data workaround
+	// because the architecture has no equivalent of RIP-relative references	
+
+	call copy_using_libc_get_ro_get_next
+copy_using_libc_get_ro_get_next:
+	# set EAX to the address of the read-only mode string "r"
+	pop esi
+	add esi, 6
+	jmp copy_using_libc_get_source_string
+	
+read_only_string:
+	.ascii "r\0"
+
+copy_using_libc_get_source_string:
+	call copy_using_libc_get_source_get_next
+copy_using_libc_get_source_get_next:
+	# set EAX to the address of the source file path string
+	pop edi
+	add edi, 6
+	jmp copy_using_libc_fopen_source
+
+sourcefile:
+	.ascii "[VARIABLE:sourcefile:VARIABLE]\0"
+
+copy_using_libc_fopen_source:
+	nop
 	call asminject_libc_fopen
-    mov r13, eax          # store file descriptor in r13 rather than a variable to avoid attempts to write to executable memory
-	pop ebx
-	pop r14
-	pop r11
+    mov edx, eax          # store file descriptor in edx rather than a variable to avoid attempts to write to executable memory
 	// END: call LIBC fopen
 	
 	// BEGIN: call LIBC fopen against the destination file
-	push r11
-	push r14
-	push r13
-	push ebx
-	lea edi, destfile[eip]
-    lea esi, write_only_string[eip]
+	
+	call copy_using_libc_get_wo_get_next
+copy_using_libc_get_wo_get_next:
+	# set EAX to the address of the read-only mode string "r"
+	pop esi
+	add esi, 6
+	jmp copy_using_libc_get_dest_string
+	
+write_only_string:
+	.ascii "w\0"
+
+copy_using_libc_get_dest_string:
+	call copy_using_libc_get_dest_get_next
+copy_using_libc_get_dest_get_next:
+	# set EAX to the address of the source file path string
+	pop edi
+	add edi, 6
+	jmp copy_using_libc_fopen_dest
+
+destfile:
+	.ascii "[VARIABLE:destfile:VARIABLE]\0"
+
+copy_using_libc_fopen_dest:
+	nop
+	push edx
 	call asminject_libc_fopen
-    mov r10, eax          # store file descriptor in r10 rather than a variable to avoid attempts to write to executable memory
-	pop ebx
-	pop r13
-	pop r14
-	pop r11
+    mov ecx, eax          # store file descriptor in edx rather than a variable to avoid attempts to write to executable memory
+	pop edx
 	// END: call LIBC fopen
 
 copyLoop:
 
-	// BEGIN: call LIBC fread against the source file
-	push r14
-	push r13
-	push r11
-	push r10
+	push eax
 	push ebx
-	mov ecx, r13	# file descriptor
-	mov edx, 256		# number of elements
-	mov esi, 1		# element size
-	mov edi, arbitrary_read_write_data_address[eip]	# buffer - read/write area allocated earlier
+	push ecx
+	push edx
+
+	// BEGIN: call LIBC fread against the source file
+	push ecx	# save destination FD in case fread stops on it
+	mov edi, 	[VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]	# buffer - read/write area allocated earlier
 	add edi, 0x1000	# don't overwrite anything else that's in it
+	mov esi, 1		# element size
+	mov eax, 256	# number of elements
+	mov ebx, edx	# file descriptor
 	call asminject_libc_fread
-    mov r12, eax    # result
-	pop ebx
-	pop r10
-	pop r11
-	pop r13
-	pop r14
+    # result is in eax
+	pop ecx	# restore destination FD
 	// END: call LIBC fread
 	
 	// if no bytes were read (usually end-of-file), processing is complete
-	cmp r12, 0
+	cmp eax, 0
 	jle doneCopying
 	
 	// BEGIN: call LIBC fwrite against the destination file with the number of elements read by fread()
-	push r14
-	push r13
-	push r11
-	push r10
-	push ebx
-	mov ecx, r10	# file descriptor
-	mov edx, r12	# number of elements
-	mov esi, 1		# element size
-	mov edi, arbitrary_read_write_data_address[eip]	# buffer - read/write area allocated earlier
+	mov edi, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]	# buffer - read/write area allocated earlier
 	add edi, 0x1000	# don't overwrite anything else that's in it
+	mov esi, 1		# element size
+	# eax already contains number of elements read
+	mov ebx, ecx	# file descriptor
 	call asminject_libc_fwrite
-    mov r12, eax    # result
-	pop ebx
-	pop r10
-	pop r11
-	pop r13
-	pop r14
+	# eax contains number of bytes written
+	
 	// END: call LIBC fwrite
+
+	pop edx
+	pop ecx
+	pop ebx
+	pop eax
 
 	jmp copyLoop
 
 doneCopying:
+	# have to repeat these here because they won't be called if the jle instruction jumps out of the loop
+	pop edx
+	pop ecx
+	pop ebx
+	pop eax
 
 	// close file handles using fclose()
 	
 	// BEGIN: call LIBC fclose against the destination file
-	push r15
-	push r14
-	push r13
-	push r10
+	# save source FD in case fclose stops on it
+	push eax
 	push ebx
-	mov edi, r13	# file descriptor
+	push ecx
+	push edx
+	mov edi, ecx	# file descriptor
 	call asminject_libc_fclose
+	pop edx
+	pop ecx
 	pop ebx
-	pop r10
-	pop r13
-	pop r14
-	pop r15
+	pop eax
 	// END: call LIBC fclose
 	
 	// BEGIN: call LIBC fclose against the source file
-	push r15
-	push r14
-	push r13
-	push r10
+	push eax
 	push ebx
-	mov edi, r10	# file descriptor
+	push ecx
+	push edx
+	mov edi, edx	# file descriptor
 	call asminject_libc_fclose
+	pop edx
+	pop ecx
 	pop ebx
-	pop r10
-	pop r13
-	pop r14
-	pop r15
+	pop eax
 	// END: call LIBC fclose
 
 SHELLCODE_SECTION_DELIMITER
 	
-sourcefile:
-	.ascii "[VARIABLE:sourcefile:VARIABLE]\0"
-	.balign 4
 
-destfile:
-	.ascii "[VARIABLE:destfile:VARIABLE]\0"
-	.balign 4
-
-read_only_string:
-	.ascii "r\0"
-	.balign 4
-
-write_only_string:
-	.ascii "w\0"
-	.balign 4

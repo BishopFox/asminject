@@ -67,7 +67,7 @@ load_phpname:
 	b load_zend_eval_string_offset
 
 base_address:
-	.word [BASEADDRESS:.+/php[0-9\.]+$:BASEADDRESS]
+	.word [BASEADDRESS:.+/php($|[0-9\.]+$):BASEADDRESS]
 	.balign 4
 
 // BEGIN: call zend_eval_string

@@ -1,56 +1,82 @@
 	// Open source file
-	push r14
-	mov eax, 2            		# SYS_OPEN
-	lea edi, sourcefile[eip]  	# file path
-	xor esi, esi          		# flags (O_RDONLY)
+	mov eax, 5            		# SYS_OPEN
+	# set EBX to the address of the source path string
+	call copy_using_syscalls_source_get_next
+copy_using_syscalls_source_get_next:
+	pop ebx
+	add ebx, 6
+	jmp copy_using_syscalls_open_source_file
+
+sourcefile:
+	.ascii "[VARIABLE:sourcefile:VARIABLE]\0"
+
+copy_using_syscalls_open_source_file:
+	xor ecx, ecx          		# flags (O_RDONLY)
 	xor edx, edx          		# mode
-	syscall
-	mov r13, eax          # store file descriptor in r13 rather than a variable to avoid attempts to write to executable memory
-	pop r14
+	int 0x80
+	mov edx, eax          # store file descriptor in r13 rather than a variable to avoid attempts to write to executable memory
 	
 	// Open destination file
-	push r14
-	push r13
-	mov eax, 2             		# SYS_OPEN
-	lea edi, destfile[eip]  	# file path
-	mov esi, 0x42          		# flags (O_RDWR | O_CREAT)
-	mov edx, 0777          		# make destination world-writable
-	syscall
-	mov r12, eax  # store file descriptor in r12 rather than a variable to avoid attempts to write to executable memory
-	pop r13
-	pop r14
+	push edx
+	mov eax, 5             		# SYS_OPEN
+	# set EBX to the address of the destination path string
+	call copy_using_syscalls_dest_get_next
+copy_using_syscalls_dest_get_next:
+	pop ebx
+	add ebx, 6
+	jmp copy_using_syscalls_open_dest_file
 
+destfile:
+	.ascii "[VARIABLE:destfile:VARIABLE]\0"
+
+copy_using_syscalls_open_dest_file:
+	mov ecx, 0x42          		# flags (O_RDWR | O_CREAT)
+	mov edx, 0777          		# make destination world-writable
+	int 0x80
+	mov ecx, eax  # store file descriptor in ecx rather than a variable to avoid attempts to write to executable memory
+	pop edx
+
+	push edx
+	push ecx
+	
 	// create a stack variable to use as a copy buffer
 	// instead of using a variable defined in this file, because that would result in writing to executable memory
 	mov eax, 0
 	push eax
-	mov r15, esp
-
-	push r15
-	push r14
-	push r13
-	push r12
+	mov edi, esp
 
 copyByteLoop:
 
 	// read a single byte at a time to avoid more complex logic
-	mov eax, 0		# SYS_READ
-	mov edi, r13	# file descriptor
-	mov esi, r15	# buffer address
+	push edx
+	push ecx
+	push edi
+	mov eax, 3		# SYS_READ
+	mov ebx, edx	# file descriptor
+	mov ecx, edi	# buffer address
 	mov edx, 1		# number of bytes to read
-	syscall
-
+	int 0x80
+	pop edi
+	pop ecx
+	pop edx
+	
 	// if no char was read (usually end-of-file), processing is complete
 	cmp eax, 0
 	jz doneCopying
 
 	// write the byte to the destination file
-	mov eax, 1		# SYS_WRITE      
-	mov edi, r12	# file descriptor
-	mov esi, r15	# buffer address
+	push edx
+	push ecx
+	push edi
+	mov eax, 4		# SYS_WRITE      
+	mov ebx, ecx	# file descriptor
+	mov ecx, edi	# buffer address
 	mov edx, 1		# number of bytes to write
-	syscall
-
+	int 0x80
+	pop edi
+	pop ecx
+	pop edx
+	
 	jmp copyByteLoop
 
 doneCopying:
@@ -58,26 +84,22 @@ doneCopying:
 	// discard the buffer stack variable
 	pop eax
 	
-	pop r12
-	pop r13
-	pop r14
-	pop r15
+	pop ecx
+	pop edx
 
 	// close file handles
-	mov ebx, r13
+	push edx
+	mov ebx, ecx
 	mov eax, 6  # sys_close
-	push r12
-	syscall
-	pop r12
-	mov ebx, r12
+	int 0x80
+	pop edx
+	mov ebx, edx
 	mov eax, 6  # sys_close
-	syscall
+	int 0x80
 	
 SHELLCODE_SECTION_DELIMITER
 	
-sourcefile:
-	.ascii "[VARIABLE:sourcefile:VARIABLE]\0"
 
-destfile:
-	.ascii "[VARIABLE:destfile:VARIABLE]\0"
+
+
 

@@ -3,8 +3,6 @@
 	push ecx
 	push edx
 	// BEGIN: example of calling a LIBC function from the asm code using template values
-	//lea edi, format_string[eip]
-	// lea edi, format_string
 	# set EDI to the address of the format string
 	call printf_format_string_get_next
 printf_format_string_get_next:
@@ -17,9 +15,7 @@ format_string:
 
 printf_format_string_step_2:
 	
-	//lea esi, dmsg[eip]
-	//lea esi, dmsg
-# set ESI to the address of the message string
+	# set ESI to the address of the message string
 	call printf_dmsg_get_next
 printf_dmsg_get_next:
 	pop esi

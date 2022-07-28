@@ -10,17 +10,17 @@ stage1_allocate_rw_get_next:
 	jmp stage1_allocate_rw_syscall
 
 mmap_params_rw:
-	.int 0x0											# start address
+	.long 0x0											# start address
 #	.balign 4
-	.int [VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]	# length
+	.long [VARIABLE:READ_WRITE_REGION_SIZE:VARIABLE]	# length
 #	.balign 4
-	.int 0x3											# prot (rw)
+	.long 0x3											# prot (rw)
 #	.balign 4
-	.int 0x22											# flags (MAP_PRIVATE | MAP_ANONYMOUS)
+	.long 0x22											# flags (MAP_PRIVATE | MAP_ANONYMOUS)
 #	.balign 4
-	.int -1											# file descriptor
+	.long -1											# file descriptor
 #	.balign 4
-	.int 0x0											# start offset
+	.long 0x0											# start offset
 #	.balign 4
 
 stage1_allocate_rw_syscall:

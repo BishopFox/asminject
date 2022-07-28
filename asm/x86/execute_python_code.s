@@ -1,77 +1,68 @@
+// for Python target processes that refer to functions in libpython instead of the main binary
 jmp execute_python_code_main
-// import reusable code fragments 
-[FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
 
 execute_python_code_main:
-
-	# // BEGIN: call Py_Initialize()
-	# push r14
-	# mov ebx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:Py_Initialize:RELATIVEOFFSET]
-	# pop r14
-	# // END: call Py_Initialize()
 	
 	// copy the Python string to arbitrary read/write memory
-	mov edi, arbitrary_read_write_data_address[eip]
+	mov edi, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
+	# set ESI to the address of the Python code string
+	call execute_python_code_get_next
+execute_python_code_get_next:
+	pop esi
+	add esi, 6
+	jmp execute_python_code_copy_code
+
+python_code:
+	.ascii "[VARIABLE:pythoncode:VARIABLE]\0"
+
+execute_python_code_copy_code:
+
+	mov edi, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	add edi, 32
-	lea esi, python_code[eip]
 	push ecx
 	mov ecx, [VARIABLE:pythoncode.length:VARIABLE]
 	add ecx, 2												# null terminator
-	#rep movsb
-	call asminject_copy_bytes
+	rep movsb
 	pop ecx
 	// END: copy the Python string to arbitrary read/write memory
 
 	// BEGIN: call PyGILState_Ensure() and store the handle it returns
-	//push r14
-	xor eax, eax
-	xor edi, edi
-	xor esi, esi
-	mov ebx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
+	mov ebx, [BASEADDRESS:.+/python[0-9\.so]*$:BASEADDRESS]
+	add ebx, [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
 	call ebx
-	mov ebx, arbitrary_read_write_data_address[eip]
+	mov ebx, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	mov [ebx], eax
-	//pop r14
 	// END: call PyGILState_Ensure()
 
 	// BEGIN: call PyRun_SimpleString("arbitrary Python code here")
-	//push r14
-	push ecx
-	xor esi, esi
-	mov edi, arbitrary_read_write_data_address[eip]
+	push ebx
+	sub esp, 0x8
+
+	push 0x0
+	mov edi, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	add edi, 32
-	xor ecx, ecx
-	mov ebx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
+	push edi
+	mov ebx, [BASEADDRESS:.+/python[0-9\.so]*$:BASEADDRESS]
+	add ebx, [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
 	call ebx
-	pop ecx
-	//pop r14
+	add esp, 0x10
+	pop ebx
 	// END: call PyRun_SimpleString("arbitrary Python code here")
 	
 	// BEGIN: call PyGILState_Release(handle)
-	//push r14
-	mov ebx, arbitrary_read_write_data_address[eip]
-	mov edi, [ebx]
-	//mov eax, [ebx]
-	//mov edi, eax
-	xor esi, esi
-	mov ebx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Release:RELATIVEOFFSET]
+	sub esp, 0xc
+	mov ebx, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
+	mov ebx, [ebx]
+	push ebx
+	mov ebx, [BASEADDRESS:.+/python[0-9\.so]*$:BASEADDRESS]
+	add ebx, [RELATIVEOFFSET:PyGILState_Release:RELATIVEOFFSET]
 	call ebx
-	//pop r14
+	add esp, 0x10
 	// END: call PyGILState_Release(handle)
-	
-	# // BEGIN: call Py_Finalize()
-	# push r14
-	# mov eax, 0
-	# mov edi, eax
-	# mov ebx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:Py_Finalize:RELATIVEOFFSET]
-	# call ebx
-	# pop r14
-	# // END: call Py_Finalize()
 
 SHELLCODE_SECTION_DELIMITER
 
-python_code:
-	.ascii "[VARIABLE:pythoncode:VARIABLE]\0"
+
 
 
 

@@ -9,12 +9,13 @@ asminject_libpthread_pthread_detach:
 	push ebp
 	mov ebp, esp
 	sub esp, 0x10
-	push r9
+	push edx
 	
-	mov r9, [BASEADDRESS:.+/libpthread[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS] + [RELATIVEOFFSET:^pthread_detach($|@@.+):RELATIVEOFFSET]
-	call r9
+	mov edx, [BASEADDRESS:.+/libpthread[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
+	add edx, [RELATIVEOFFSET:^pthread_detach($|@@.+):RELATIVEOFFSET]
+	call edx
 	
-	pop r9
+	pop edx
 	leave
 	ret
 // END: asminject_libpthread_pthread_detach

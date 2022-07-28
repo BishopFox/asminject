@@ -12,6 +12,7 @@
   * [Specifying non-PIC code](#specifying-non-pic-code)
   * [Multi-architecture support](#multi-architecture-support)
 * [But what about Yama's ptrace_scope restrictions?](#but-what-about-yamas-ptrace_scope-restrictions)
+* [Future goals](#future-goals)
 * [Version history](#version-history)
 
 ## Origins
@@ -239,11 +240,31 @@ These examples cover very specific uses of `asminject.py` for different language
 
 This section was getting too lengthy for the main `README.md`, so it's been moved into a separate <a href="docs/specialized_options.md">specialized options document</a>.
 
+## Future goals
+
+* Allow shellcode to be passed via stdin in addition to the current method of reading from a file.
+* For Python and other script interpreters with APIs for passing in compiled bytecode for execution (versus `eval`-style execution of human-readable script code), provide payloads to take advantage of this ability for even more stealth.
+* If feasible, inject Java code into Java processes via the JNI.
+* Add alternative DLL injection methods for various scenarios.
+* Add options to hook a specific method (or address, etc.) as an alternative to the current "hook the next syscall" technique that was inherited from `dlinject.py`.
+* Add more elaborate obfuscation fragments.
+
 ## But what about Yama's ptrace_scope restrictions?
 
 If you are an authorized administrator of a Linux system where someone has accidentally set `/proc/sys/kernel/yama/ptrace_scope` to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
 ## Version history
+
+### 0.34 (2022-07-27)
+
+* Finished porting the following payloads and related fragments to x86 architecture:
+  * `execute_python_code.s`
+  * `execute_python_code-libpython.s`
+  * `execute_php_code.s`
+  * `execute_ruby_code.s`
+  * `copy_file_using_libc.s`
+  * `copy_file_using_syscalls.s`
+* More flexible regexes for identifying the `php` binary
 
 ### 0.33 (2022-07-26)
 

@@ -1,6 +1,6 @@
 // BEGIN: asminject_libpthread_pthread_join
 // wrapper for the libpthread pthread_join function
-// tested with libpthread 2.28 and 2.33
+// tested with libpthread
 // Assumes the signature for pthread_join is int pthread_join(pthread_t thread, void **retval);
 // if your libpthread has a different signature for pthread_join, this code will probably fail
 // edi = thread structure                               
@@ -10,12 +10,13 @@ asminject_libpthread_pthread_join:
 	push ebp
 	mov ebp, esp
 	sub esp, 0x10
-	push r9
+	push edx
 	
-	mov r9, [BASEADDRESS:.+/libpthread[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS] + [RELATIVEOFFSET:^pthread_join($|@@.+):RELATIVEOFFSET]
-	call r9
+	mov edx, [BASEADDRESS:.+/libpthread[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
+	add edx, [RELATIVEOFFSET:^pthread_join($|@@.+):RELATIVEOFFSET]
+	call edx
 	
-	pop r9
+	pop edx
 	leave
 	ret
 // END: asminject_libpthread_pthread_join

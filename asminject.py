@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.33
-Ben Lincoln, Bishop Fox, 2022-07-26
+v0.34
+Ben Lincoln, Bishop Fox, 2022-07-27
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -1478,9 +1478,14 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
             log(f"Assembler command: {argv}", ansi=injection_params.ansi)
         result = subprocess.run(argv, stdout=pipe, stderr=pipe, input=program)
         
-        if result.returncode != 0:
-            emsg = result.stderr.decode().strip()
-            log_error("Assembler command failed:\n\t" + emsg.replace("\n", "\n\t"), ansi=injection_params.ansi)
+        assembler_console_output = f"stdout:\n\n{result.stdout.decode().strip()}\n\nstderr:\n\n{result.stderr.decode().strip()}"
+        if result.returncode == 0:
+            if injection_params.enable_debugging_output:
+                log(f"Assembler output: \n\n{assembler_console_output}", ansi=injection_params.ansi)
+        else:
+            #emsg = result.stderr.decode().strip()
+            #log_error("Assembler command failed:\n\t" + emsg.replace("\n", "\n\t"), ansi=injection_params.ansi)
+            log_error("Assembler command failed:\n\n" + assembler_console_output, ansi=injection_params.ansi)
             return None
         
         # ld for ARM won't emit raw binaries like it will for x86-64

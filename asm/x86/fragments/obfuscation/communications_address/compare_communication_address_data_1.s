@@ -2,10 +2,9 @@
 push %r0%
 push %r1%
 push %r2%
-pushfq
+pushf
 
-
-movabsq %r0%, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
+mov %r0%, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
 mov %r1%, [%r0%]
 add %r0%, 8
 mov %r2%, [%r0%]
@@ -15,7 +14,7 @@ cmp %r1%, %r3%
 
 ccad1_[VARIABLE:OBFUSCATION_FRAGMENT_NUMBER:VARIABLE]_a:
 
-popfq
+popf
 pop %r2%
 pop %r1%
 pop %r0%

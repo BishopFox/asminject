@@ -5,21 +5,38 @@
 // if your libc has a different signature for fwrite, this code will probably fail
 // edi = pointer to buffer
 // esi = element size
-// edx = number of elements
-// ecx = destination file handle
+// eax = number of elements
+// ebx = destination file handle
 // eax will contain the number of bytes written when this function returns
+
+// the 32-bit x86 version of calling fwrite is handled like this:
+// push the arguments to the stack in reverse order:
+// * pointer to file descriptor
+// * number of elements
+// * element size
+// * pointer to read buffer
+// Call the fwrite function
+// add 0x10 to the stack pointer
+
 asminject_libc_fwrite:
 	push ebp
-	mov ebp, esp
+	mov ebp, esp	
 	sub esp, 0x10
-	push r9
-	push r14
+	push edx
 	
-	mov r9, [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS] + [RELATIVEOFFSET:^fwrite($|@@.+):RELATIVEOFFSET]
-	call r9
+	push ebx
+	push eax
+	push esi
+	push edi
+	
+	mov edx, [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
+	add edx, [RELATIVEOFFSET:^fwrite($|@@.+):RELATIVEOFFSET]
+	call edx
 
-	pop r14
-	pop r9
+	add esp, 0x10
+
+	pop edx
 	leave
 	ret
+
 // END: asminject_libc_fwrite

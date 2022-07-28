@@ -9,13 +9,14 @@ asminject_libdl_dlopen:
 	push ebp
 	mov ebp, esp
 	sub esp, 0x10
-	push r9
+	push edx
 	
 	mov esi, 2              # mode (RTLD_NOW)
-	mov r9, [BASEADDRESS:.+/libdl[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS] + [RELATIVEOFFSET:^dlopen($|@@.+):RELATIVEOFFSET]
-	call r9
+	mov edx, [BASEADDRESS:.+/libdl[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
+	add edx, [RELATIVEOFFSET:^dlopen($|@@.+):RELATIVEOFFSET]
+	call edx
 	
-	pop r9
+	pop edx
 	leave
 	ret
 // END: asminject_libdl_dlopen

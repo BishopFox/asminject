@@ -11,23 +11,33 @@ cld
 
 	mov esi, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
 	mov edi, [VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]	
+	push eax
+	push ebx
 	push ecx
 	push edx
 	call asminject_set_payload_state
 	pop edx
 	pop ecx
+	pop ebx
+	pop eax
 	
 	// wait for the script to have restored memory, then proceed
 	mov esi, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
 	mov edi, [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]
+	push eax
+	push ebx
 	push ecx
 	push edx
 	call asminject_wait_for_script_state
 	pop edx
 	pop ecx
+	pop ebx
+	pop eax
 
 execute_inner_payload:
 	
+	push eax
+	push ebx
 	push ecx
 	push edx
 	
@@ -35,12 +45,13 @@ execute_inner_payload:
 
 	pop edx
 	pop ecx
+	pop ebx
+	pop eax
 
 cleanup_and_return:
 
 	// restore fancy registers
 	push eax
-	//mov eax, read_write_address[eip]
 	mov eax, [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
 	add eax, [VARIABLE:RWR_CPU_STATE_BACKUP_OFFSET:VARIABLE]
 	fxrstor [eax]
@@ -49,20 +60,28 @@ cleanup_and_return:
 // let the script know that the payload is ready for cleanup
 	mov esi, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
 	mov edi, [VARIABLE:STATE_PAYLOAD_READY_FOR_SCRIPT_CLEANUP:VARIABLE]
+	push eax
+	push ebx
 	push ecx
 	push edx
 	call asminject_set_payload_state
 	pop edx
 	pop ecx
+	pop ebx
+	pop eax
 
 // wait for cleanup
 	mov esi, [VARIABLE:COMMUNICATION_ADDRESS:VARIABLE]
 	mov edi, [VARIABLE:STATE_SCRIPT_CLEANUP_COMPLETE:VARIABLE]
+	push eax
+	push ebx
 	push ecx
 	push edx
 	call asminject_wait_for_script_state
 	pop edx
 	pop ecx
+	pop ebx
+	pop eax
 	
 // OBFUSCATION_ALLOCATED_MEMORY_OFF
 // OBFUSCATION_COMMUNICATIONS_ADDRESS_OFF
@@ -74,34 +93,26 @@ cleanup_and_return:
 	popf
 	
 	// jump back to the original instruction address
-	//jmp old_instruction_pointer[eip]
-	//jmp old_instruction_pointer
 	push [VARIABLE:INSTRUCTION_POINTER:VARIABLE]
 	ret
 	// OBFUSCATION_ON
 
-old_instruction_pointer:
-	.word [VARIABLE:INSTRUCTION_POINTER:VARIABLE]
-	.balign 4
-
 [VARIABLE:SHELLCODE_DATA:VARIABLE]
 
 read_write_address:
-	.word [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
+	.long [VARIABLE:READ_WRITE_ADDRESS:VARIABLE]
 	.balign 4
 
 existing_stack_backup_address:
-	.word [VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]
+	.long [VARIABLE:EXISTING_STACK_BACKUP_ADDRESS:VARIABLE]
 	.balign 4
 
 arbitrary_read_write_data_address:
-	.word [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
+	.long [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	.balign 4
 
 read_write_address_end:
-	.word [VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]
+	.long [VARIABLE:READ_WRITE_ADDRESS_END:VARIABLE]
 	.balign 4
-
-.text
 
 [FRAGMENTS]

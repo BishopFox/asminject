@@ -145,7 +145,7 @@ injected python code
 
 ## Differences from dlinject.py
 
-`dlinject.py` was written specifically to cause the target process to load a shared library from disk. It does this by injecting code into the target process that calls the `_dl_open` function in the `ld` shared library. This works on some versions of some Linux distributions, but [there is an open issue for the project because that symbol is not consistently exported by the library](https://github.com/DavidBuchanan314/dlinject/issues/8). `asminject.py` extends that basic concept significantly by injecting arbitrary code into the target process, and includes templates to perform a variety of actions (execute arbitrary Python, PHP, or Ruby code inside an existing process for one of those languages, copying files using syscalls, and so on). It also includes a template to load a shared library into the target process using what I believe is a more reliable method: calling the `dlopen` method in `libdl`.
+`dlinject.py` was written specifically to cause the target process to load a shared library from disk. It does this by injecting code into the target process that calls the `_dl_open` function in the `ld` shared library. This works on some versions of some Linux distributions, but [there is an open issue for the project because that symbol is not consistently exported by the library](https://github.com/DavidBuchanan314/dlinject/issues/8). `asminject.py` extends that basic concept significantly by injecting arbitrary code into the target process, and includes templates to perform a variety of actions (execute arbitrary Python, PHP, or Ruby code inside an existing process for one of those languages, copying files using syscalls, and so on). It also includes templates that emulate the original `dlinject.py` and load a shared library into the target process using several different methods, and this is discussed in more detail in <a href="docs/examples-shared_library_injection.md">the shared library injection examples document</a>.
 
 `dlinject.py` writes the second stage code to disk, and the first stage payload reads that file into memory. `asminject.py` sets up a two-way communication channel entirely in process memory, so the target process does not load any potentially suspicious code from the filesystem.
 
@@ -215,7 +215,28 @@ The `practice` directory of this repository includes basic looping code that out
 
 ## Examples
 
-This section was getting too lengthy for the main `README.md`, so it's been moved into the following files:
+The basic syntax for calling `asminject.py` is:
+
+```
+# python3 ./asminject.py <target_process_id> <payload> \
+  --arch [x86-64|x86|arm32] --relative-offsets-from-binaries --stop-method "slow" \
+  --var <payload_variable_1_name> <payload_variable_1_value> \
+  # ... \
+  --var <payload_variable_n_name> <payload_variable_n_value>
+```
+
+In most cases, any of the payloads used in the examples will run on any of the supported architectures.
+
+* <a href="docs/examples-copying-files.md">Copying files</a> - simple payloads that cause an existing process to copy files for you
+* <a href="docs/examples-shellcode_injection.md">Shellcode/stager injection</a>
+* <a href="docs/examples-shared_library_injection.md">Shared library injection</a>
+* <a href="docs/examples-sliver.md">Sliver examples</a> using [Bishop Fox's Sliver C2 framework](https://github.com/BishopFox/sliver)
+
+### Injecting new script code into an existing process that uses the same interpreter
+
+* <a href="docs/examples-python.md">Python code injection</a>
+* <a href="docs/examples-php.md">PHP code injection</a>
+* <a href="docs/examples-ruby.md">Ruby code injection</a>
 
 ### Architecture-specific
 
@@ -228,17 +249,19 @@ These examples will walk you through a variety of `asminject.py` invocations for
 
 These examples cover very specific uses of `asminject.py` for different languages that the code for target process may be written in or interpreted by. For example, writing variables and object data to disk. The specific commands are only provided for one architecture, but should work for others as long as you apply the differences discussed in the architecture-specific examples.
 
-* <a href="docs/examples-ruby.md">Ruby examples</a>
-* <a href="docs/examples-python.md">Python examples</a>
-* <a href="docs/examples-php.md">PHP examples</a>
+
 
 ### Other specific example categories
 
-* <a href="docs/examples-sliver.md">Sliver examples</a> using [Bishop Fox's Sliver C2 framework](https://github.com/BishopFox/sliver)
+
 
 ## Specialized options
 
 This section was getting too lengthy for the main `README.md`, so it's been moved into a separate <a href="docs/specialized_options.md">specialized options document</a>.
+
+## But what about Yama's ptrace_scope restrictions?
+
+If you are an authorized administrator of a Linux system where someone has accidentally set `/proc/sys/kernel/yama/ptrace_scope` to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
 ## Future goals
 
@@ -247,14 +270,26 @@ This section was getting too lengthy for the main `README.md`, so it's been move
 * If feasible, inject Java code into Java processes via the JNI.
 * Add alternative DLL injection methods for various scenarios.
 * Add options to hook a specific method (or address, etc.) as an alternative to the current "hook the next syscall" technique that was inherited from `dlinject.py`.
+* Provide a way to use the tool for quasi-debugging, e.g. hook a function and output the arguments passed to it every time it's called.
+  * It might make more sense to find a way to inject Frida using `asminject.py` - more research is required.
+* Develop interactive payloads, e.g. instead of injecting a particular line of Python script code into a Python process, `asminject.py` could prompt the operator for a line of code to inject, inject it, return the resulting output, and then prompt the operator for another line of code.
+  * This might also make more sense to handle using Frida, if Frida can be injected into a process using `asminject.py` in a way that avoids Frida's need to invoke the debugger interface temporarily.
 * Add more elaborate obfuscation fragments.
-
-## But what about Yama's ptrace_scope restrictions?
-
-If you are an authorized administrator of a Linux system where someone has accidentally set `/proc/sys/kernel/yama/ptrace_scope` to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
 ## Version history
 
+### 0.35 (2022-07-28)
+
+* Finished porting the following payloads and related fragments to x86 architecture, bringing it to parity with x86-64 and ARM32:
+  * `dlinject.s`
+  * `dlinject_threaded.s`
+  * `execute_precompiled.s`
+  * `execute_precompiled_threaded.s`
+* `dlinject.s` and `dlinject-threaded.s` for all three architectures will now find the `dlopen` function whether it's exported by `libdl` (as before) or `libc` (as it is on some other Linux distributions).
+  * Added a new, experimental `dlinject-ld.s` payload, currently only for 32-bit x86, that calls the `_dl_open` function in the `ld` library instead of `dlopen` in `libdl` or `libc`, as this may be useful in some cases.
+* `execute_python_code.s` should now work whether the Linux distribution places the necessary functions in a separate `libpython` or embeds them directly into the `python` binary, instead of requiring a separate `execute_python_code-libpython.s`.
+* All of the payloads for all architectures that depend on `libpthread` functions should now find them whether they're in a separate `libpthread` library or included in `libc`.
+  
 ### 0.34 (2022-07-27)
 
 * Finished porting the following payloads and related fragments to x86 architecture:

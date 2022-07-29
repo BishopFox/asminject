@@ -1,9 +1,9 @@
 // BEGIN: XOR register 1 with register 2
-pushfq
+pushf
 // OBFUSCATION_OFF
 push %r0%
 xor %r0%, %r1%
 pop %r0%
 // OBFUSCATION_ON
-popfq
+popf
 // END: XOR register 1 with register 2

@@ -36,7 +36,7 @@ copy_code_to_rw_memory:
 	b load_ensure_offset
 
 base_address:
-	.word [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS]
+	.word [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS]
 	.balign 4
 
 // BEGIN: call PyGILState_Ensure

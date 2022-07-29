@@ -27,7 +27,7 @@ execute_python_code_main:
 	xor rax, rax
 	xor rdi, rdi
 	xor rsi, rsi
-	mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
 	call rbx
 	mov rbx, arbitrary_read_write_data_address[rip]
 	mov [rbx], rax
@@ -41,7 +41,7 @@ execute_python_code_main:
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 32
 	xor rcx, rcx
-	mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
 	call rbx
 	pop rcx
 	//pop r14
@@ -54,7 +54,7 @@ execute_python_code_main:
 	//mov rax, [rbx]
 	//mov rdi, rax
 	xor rsi, rsi
-	mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Release:RELATIVEOFFSET]
+	mov rbx, [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Release:RELATIVEOFFSET]
 	call rbx
 	//pop r14
 	// END: call PyGILState_Release(handle)

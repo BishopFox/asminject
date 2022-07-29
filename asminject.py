@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.34
-Ben Lincoln, Bishop Fox, 2022-07-27
+v0.35
+Ben Lincoln, Bishop Fox, 2022-07-28
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -1855,7 +1855,10 @@ def asminject(injection_params):
                         precompiled_shellcode_as_hex = f"{precompiled_shellcode_as_hex}, {hex(precompiled_payload[byte_num])}"
                 
                 shellcode_as_inline_bytes = f"{injection_params.precompiled_shellcode_label}:\n\t.byte {precompiled_shellcode_as_hex}\n\n"
-                shellcode_data_section = shellcode_data_section.replace(injection_params.inline_shellcode_placeholder, shellcode_as_inline_bytes)
+                if shellcode_data_section == "":
+                    stage2_source_code = stage2_source_code.replace(injection_params.inline_shellcode_placeholder, shellcode_as_inline_bytes)
+                else:
+                    shellcode_data_section = shellcode_data_section.replace(injection_params.inline_shellcode_placeholder, shellcode_as_inline_bytes)
                     
         except Exception as e:
             log_error(f"Couldn't read and embed the precompiled shellcode file '{injection_params.precompiled_shellcode}': {e}", ansi=injection_params.ansi)

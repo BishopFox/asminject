@@ -2,12 +2,12 @@
 # Except it uses the publicly-exported dlopen() from libdl
 # instead of the private _dl_open function that some versions of ld
 # sort of exported
-[FRAGMENT:asminject_libdl_dlopen.s:FRAGMENT]
+[FRAGMENT:asminject_libc_or_libdl_dlopen.s:FRAGMENT]
 
 	// BEGIN: call dlopen() against the specified library
 	push r14
 	lea rdi, library_path[rip]
-    call asminject_libdl_dlopen
+    call asminject_libc_or_libdl_dlopen
 	pop r14
 	// END: call dlopen()
 

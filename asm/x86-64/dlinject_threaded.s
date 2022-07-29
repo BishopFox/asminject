@@ -1,7 +1,7 @@
 # Threaded version of dlinject.s
 # Same caveats as execute_precompiled_threaded.s
 
-[FRAGMENT:asminject_libdl_dlopen.s:FRAGMENT]
+[FRAGMENT:asminject_libc_or_libdl_dlopen.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
@@ -12,7 +12,7 @@ load_library:
 	// BEGIN: call dlopen() against the specified library
 	push r14
 	lea rdi, library_path[rip]
-	call asminject_libdl_dlopen
+	call asminject_libc_or_libdl_dlopen
 	pop r14
 	mov rdi, 0
 	call asminject_libpthread_pthread_exit

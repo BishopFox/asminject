@@ -6,15 +6,28 @@
 // edi = thread structure                               
 // esi = return value pointer (generally 0 is fine)
 
+// the 32-bit x86 version of calling pthread_join is handled like this:
+// subtract 0x8 from the stack pointer
+// push the arguments to the stack in reverse order:
+// * return value
+// * address of the thread ID value
+// Call the pthread_join function
+
 asminject_libpthread_pthread_join:
 	push ebp
 	mov ebp, esp
 	sub esp, 0x10
 	push edx
 	
-	mov edx, [BASEADDRESS:.+/libpthread[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
+	sub esp, 0x8
+	push esi
+	push edi
+	
+	mov edx, [BASEADDRESS:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	add edx, [RELATIVEOFFSET:^pthread_join($|@@.+):RELATIVEOFFSET]
 	call edx
+	
+	add esp, 0x10
 	
 	pop edx
 	leave

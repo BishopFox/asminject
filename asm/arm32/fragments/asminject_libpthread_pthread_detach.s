@@ -17,7 +17,7 @@ asminject_libpthread_pthread_detach:
 	b asminject_libpthread_pthread_detach_load_pthread_detach_offset
 
 asminject_libpthread_pthread_detach_base_address:
-	.word [BASEADDRESS:.+/libpthread[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
+	.word [BASEADDRESS:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	.balign 4
 	
 // Load the relative offset of pthread_detach into r9

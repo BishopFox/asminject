@@ -18,9 +18,10 @@ asminject_nanosleep:
 	// offset or allocate memory
 	push esi
 	push edi
-		
-	mov ebx, esp	# pointer to the two values just pushed onto the stack
-	mov ecx, esp	# pointer to the two values just pushed onto the stack
+	
+	// pointer to the two values just pushed onto the stack
+	mov ebx, esp
+	mov ecx, esp
 	xor esi, esi
 	
 	// call sys_nanosleep

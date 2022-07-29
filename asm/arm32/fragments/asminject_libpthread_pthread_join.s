@@ -18,7 +18,7 @@ asminject_libpthread_pthread_join:
 	b asminject_libpthread_pthread_join_load_pthread_join_offset
 
 asminject_libpthread_pthread_join_base_address:
-	.word [BASEADDRESS:.+/libpthread[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
+	.word [BASEADDRESS:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	.balign 4
 	
 // Load the relative offset of pthread_join into r9

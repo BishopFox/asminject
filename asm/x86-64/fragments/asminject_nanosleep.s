@@ -16,7 +16,8 @@ asminject_nanosleep:
 	push rsi
 	push rdi
 		
-	mov rdi, rsp	# pointer to the two values just pushed onto the stack
+	// pointer to the two values just pushed onto the stack
+	mov rdi, rsp
 	// clearing rsi is important
 	xor rsi, rsi
 	

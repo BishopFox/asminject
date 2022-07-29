@@ -5,17 +5,25 @@
 // if your libpthread has a different signature for pthread_exit, this code will probably fail
 // edi = return value (generally 0 is fine)
 
+// the 32-bit x86 version of calling pthread_exit is handled like this:
+// subtract 0xc from the stack pointer
+// push the arguments to the stack in reverse order:
+// * return value
+// Call the pthread_exit function
+
 asminject_libpthread_pthread_exit:
 	push ebp
 	mov ebp, esp
 	sub esp, 0x10
-	push edx
 	
-	mov edx, [BASEADDRESS:.+/libpthread[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
+	sub esp, 0xc
+	
+	push edi
+	
+	mov edx, [BASEADDRESS:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	add edx, [RELATIVEOFFSET:^pthread_exit($|@@.+):RELATIVEOFFSET]
 	call edx
 	
-	pop edx
-	leave
-	ret
+	//leave
+	//ret
 // END: asminject_libpthread_pthread_exit

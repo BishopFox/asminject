@@ -43,12 +43,12 @@ execute_inner_payload:
 	
 	[VARIABLE:SHELLCODE_SOURCE:VARIABLE]
 
+cleanup_and_return:
+
 	pop edx
 	pop ecx
 	pop ebx
 	pop eax
-
-cleanup_and_return:
 
 	// restore fancy registers
 	push eax

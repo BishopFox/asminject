@@ -1,7 +1,7 @@
 # Threaded version of dlinject.s
 # Same caveats as dlinject_threaded.s
 
-[FRAGMENT:asminject_libdl_dlopen.s:FRAGMENT]
+[FRAGMENT:asminject_libc_or_libdl_dlopen.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_create.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
@@ -19,7 +19,7 @@ library_path:
 call_dlopen:
 	push {r1}
 	mov r1, #0x2@				@ mode (RTLD_NOW)
-	bl asminject_libdl_dlopen
+	bl asminject_libc_or_libdl_dlopen
 	pop {r1}
 	mov r0, #0x0	@ pthread_exit return value NULL
 	bl asminject_libpthread_pthread_exit

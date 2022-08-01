@@ -181,7 +181,7 @@ The basic syntax for calling `asminject.py` is:
 
 In most cases, any of the payloads used in the examples will run on any of the supported architectures.
 
-* <a href="docs/examples-basic.md">Basic examples/a> - simple payloads that cause an existing process to copy files for you
+* <a href="docs/examples-basic.md">Basic examples</a> - simple payloads that cause an existing process to copy files for you
 * <a href="docs/examples-python.md">Python code injection</a>
 * <a href="docs/examples-php.md">PHP code injection</a>
 * <a href="docs/examples-ruby.md">Ruby code injection</a>

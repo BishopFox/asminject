@@ -3,9 +3,9 @@
 * [Background](#background)
 * [Important](#important)
 * [dlopen with multithreading](#dlopen-with-multithreading)
-* [_dl_open with multithreading\](#dl-open-with-multithreading)
+* [_dl_open with multithreading](#dl-open-with-multithreading)
 * [dlopen without multithreading](#dlopen-without-multithreading)
-* [_dl_open without multithreading\](#dl-open-without-multithreading)
+* [_dl_open without multithreading](#dl-open-without-multithreading)
 
 ## Background
 

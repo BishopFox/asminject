@@ -20,7 +20,7 @@ $ sudo python3 practice/python_loop.py
 2022-05-12T19:46:56.264897 - Loop count 2
 ```
 
-In a separate terminal, locate the process and inject some arbitrary Python code into it. Note the use of the `--non-pic-binary` option discussed in <a href="docs/specialized_options.md#specifying-non-pic-code">specialized options</a>, as this is required for Python 3.9 specifically. For other Python versions, you may or may not need to exclude the option.
+In a separate terminal, locate the process and inject some arbitrary Python code into it. Note the use of the `--non-pic-binary` option discussed in <a href="docs/specialized_options.md#specifying-non-pic-code">specialized options</a>, as this is required for Python 3.9 specifically on most(?) x86-64 Linux distributions. For other Python versions, you may or may not need to exclude the option.
 
 This payload requires one variable: `pythoncode`, which should contain the Python script code to execute in the existing Python process.
 

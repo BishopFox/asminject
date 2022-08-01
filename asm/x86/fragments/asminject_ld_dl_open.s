@@ -56,7 +56,8 @@ asminject_ld_dl_open_call_dl_open:
 	mov edx, [BASEADDRESS:.+/ld(-linux|)[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
 	add edx, [RELATIVEOFFSET:^_dl_open($|@@.+):RELATIVEOFFSET]
 	push ecx
-	mov eax, 0x2 (RTLD_NOW)
+	// (RTLD_NOW)
+	mov eax, 0x2
 	// when observing a real call in gdb, the mode was OR'd with 0x80000000
 	//or eax, 0x80000000
 	// for debugging, the exact value observed in gdb - decodes to RTLD_LAZY | RTLD_DEEPBIND | RTLD_GLOBAL | 0x80000000

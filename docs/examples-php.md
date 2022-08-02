@@ -26,9 +26,19 @@ In a separate window, find the target process, and inject the code:
 root     2037629  [...] php practice/php_loop.php
 
 # python3 ./asminject.py 2037629 execute_php_code.s \
-   --relative-offsets-from-binaries --stop-method "slow" \
+   --relative-offsets-from-binaries \
    --var phpcode "echo \\\"Injected PHP code\\\n\\\";" \
    --var phpname PHP
+```
+
+Note that on ARM32 Linux, you may need to flag the `php` binary as non-PIC code, e.g.:
+
+```
+# python3 ./asminject.py 483 execute_php_code.s \
+   --relative-offsets-from-binaries \
+   --var phpcode "echo \\\"Injected PHP code\\\n\\\";" \
+   --var phpname PHP
+   --non-pic-binary 'bin/php'
 ```
 
 In the first window, note that the loop is interrupted by the injected code, e.g.:
@@ -51,8 +61,8 @@ var_dump(get_defined_vars());
 e.g.
 
 ```
-python3 ./asminject.py 249986 execute_php_code.s --arch x86-64 \
-   --relative-offsets-from-binaries --stop-method "slow" \
+python3 ./asminject.py 249986 execute_php_code.s \
+   --relative-offsets-from-binaries \
    --var phpcode "var_dump(get_defined_vars());" \
    --var phpname PHP
 ```

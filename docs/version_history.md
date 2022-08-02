@@ -1,11 +1,26 @@
 ## asminject.py - Version history
 
+### 0.37 (2022-08-02)
+
+* Re-engineered relative offset model to tie function names to specific binary paths
+  * This was necessary to fix some issues with the more flexible regular expressions that reference some functions
+  * It doesn't change the operator experience, but does affect the assembly code for all architectures
+    * Old-style library function reference: `mov r9, [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS] + [RELATIVEOFFSET:^fopen($|@@.+):RELATIVEOFFSET]`
+	* New-style library function reference: `mov r9, [FUNCTION_ADDRESS:^printf($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]`
+	* If you've written custom payloads that reference functions in other binaries, you'll need to convert them to the newer syntax
+	* Payloads for x86 and ARM32 that reference library functions are generally much shorter now
+* Bug fixes to 32-bit x86 obfuscation code
+* Fixed a bug in the ARM32 library injection fragment that made it unreliable
+* Fixed incomplete ARM32 `dlinject-threaded.s` payload that was broken
+* Added basic processor architecture autodetection feature
+* Documentation updates
+
 ### 0.36 (2022-08-01)
 
 * Bug fixes for recent changes
 * Better documentation
-* Added a threaded version (`dlinject-ld-threaded.s`) of the experimental 32-bit x86 payload `dlinject-ld.s` introduced in version 0.35.
-* Standardized payload naming conventions.
+* Added a threaded version (`dlinject-ld-threaded.s`) of the experimental 32-bit x86 payload `dlinject-ld.s` introduced in version 0.35
+* Standardized payload naming conventions
 
 ### 0.35 (2022-07-28)
 
@@ -14,10 +29,10 @@
   * `dlinject-threaded.s`
   * `execute_precompiled.s`
   * `execute_precompiled-threaded.s`
-* `dlinject.s` and `dlinject-threaded.s` for all three architectures will now find the `dlopen` function whether it's exported by `libdl` (as before) or `libc` (as it is on some other Linux distributions).
-* Added a new, experimental `dlinject-ld.s` payload, currently only for 32-bit x86, that calls the `_dl_open` function in the `ld` library instead of `dlopen` in `libdl` or `libc`, as this may be useful in some cases.
-* `execute_python_code.s` should now work whether the Linux distribution places the necessary functions in a separate `libpython` or embeds them directly into the `python` binary, instead of requiring a separate `execute_python_code-libpython.s`.
-* All of the payloads for all architectures that depend on `libpthread` functions should now find them whether they're in a separate `libpthread` library or included in `libc`.
+* `dlinject.s` and `dlinject-threaded.s` for all three architectures will now find the `dlopen` function whether it's exported by `libdl` (as before) or `libc` (as it is on some other Linux distributions)
+* Added a new, experimental `dlinject-ld.s` payload, currently only for 32-bit x86, that calls the `_dl_open` function in the `ld` library instead of `dlopen` in `libdl` or `libc`, as this may be useful in some cases
+* `execute_python_code.s` should now work whether the Linux distribution places the necessary functions in a separate `libpython` or embeds them directly into the `python` binary, instead of requiring a separate `execute_python_code-libpython.s`
+* All of the payloads for all architectures that depend on `libpthread` functions should now find them whether they're in a separate `libpthread` library or included in `libc`
   
 ### 0.34 (2022-07-27)
 

@@ -32,7 +32,7 @@ In a separate window, find the target process, and inject the code:
 root     2037714  [...] ruby practice/ruby_loop.rb
 
 # python3 ./asminject.py 2037714 execute_ruby_code.s \
-   --relative-offsets-from-binaries --stop-method "slow" \
+   --relative-offsets-from-binaries \
    --var rubycode "puts(\\\"Injected Ruby code\\\")"
 ```
 
@@ -55,9 +55,8 @@ global_variables.sort.each do |name|; puts "#{name}: #{eval "#{name}.inspect"}
 e.g.
 
 ```
-# python3 ./asminject.py 84955 execute_ruby_code.s --arch x86-64 \
+# python3 ./asminject.py 84955 execute_ruby_code.s \
    --relative-offsets-from-binaries \
-   --stop-method "slow" \
    --var rubycode "global_variables.sort.each do |name|; puts \\\"#{name}: #{eval \\\"#{name}.inspect\\\"}\\\"; end"
 ```
 
@@ -88,7 +87,7 @@ $obj_dump_counter = 0; ObjectSpace.each_object{|e| File.open("/tmp/rubydump-#{$o
 e.g.
 
 ```
-python3 ./asminject.py 163017 execute_ruby_code.s --arch x86-64 \
-   --relative-offsets-from-binaries --stop-method "slow" \
+python3 ./asminject.py 163017 execute_ruby_code.s \
+   --relative-offsets-from-binaries \
    --var rubycode '$obj_dump_counter = 0; ObjectSpace.each_object{|e| File.open(\"/tmp/rubydump-#{$obj_dump_counter}.dat\", \"wb\") { |file| file.write(e); $obj_dump_counter += 1; }}'
 ```

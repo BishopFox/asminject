@@ -27,17 +27,18 @@ This payload requires two variables: `sourcefile` and `destfile`.
 root     2036577  [...] python3 practice/python_loop.py
 
 # python3 ./asminject.py 2036577 copy_file_using_syscalls.s \
-   --var sourcefile "/etc/shadow" \
+   --relative-offsets-from-binaries \
+   --var sourcefile "/etc/passwd" \
    --var destfile "/tmp/bishopfox.txt"
 
 ...omitted for brevity...
 
-# cat /tmp/shadow_copied_using_syscalls.txt
+# cat /tmp/bishopfox.txt
 
-root:!:18704:0:99999:7:::
-daemon:*:18704:0:99999:7:::
-bin:*:18704:0:99999:7:::
-sys:*:18704:0:99999:7:::
+root:x:0:0:root:/root:/usr/bin/zsh
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+sys:x:3:3:sys:/dev:/usr/sbin/nologin
 ...omitted for brevity...
 ```
 
@@ -49,8 +50,9 @@ This payload requires relative offsets for the `libc` shared library used by the
 
 ```
 # python3 ./asminject.py 1876570 copy_file_using_libc.s \
-   --relative-offsets-from-binaries --stop-method "slow" \
-   --var sourcefile "/etc/passwd" --var destfile "/var/tmp/copy_test.txt"
+   --relative-offsets-from-binaries \
+   --var sourcefile "/etc/passwd" \
+   --var destfile "/tmp/bishopfox.txt"
 ```
 
 ## Print text to standard output
@@ -60,8 +62,8 @@ The `printf.s` payload can be useful for debugging injecting into a particular t
 This payload requires relative offsets for the `libc` shared library used by the target process.
 
 ```
-python3 ./asminject.py 2258 printf.s --arch arm32 \
-	--relative-offsets-from-binaries --stop-method "slow" \ 
-	--var formatstring "DEBUG: '%s'" \
-	--var message "12345"
+python3 ./asminject.py 2258 printf.s \
+   --relative-offsets-from-binaries \
+   --var formatstring "DEBUG: '%s'" \
+   --var message "12345"
 ```

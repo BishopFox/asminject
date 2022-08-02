@@ -1,14 +1,18 @@
 # asminject.py - Specialized Options
 
+* [Multi-architecture support](#multi-architecture-support)
 * [Process suspension methods](#process-suspension-methods)
 * [Specifying non-PIC code](#specifying-non-pic-code)
-* [Multi-architecture support](#multi-architecture-support)
 * [Specifying memory allocation size](#specifying-memory-allocation-size)
 * [Memory reuse](#memory-reuse)
 * [Anti-forensics](#anti-forensics)
 * [Restoring more of the target process's memory](#restoring-more-of-the-target-processs-memory)
 * [Payload obfuscation](#payload-obfuscation)
 * [Debugging/troubleshooting options](#debuggingtroubleshooting-options)
+
+## Multi-architecture support
+
+`asminject.py` currently supports x86-64 (64-bit AMD/Intel), x86 (32-bit Intel/AMD), and ARM32 payloads. As of version 0.37, it will attempt to autodetect the architecture. If the automatic detection fails, or you want to override it for some reason, you can explicitly specify the architecture with the `--arch` option, e.g. `--arch arm32`.
 
 ## Process suspension methods
 
@@ -23,11 +27,12 @@
 
 `asminject.py` adds a fourth option: increasing the priority of its own process and decreasing the priority of the target process. This "slow" mode (the default) generally allows it to act like [Quicksilver in _X-Men: Days of Future Past_](https://youtu.be/T9GFyZ5LREQ?t=32), making its changes to the target process at lightning speed. The target process is still running, but so slowly relative to `asminject.py` that it may as well be suspended.
 
+The `slow` method has worked so well in testing that it's the default in current versions of `asminject.py`.
+
 ```
 # python3 ./asminject.py 1470158 execute_python_code.s \
     --relative-offsets-from-binaries \
     --var pythoncode "print('OK');" \
-	--stop-method "slow"
 
 ...omitted for brevity...
 [*] Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...
@@ -117,7 +122,7 @@ If you want to be sure, run a copy of the target in `gdb`, and check whether the
 ```
 # cat /proc/14629/maps
 
-00010000-0028f000 r-xp 00000000 b3:07 523346     /usr/bin/python2.7
+00010000-0028f000 r-xp [...] /usr/bin/python2.7
 ...omitted for brevity...
 
 grep PyGILState_Ensure relative_offsets-python2.7.txt
@@ -158,20 +163,15 @@ Dump of assembler code from 0x18b428 to 0x1b8450:
 
 In this case (Python 2.7 on ARM32 Linux), the binary was *not* position-independent, and using `asminject.py` successfully required adding the option `--non-pic-binary "/usr/bin/python.*"`.
 
-## Multi-architecture support
-
-`asminject.py` currently supports both x86-64 and ARM32 payloads. Add the `--arch arm32` option to use ARM32. The examples for that architecture in the documentation were executed on a Raspberry Pi.
-
 ## Specifying memory allocation size
 
 By default, `asminject.py` selects random amounts of memory to allocate for its read/execute and read/write blocks. These blocks should be more than large enough for all of the payloads included with the tool. If you are using custom payloads that require more space, or wish to control the values for reproducibility, the `--use-read-execute-size` `--use-read-write-size` options can be used to select fixed sizes. For example:
 
 ```
-# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 \
+# python3 ./asminject.py 2684562 execute_python_code.s \
     --relative-offsets-from-binaries \
-	--non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" \
+	--non-pic-binary "/usr/bin/python3\\.[0-9]+" \
 	--var pythoncode "print('injected python code');" \
-	--debug \
 	--do-not-deallocate \
 	--use-read-execute-size 0x100000 \
 	--use-read-write-size 0x100000
@@ -186,9 +186,9 @@ When executed without any memory-related options, the first stage of `asminject.
 If you add the `--do-not-deallocate` option when calling `asminject.py`, it will leave both blocks allocated in the target process when it exits, and indicate how to reuse them the next time you inject code into the same process, e.g.:
 
 ```
-# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 \
+# python3 ./asminject.py 2684562 execute_python_code.s \
     --relative-offsets-from-binaries \
-	--non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" \
+	--non-pic-binary "/usr/bin/python3\\.[0-9]+" \
 	--var pythoncode "print('injected python code');" \
 	--do-not-deallocate
 
@@ -204,9 +204,9 @@ If you add the `--do-not-deallocate` option when calling `asminject.py`, it will
 i.e. to inject the same code into the same process again:
 
 ```
-# python3 ./asminject.py 2684562 execute_python_code.s --arch x86-64 \
+# python3 ./asminject.py 2684562 execute_python_code.s \
     --relative-offsets-from-binaries \
-	--non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" \
+	--non-pic-binary "/usr/bin/python3\\.[0-9]+" \
 	--var pythoncode "print('injected python code');" \
 	--do-not-deallocate \
 	--use-read-execute-address 0x7ffff7faf000 \
@@ -222,8 +222,8 @@ Security software or a very determined investigator could theoretically look for
 By default, this feature will write null bytes (`0x00`), but any integer that can be represented using a number of bytes equal to the word length of the CPU can be used by including the ``--clear-payload-memory-value`` option. For example:
 
 ~~~
-# python3 ./asminject.py 1494 printf_with_copy.s --arch arm32 \
-    --relative-offsets relative_offsets-libc-2.28.txt --stop-method "slow" \
+# python3 ./asminject.py 1494 printf_with_copy.s \
+    --relative-offsets relative_offsets-libc-2.28.txt \
 	--var message "ABCDEFGHIJKLMNOPQRSTUVWXYZ" --debug \
 	--clear-payload-memory \
 	--clear-payload-memory-value 0x00c651e0 \
@@ -288,9 +288,9 @@ Because obfuscation is applied in a truly random, non-deterministic manner, it c
 If the `--write-assembly-source-to-disk` and `--preserve-temp-files` options are specified, several variations of the source code for each payload are written to disk. For purposes of this section, the "post-obfuscation, pre-variable-replacement" variation should be used. E.g.:
 
 ```
-# python3 ./asminject.py 21637 execute_python_code.s --arch arm32 \
+# python3 ./asminject.py 21637 execute_python_code.s \
     --relative-offsets-from-binaries \
-	--non-pic-binary "/usr/bin/python.*" --stop-method "slow" \
+	--non-pic-binary "/usr/bin/python.*" \
 	--var pythoncode "print('injected python code');" --debug \
 	--preserve-temp-files --write-assembly-source-to-disk \
 	--obfuscate --obfuscation-iterations 4
@@ -303,9 +303,9 @@ If the `--write-assembly-source-to-disk` and `--preserve-temp-files` options are
 To reuse the source code for debugging purposes, add the `--use-stage-1-source` and/or `--use-stage-2-source` options when calling `asminject.py` again, e.g.:
 
 ```
-# python3 ./asminject.py 21637 execute_python_code.s --arch arm32 \
+# python3 ./asminject.py 21637 execute_python_code.s \
     --relative-offsets-from-binaries \
-	--non-pic-binary "/usr/bin/python.*" --stop-method "slow" \
+	--non-pic-binary "/usr/bin/python.*" \
 	--var pythoncode "print('injected python code');" \
 	--debug \
 	--use-stage-2-source '/tmp/20220615185024245932478624/assembly/tmpnbg5ju1h-stage_2-post-obfuscation-pre-replacement.s'
@@ -323,5 +323,4 @@ To reuse the source code for debugging purposes, add the `--use-stage-1-source` 
 `--pause-before-memory-restore` pauses execution after the payload has indicated it is ready for target process memory to be restored, but before that restoration takes place.
 
 `--pause-after-memory-restore` pauses execution after target process memory has been restored, but before stage two restores CPU state and jumps back to the original instruction pointer.
-
 

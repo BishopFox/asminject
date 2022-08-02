@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.36
-Ben Lincoln, Bishop Fox, 2022-08-01
+v0.37
+Ben Lincoln, Bishop Fox, 2022-08-02
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -25,6 +25,7 @@ import inspect
 import json
 import math
 import os
+import platform
 import psutil
 import random
 import re
@@ -593,7 +594,10 @@ class asminject_parameters:
             #self.state_backup_restore_instruction_list = [ ("push eax", "pop eax"), ("push ebx", "pop ebx"), ("push ecx", "pop ecx"), ("push edx", "pop edx"), ("push ebp", "pop ebp"), ("push esi", "pop esi"), ("push edi", "pop edi"), ("push cs", "pop cs"), ("push ds", "pop ds"), ("push es", "pop es"), ("push fs", "pop fs"), ("push gs", "pop gs"), ("push ss", "pop ss") ]
             self.state_backup_restore_instruction_list = [ ("push eax", "pop eax"), ("push ebx", "pop ebx"), ("push ecx", "pop ecx"), ("push edx", "pop edx"), ("push ebp", "pop ebp"), ("push esi", "pop esi"), ("push edi", "pop edi")]
             self.flag_setting_instructions = [ "cmp" ]
-            self.no_obfuscation_after_instructions = [ "leave" ]
+            # x86 code uses a lot of these kinds of logic:
+            # "set a pointer to the address of the data after this jmp"
+            # ...which involves an uninterrupted sequence of call => pop => add => jmp
+            self.no_obfuscation_after_instructions = [ "add", "call", "jmp", "pop", "leave" ]
         if self.architecture == "arm32":
             self.register_size = 4
             self.register_size_format_string = 'L'
@@ -876,6 +880,7 @@ class memory_map_entry:
         self.path = None
         self.position_independent_code = False
         self.backup_path = None
+        self.symbol_list = None
     
     def set_permissions_from_string(self, permission_string):
         self.permissions = memory_map_permissions.from_permission_string(permission_string)
@@ -1127,7 +1132,7 @@ def next_line_can_be_obfuscated(injection_params, lines, current_line_number):
     if current_line_trimmed[-1:] == ":":
         return False
       # Do not obfuscate lines immediately after comments - just after actual code
-    if current_line_trimmed[-1:] == "//" or current_line_trimmed[-1:] == "#":
+    if current_line_trimmed[0:2] == "//" or current_line_trimmed[0:1] == "#":
         return False
         
     # Do not obfuscate lines ending with "[pc]", because the next real line after that 
@@ -1330,59 +1335,115 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
         if injection_params.enable_debugging_output:
             log(f"Replacement key: '{rname}', value '{replacements[rname]}'", ansi=injection_params.ansi)  
     
-    # Replace base address regex matches
-    lname_placeholders = []
-    lname_placeholders_matches = re.finditer(r'(\[BASEADDRESS:)(.*?)(:BASEADDRESS\])', formatted_source)
-    placeholder_match_binary_paths = []
-    for match in lname_placeholders_matches:
-        placeholder_regex = match.group(2)
-        if placeholder_regex not in lname_placeholders:
+    # Replace function address placeholders
+    # e.g. [FUNCTION_ADDRESS:^printf($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+    function_address_placeholders = []
+    function_address_placeholder_matches = re.finditer(r'(\[FUNCTION_ADDRESS:)(.*?)(:FUNCTION_ADDRESS\])', formatted_source)
+    for match in function_address_placeholder_matches:
+        function_and_library = match.group(2)
+        if function_and_library not in function_address_placeholders:
             if injection_params.enable_debugging_output:
-                log(f"Found library base address regex placeholder '{placeholder_regex}' in assembly code", ansi=injection_params.ansi)
-            lname_placeholders.append(placeholder_regex)
-    for lname_regex in lname_placeholders:
-        found_library_match = False
+                log(f"Found function address placeholder '{function_and_library}' in assembly code", ansi=injection_params.ansi)
+            function_address_placeholders.append(function_and_library)
+    for func_addr_placeholder in function_address_placeholders:
+        found_func_addr_match = False
+        func_addr_placeholder_split = func_addr_placeholder.split(":IN_BINARY:")
+        func_addr_function_regex = func_addr_placeholder_split[0]
+        func_addr_binary_regex = func_addr_placeholder_split[1]
+        
         for lname in memory_map_path_names:
-            #if injection_params.enable_debugging_output:
-            #    log(f"Checking '{lname}' against library base address regex placeholder '{lname_regex}' from assembly code", ansi=injection_params.ansi)
-            if re.search(lname_regex, lname):
-                log(f"Using '{lname}' for library base address regex placeholder '{lname_regex}' in assembly code", ansi=injection_params.ansi)
-                replacements[f"[BASEADDRESS:{lname_regex}:BASEADDRESS]"] = f"{hex(memory_map_data.get_first_region_for_named_file(lname).get_base_address())}"
-                if lname not in placeholder_match_binary_paths:
-                    placeholder_match_binary_paths.append(lname)
-                found_library_match = True
-                break
-        if not found_library_match:
-            log_error(f"Could not find a match for the library base address regular expression '{lname_regex}' in the list of libraries loaded by the target process. Make sure you've targeted the correct process, and that it is compatible with the selected payload.", ansi=injection_params.ansi)
+            if not found_func_addr_match:
+                if injection_params.enable_debugging_output:
+                    log(f"Testing '{lname}' against binary path regex '{func_addr_binary_regex}' in assembly code", ansi=injection_params.ansi)
+                if re.search(func_addr_binary_regex, lname):
+                    if injection_params.enable_debugging_output:
+                        log(f"Checking '{lname}' for function address placeholder '{func_addr_placeholder}' in assembly code", ansi=injection_params.ansi)
+                    # If relative addresses have already been provided or collected for the specified binary, use the existing data
+                    # Otherwise, collect and cache it
+                    binary_relative_offsets = {}
+                    if lname in injection_params.relative_offsets.keys():
+                        if injection_params.enable_debugging_output:
+                            log(f"Checking existing list of relative offsets for '{lname}' for a function that matches regular expression '{func_addr_function_regex}'", ansi=injection_params.ansi)
+                        binary_relative_offsets = injection_params.relative_offsets[lname]
+                    else:
+                        if injection_params.relative_offsets_from_binaries:
+                            if os.path.isfile(lname):
+                                if injection_params.enable_debugging_output:
+                                    log(f"Collecting a list of relative offsets from '{lname}' and then checking them for a function that matches regular expression '{func_addr_function_regex}'", ansi=injection_params.ansi)
+                                injection_params.relative_offsets[lname] = get_elf_symbol_to_offset_map(lname)
+                                binary_relative_offsets = injection_params.relative_offsets[lname]
+                            else:
+                                log(f"Ignoring '{lname}' because it is not a file. If you really need to reference symbols in that region of memory, provide them from a file with the --relative-offsets option", ansi=injection_params.ansi)
+                        else:
+                            if injection_params.enable_debugging_output:
+                                log(f"Ignoring '{lname}' because no relative offsets were provided for that file and the option to collect them is disabled", ansi=injection_params.ansi)
+                    # wherever the list came from, check it for the function in question
+                    for symbol_name in binary_relative_offsets.keys():
+                        if not found_func_addr_match:
+                            if re.search(func_addr_function_regex, symbol_name):
+                                if injection_params.enable_debugging_output:
+                                    log(f"Found a match for '{func_addr_function_regex}' in symbol list for '{lname}': '{symbol_name}'", ansi=injection_params.ansi)
+                                function_address = memory_map_data.get_first_region_for_named_file(lname).get_base_address() + binary_relative_offsets[symbol_name]
+                                replacements[f"[FUNCTION_ADDRESS:{func_addr_placeholder}:FUNCTION_ADDRESS]"] = f"{hex(function_address)}"
+                                found_func_addr_match = True
+                                break
+        if not found_func_addr_match:
+            log_error(f"Could not find a match for the function address placeholder '{func_addr_placeholder}' in the target process. Make sure you've targeted the correct process, and that it is compatible with the selected payload. If you believe you've received this message in error, please open an issue on GitHub.", ansi=injection_params.ansi)
             return None
+    
+    # # Replace base address regex matches
+    # lname_placeholders = []
+    # lname_placeholders_matches = re.finditer(r'(\[BASEADDRESS:)(.*?)(:BASEADDRESS\])', formatted_source)
+    # placeholder_match_binary_paths = []
+    # for match in lname_placeholders_matches:
+        # placeholder_regex = match.group(2)
+        # if placeholder_regex not in lname_placeholders:
+            # if injection_params.enable_debugging_output:
+                # log(f"Found library base address regex placeholder '{placeholder_regex}' in assembly code", ansi=injection_params.ansi)
+            # lname_placeholders.append(placeholder_regex)
+    # for lname_regex in lname_placeholders:
+        # found_library_match = False
+        # for lname in memory_map_path_names:
+            # #if injection_params.enable_debugging_output:
+            # #    log(f"Checking '{lname}' against library base address regex placeholder '{lname_regex}' from assembly code", ansi=injection_params.ansi)
+            # if re.search(lname_regex, lname):
+                # log(f"Using '{lname}' for library base address regex placeholder '{lname_regex}' in assembly code", ansi=injection_params.ansi)
+                # replacements[f"[BASEADDRESS:{lname_regex}:BASEADDRESS]"] = f"{hex(memory_map_data.get_first_region_for_named_file(lname).get_base_address())}"
+                # if lname not in placeholder_match_binary_paths:
+                    # placeholder_match_binary_paths.append(lname)
+                # found_library_match = True
+                # break
+        # if not found_library_match:
+            # log_error(f"Could not find a match for the library base address regular expression '{lname_regex}' in the list of libraries loaded by the target process. Make sure you've targeted the correct process, and that it is compatible with the selected payload.", ansi=injection_params.ansi)
+            # return None
 
-    # Replace relative offset regex matches
-    r_offset_placeholders = []
-    r_offset_placeholders_matches = re.finditer(r'(\[RELATIVEOFFSET:)(.*?)(:RELATIVEOFFSET\])', formatted_source)
-    for match in r_offset_placeholders_matches:
-        r_offset_placeholder_regex = match.group(2)
-        if r_offset_placeholder_regex not in r_offset_placeholders:
-            if injection_params.enable_debugging_output:
-                log(f"Found relative offset regex placeholder '{r_offset_placeholder_regex}' in assembly code", ansi=injection_params.ansi)
-            r_offset_placeholders.append(r_offset_placeholder_regex)
-    for r_symbol_regex in r_offset_placeholders:
-        found_offset_match = False
-        # check explicitly-specified relative offsets first
-        symbol_search_result = get_offset_from_map_by_regex(injection_params, injection_params.relative_offsets, r_symbol_regex)
-        # if a match wasn't found in an explicitly-referenced list, 
-        # and the option is enabled, check the binary itself for symbols/offsets
-        if not symbol_search_result:
-            if injection_params.relative_offsets_from_binaries:
-                for binary_path in placeholder_match_binary_paths:
-                    if not symbol_search_result:
-                        symbol_search_result = get_offset_from_map_by_regex(injection_params, get_elf_symbol_to_offset_map(binary_path), r_symbol_regex)
-        if symbol_search_result:
-            found_offset_match = True
-            log(f"Using '{symbol_search_result[0]}' for relative offset regex placeholder '{r_symbol_regex}' in assembly code", ansi=injection_params.ansi)
-            replacements[f"[RELATIVEOFFSET:{r_symbol_regex}:RELATIVEOFFSET]"] = f"{hex(symbol_search_result[1])}"
-        else:
-            log_error(f"Could not find a match for the relative offset regular expression '{r_symbol_regex}' in the list of relative offsets provided to asminject.py. Make sure you've targeted the correct process, and provided accurate lists of any necessary relative offsets for the process.", ansi=injection_params.ansi)
-            return None
+    # # Replace relative offset regex matches
+    # r_offset_placeholders = []
+    # r_offset_placeholders_matches = re.finditer(r'(\[RELATIVEOFFSET:)(.*?)(:RELATIVEOFFSET\])', formatted_source)
+    # for match in r_offset_placeholders_matches:
+        # r_offset_placeholder_regex = match.group(2)
+        # if r_offset_placeholder_regex not in r_offset_placeholders:
+            # if injection_params.enable_debugging_output:
+                # log(f"Found relative offset regex placeholder '{r_offset_placeholder_regex}' in assembly code", ansi=injection_params.ansi)
+            # r_offset_placeholders.append(r_offset_placeholder_regex)
+    # for r_symbol_regex in r_offset_placeholders:
+        # found_offset_match = False
+        # # check explicitly-specified relative offsets first
+        # symbol_search_result = get_offset_from_map_by_regex(injection_params, injection_params.relative_offsets, r_symbol_regex)
+        # # if a match wasn't found in an explicitly-referenced list, 
+        # # and the option is enabled, check the binary itself for symbols/offsets
+        # if not symbol_search_result:
+            # if injection_params.relative_offsets_from_binaries:
+                # for binary_path in placeholder_match_binary_paths:
+                    # if not symbol_search_result:
+                        # symbol_search_result = get_offset_from_map_by_regex(injection_params, get_elf_symbol_to_offset_map(binary_path), r_symbol_regex)
+        # if symbol_search_result:
+            # found_offset_match = True
+            # log(f"Using '{symbol_search_result[0]}' for relative offset regex placeholder '{r_symbol_regex}' in assembly code", ansi=injection_params.ansi)
+            # replacements[f"[RELATIVEOFFSET:{r_symbol_regex}:RELATIVEOFFSET]"] = f"{hex(symbol_search_result[1])}"
+        # else:
+            # log_error(f"Could not find a match for the relative offset regular expression '{r_symbol_regex}' in the list of relative offsets provided to asminject.py. Make sure you've targeted the correct process, and provided accurate lists of any necessary relative offsets for the process.", ansi=injection_params.ansi)
+            # return None
     
     pre_obfuscation_source = formatted_source
     write_source_to_file(injection_params, pre_obfuscation_source, "pre-obfuscation, pre-variable-replacement", f"{file_name_suffix}-pre-obfuscation-pre-replacement")
@@ -1404,7 +1465,8 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
             pre_obfuscation_source = pre_obfuscation_source.replace(search_text, replacements[search_text])
     
     # check for any remaining placeholders in the formatted source code
-    placeholder_types = ['BASEADDRESS', 'RELATIVEOFFSET', 'VARIABLE']
+    # placeholder_types = ['BASEADDRESS', 'RELATIVEOFFSET', 'VARIABLE']
+    placeholder_types = ['FUNCTION_ADDRESS', 'VARIABLE']
     missing_values = []
     for pht in placeholder_types:
         missing_placeholders_matches = re.finditer(r'(\[' + pht + ':)(.*?)(:' + pht + '\])', formatted_source)
@@ -2259,6 +2321,23 @@ def validate_overwrite_data(injection_params):
         log_error("The payload memory overwrite value {hex(injection_params.clear_payload_memory_value)} is too large for the target architecture's CPU width of {injection_params.register_size} bytes", ansi=injection_params.ansi)
         sys.exit(1)
 
+def autodetect_architecture_string(injection_params):
+    platform_arch_string = platform.machine().lower()
+    autodetected_arch_string = None
+    if platform_arch_string in ["amd64", "x86_64"]:
+        autodetected_arch_string = "x86-64"
+    
+    if platform_arch_string in ["i386", "i486", "i586", "i686"]:
+        autodetected_arch_string = "x86"
+    
+    if platform_arch_string in ["armv7l", "armv7"]:
+        autodetected_arch_string = "arm32"
+    
+    if not autodetected_arch_string:
+        log_error(f"Did not recognize the processor architecture string '{platform_arch_string}'", ansi=injection_params.ansi)
+    
+    return autodetected_arch_string
+
 def parse_command_line_numeric_value(v):
     result = None
     if len(v) > 2 and v[0:2].lower() == "0x":
@@ -2302,8 +2381,8 @@ if __name__ == "__main__":
     parser.add_argument("asm_path", metavar="payload_path", type=str,
         help="Path to the assembly code that should be injected")
 
-    parser.add_argument("--relative-offsets", action='append', nargs='*', required=False,
-        help="Path to the list of relative offsets referenced in the assembly code. May be specified multiple times to reference several files. Generate on a per-binary basis using the following command, e.g. for libc-2.31: # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d\" \" -f3,9")
+    parser.add_argument("--relative-offsets", action='append', nargs=2, type=str, required=False,
+        help="Library name and path to a list of relative offsets referenced in the assembly code. May be specified multiple times to reference several files. Generate on a per-binary basis using the following command, e.g. for libc-2.31: # ./get_relative_offsets.sh /usr/lib/x86_64-linux-gnu/libc-2.31.so > relative_offsets-libc-2.31.txt; Reference when calling asminject.py using e.g. --relative-offsets /usr/lib/x86_64-linux-gnu/libc-2.31.so /usr/lib/x86_64-linux-gnu/libc-2.31.so")
 
     parser.add_argument("--relative-offsets-from-binaries",type=str2bool, nargs='?',
         const=True, default=False,
@@ -2336,10 +2415,10 @@ if __name__ == "__main__":
               # Default: wait-syscall.")
     
     parser.add_argument("--arch",
-        #choices=["x86-64", "x86", "arm32", "aarch64"], default="x86-64",
-        choices=["x86-64", "x86", "arm32"], default="x86-64",
-        help="Processor architecture for the injected code. \
-              Default: x86-64.")
+        #choices=["x86-64", "x86", "arm32", "arm64"], default="x86-64",
+        choices=["x86-64", "x86", "arm32"], #, default="x86-64",
+        help="Processor architecture for the injected code.")
+              #Default: x86-64.")
             
     parser.add_argument("--var",action='append',nargs=2, type=str,
         help="Specify a custom variable for use by the stage 2 code, e.g. --var pythoncode \"print('OK')\". May be specified multiple times for different variables.")
@@ -2433,11 +2512,27 @@ if __name__ == "__main__":
         for var_set in args.var:
             injection_params.custom_replacements[f"[VARIABLE:{var_set[0]}:VARIABLE]"] = var_set[1]
             injection_params.custom_replacements[f"[VARIABLE:{var_set[0]}.length:VARIABLE]"] = str(len(var_set[1]))
-            
+    
+    # attempt to autodetermine architecture unless explicitly specified
+    architecture_string = ""
+    detected_architecture_string = autodetect_architecture_string(injection_params)
+    
+    autodetection_string = ""
+    if args.arch:
+        architecture_string = args.arch
+    else:
+        if detected_architecture_string:
+            architecture_string = detected_architecture_string
+            autodetection_string = "autodetected "
+        else:
+            log_error(f"Unable to automatically determine the processor architecture - specify an architecture manually using the --arch option", ansi=injection_params.ansi)
+            sys.exit(1)
+
+    log(f"Using {autodetection_string}processor architecture '{architecture_string}'")
 
     injection_params.base_script_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
     injection_params.pid = args.pid
-    injection_params.set_architecture(args.arch)
+    injection_params.set_architecture(architecture_string)
     injection_params.asm_path = os.path.join(injection_params.base_script_path, "asm", injection_params.architecture, args.asm_path)
     injection_params.stop_method = args.stop_method
     injection_params.pause_before_resume = args.pause_before_resume
@@ -2481,23 +2576,33 @@ if __name__ == "__main__":
     
     # readelf -a --wide /usr/lib/x86_64-linux-gnu/libc-2.31.so | grep DEFAULT | grep FUNC | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | sed 's/  / /g' | cut -d" " -f3,9 > offsets-libc-2.31.so.txt
     if args.relative_offsets:
-        if len(args.relative_offsets) > 0:
-            for elem in args.relative_offsets:
-                for offsets_path in elem:
-                    if offsets_path.strip() != "":
-                        reloff_abs_path = os.path.abspath(offsets_path)
-                        with open(reloff_abs_path) as offsets_file:
-                            for line in offsets_file.readlines():
-                                line_array = line.strip().split(" ")
-                                offset_name = line_array[1].strip()
-                                if offset_name in injection_params.relative_offsets.keys():
-                                    log_warning(f"The offset '{offset_name}' is redefined in '{reloff_abs_path}'", ansi=injection_params.ansi)
-                                offset_value = int(line_array[0], 16)
-                                if offset_value > 0:
-                                    injection_params.relative_offsets[offset_name] = offset_value
-                                else:
-                                    if injection_params.enable_debugging_output:
-                                        log_warning(f"Ignoring offset '{offset_name}' in '{reloff_abs_path}' because it has a value of zero", ansi=injection_params.ansi)
+        for relative_offset_set in args.relative_offsets:
+            injection_params.custom_replacements[f"[VARIABLE:{relative_offset_set[0]}:VARIABLE]"] = relative_offset_set[1]
+            injection_params.custom_replacements[f"[VARIABLE:{relative_offset_set[0]}.length:VARIABLE]"] = str(len(relative_offset_set[1]))
+            offsets_binary_name = relative_offset_set[0].strip()
+            offsets_path = relative_offset_set[1].strip()
+            if offsets_path != "":
+                reloff_abs_path = os.path.abspath(offsets_path)
+                offset_list = {}
+                try:
+                    with open(reloff_abs_path) as offsets_file:
+                        for line in offsets_file.readlines():
+                            line_array = line.strip().split(" ")
+                            offset_name = line_array[1].strip()
+                            offset_value = int(line_array[0], 16)
+                            if offset_value > 0:
+                                if offset_name in offset_list.keys():
+                                    existing_value = offset_list[offset_name]
+                                    log_warning(f"The offset '{offset_name}' is redefined from '{existing_value}' to '{offset_value}' in '{reloff_abs_path}'", ansi=injection_params.ansi)
+                                offset_list[offset_name] = offset_value
+                            else:
+                                if injection_params.enable_debugging_output:
+                                    log_warning(f"Ignoring offset '{offset_name}' in '{reloff_abs_path}' because it has a value of zero", ansi=injection_params.ansi)
+                except Exception as e:
+                    log_error(f"Couldn't load list of relative offsets for '{offsets_binary_name}' from '{reloff_abs_path}': {e}", ansi=injection_params.ansi)
+                    sys.exit(1)
+            
+                injection_params.relative_offsets[offsets_binary_name] = offset_list
     
     if args.relative_offsets_from_binaries:
         injection_params.relative_offsets_from_binaries = True

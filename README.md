@@ -25,7 +25,7 @@ The original `dlinject.py` was designed specifically to load Linux shared librar
 
 ## Getting started
 
-Make sure you have `gcc` installed.
+Make sure you have `gcc` and `readelf` installed. `readelf` is generally part of the `binutils` package for most Linux distributions.
 
 In one terminal window, start a Python script that will not exit immediately. For example:
 
@@ -239,11 +239,12 @@ If you are an authorized administrator of a Linux system where someone has accid
 * Allow shellcode to be passed via stdin in addition to the current method of reading from a file.
 * For Python and other script interpreters with APIs for passing in compiled bytecode for execution (versus `eval`-style execution of human-readable script code), provide payloads to take advantage of this ability for even more stealth.
 * If feasible, inject Java code into Java processes via the JNI.
-* Add alternative DLL injection methods for various scenarios.
+* Add alternative shared library injection methods for various scenarios.
 * Add options to hook a specific method (or address, etc.) as an alternative to the current "hook the next syscall" technique that was inherited from `dlinject.py`.
 * Provide a way to use the tool for quasi-debugging, e.g. hook a function and output the arguments passed to it every time it's called.
   * It might make more sense to find a way to inject Frida using `asminject.py` - more research is required.
 * Develop interactive payloads, e.g. instead of injecting a particular line of Python script code into a Python process, `asminject.py` could prompt the operator for a line of code to inject, inject it, return the resulting output, and then prompt the operator for another line of code.
   * This might also make more sense to handle using Frida, if Frida can be injected into a process using `asminject.py` in a way that avoids Frida's need to invoke the debugger interface temporarily.
+* Provide a way to interact with a target process running on a processor architecture that doesn't match the one where `asminject.py` is running. e.g. interact with a remote device using hardware like a PCI leech, exploit extreme corner cases like devices with `/proc/mem` accessible as root over an NFS share, etc.
 * Add more elaborate obfuscation fragments.
 

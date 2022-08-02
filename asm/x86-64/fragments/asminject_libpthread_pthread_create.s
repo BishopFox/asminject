@@ -14,7 +14,7 @@ asminject_libpthread_pthread_create:
 	
 	mov rcx, 0
 	mov rsi, 0
-	mov r9, [BASEADDRESS:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS] + [RELATIVEOFFSET:^pthread_create($|@@.+):RELATIVEOFFSET]
+	mov r9, [FUNCTION_ADDRESS:^pthread_create($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
 	call r9
 	
 	pop r9

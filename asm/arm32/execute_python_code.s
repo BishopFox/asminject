@@ -30,15 +30,6 @@ copy_code_to_rw_memory:
 	bl asminject_copy_bytes
 	pop {r7}
 
-// get the base address of the Python library
-// (will be persisted in r9 throughout the remainder of this payload)
-	ldr r9, [pc]
-	b load_ensure_offset
-
-base_address:
-	.word [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS]
-	.balign 4
-
 // BEGIN: call PyGILState_Ensure
 // get the offset of the PyGILState_Ensure function
 load_ensure_offset:
@@ -46,17 +37,16 @@ load_ensure_offset:
 	b call_ensure
 
 ensure_offset:
-	.word [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
+	.word [FUNCTION_ADDRESS:PyGILState_Ensure:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	.balign 4
 
 call_ensure:
 	mov r0, #0x0
 	mov r1, #0x0
-	add r6, r9, r8
 	push {r7}
 	push {r8}
 	push {r9}
-	blx r6
+	blx r8
 	pop {r9}
 	pop {r8}
 	pop {r7}
@@ -70,7 +60,7 @@ call_ensure:
 	b call_run
 
 run_offset:
-	.word [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
+	.word [FUNCTION_ADDRESS:PyRun_SimpleStringFlags:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	.balign 4
 
 call_run:
@@ -78,11 +68,10 @@ call_run:
 	mov r0, r7			@ base read/write address
 	add r0, r0, #0x80	@ Offset of copied string
 	mov r1, #0x0			@ NULL	
-	add r6, r9, r8
 	push {r7}
 	push {r8}
 	push {r9}
-	blx r6
+	blx r8
 	pop {r9}
 	pop {r8}
 	pop {r7}
@@ -94,17 +83,16 @@ call_run:
 	b call_release
 
 release_offset:
-	.word [RELATIVEOFFSET:PyGILState_Release:RELATIVEOFFSET]
+	.word [FUNCTION_ADDRESS:PyGILState_Release:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	.balign 4
 
 call_release:
 	// load handle from read/write memory
 	ldr r0, [r7]
-	add r6, r9, r8
 	push {r7}
 	push {r8}
 	push {r9}
-	blx r6
+	blx r8
 	pop {r9}
 	pop {r8}
 	pop {r7}

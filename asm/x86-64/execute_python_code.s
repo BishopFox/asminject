@@ -6,7 +6,7 @@ execute_python_code_main:
 
 	# // BEGIN: call Py_Initialize()
 	# push r14
-	# mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:Py_Initialize:RELATIVEOFFSET]
+	# mov rbx, [FUNCTION_ADDRESS:Py_Initialize:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	# pop r14
 	# // END: call Py_Initialize()
 	
@@ -27,7 +27,7 @@ execute_python_code_main:
 	xor rax, rax
 	xor rdi, rdi
 	xor rsi, rsi
-	mov rbx, [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
+	mov rbx, [FUNCTION_ADDRESS:PyGILState_Ensure:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	call rbx
 	mov rbx, arbitrary_read_write_data_address[rip]
 	mov [rbx], rax
@@ -41,7 +41,7 @@ execute_python_code_main:
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 32
 	xor rcx, rcx
-	mov rbx, [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
+	mov rbx, [FUNCTION_ADDRESS:PyRun_SimpleStringFlags:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	call rbx
 	pop rcx
 	//pop r14
@@ -54,7 +54,7 @@ execute_python_code_main:
 	//mov rax, [rbx]
 	//mov rdi, rax
 	xor rsi, rsi
-	mov rbx, [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS] + [RELATIVEOFFSET:PyGILState_Release:RELATIVEOFFSET]
+	mov rbx, [FUNCTION_ADDRESS:PyGILState_Release:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	call rbx
 	//pop r14
 	// END: call PyGILState_Release(handle)
@@ -63,7 +63,7 @@ execute_python_code_main:
 	# push r14
 	# mov rax, 0
 	# mov rdi, rax
-	# mov rbx, [BASEADDRESS:.+/python[0-9\.]+$:BASEADDRESS] + [RELATIVEOFFSET:Py_Finalize:RELATIVEOFFSET]
+	# mov rbx, [FUNCTION_ADDRESS:Py_Finalize:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	# call rbx
 	# pop r14
 	# // END: call Py_Finalize()

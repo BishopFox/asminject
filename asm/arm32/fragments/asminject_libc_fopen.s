@@ -12,33 +12,20 @@ asminject_libc_fopen:
 	add r11, sp, #0x04
 	sub sp, sp, #0x20
 	push {r10}
-	push {r9}
 
-// store the base address of libc in r10
+// store the address of libc fopen in r10
 	ldr r10, [pc]
-	b asminject_libc_fopen_load_fopen_offset
-
-asminject_libc_fopen_base_address:
-	.word [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
-	.balign 4
-	
-// Store the relative offset of fopen in r9
-asminject_libc_fopen_load_fopen_offset:
-	ldr r9, [pc]
 	b asminject_libc_fopen_call_fopen
 
-asminject_libc_fopen_fopen_offset:
-	.word [RELATIVEOFFSET:^fopen($|@@.+):RELATIVEOFFSET]
+asminject_libc_fopen_address:
+	.word [FUNCTION_ADDRESS:^fopen($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
 	.balign 4
 
 asminject_libc_fopen_call_fopen:
-	// r9 = relative offset + base address
-	add r9, r9, r10
 	// r0 will already be set to the path to the file
 	// r1 will already be set to the mode string
-	blx r9
+	blx r10
 
-	pop {r9}
 	pop {r10}
 
 	sub sp, r11, #0x04

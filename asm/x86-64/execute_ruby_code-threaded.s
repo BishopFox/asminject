@@ -6,40 +6,6 @@
 [FRAGMENT:asminject_libpthread_pthread_detach.s:FRAGMENT]
 [FRAGMENT:asminject_libpthread_pthread_exit.s:FRAGMENT]
 [FRAGMENT:asminject_nanosleep.s:FRAGMENT]
-
-	# // BEGIN: call ruby_sysinit
-	# push rbx
-	# lea rax, ruby_argv[rip]	# fake argv data
-	# lea rdx, ruby_argc[rip]	# fake argc data
-	# mov rsi, rdx
-	# mov rdi, rax
-	# mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:ruby_sysinit:RELATIVEOFFSET]
-	# call rbx
-	# pop rbx
-	# // END: call ruby_sysinit
-	
-	# // BEGIN: call ruby_init_stack
-	# push rbx
-	# lea rax, [RBP - 8]
-	# mov rdi, rax
-	# mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:ruby_init_stack:RELATIVEOFFSET]
-	# call rbx
-	# pop rbx
-	# // END: call ruby_init_stack
-	
-	# // BEGIN: call ruby_init
-	# push rbx
-	# mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:ruby_init:RELATIVEOFFSET]
-	# call rbx
-	# pop rbx
-	# // END: call ruby_init
-	
-	# // BEGIN: call ruby_init_loadpath
-	# push rbx
-	# mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:ruby_init_loadpath:RELATIVEOFFSET]
-	# call rbx
-	# pop rbx
-	# // END: call ruby_init_loadpath
 	
 	// copy the Ruby string to arbitrary read/write memory
 	push r14
@@ -57,24 +23,12 @@
 	push rbx
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 32
-	mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:rb_eval_string:RELATIVEOFFSET]
+	mov rbx, [FUNCTION_ADDRESS:^rb_eval_string$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
 	call rbx
 	pop rbx
 	pop r14
 	// END: call rb_eval_string
 	
-	# // BEGIN: call ruby_cleanup
-	# push rbx
-	# mov rdi, 0
-	# mov rbx, [BASEADDRESS:.+/libruby[0-9\.so\-]+$:BASEADDRESS] + [RELATIVEOFFSET:ruby_cleanup:RELATIVEOFFSET]
-	# call rbx
-	# pop rbx
-	# // END: call ruby_cleanup
-	
-	#mov rax, 0
-	#mov rdi, 0
-	#call asminject_libpthread_pthread_exit
-	# calling pthread_exit here will cause Ruby to crash with a stack trace
 	ret
 	
 forever_loop:

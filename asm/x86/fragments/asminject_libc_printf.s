@@ -18,8 +18,8 @@ asminject_libc_printf:
 	push esi
 	push edi
 	mov ebx, esp
-	mov edx, [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
-	add edx, [RELATIVEOFFSET:^printf($|@@.+):RELATIVEOFFSET]
+
+	mov edx, [FUNCTION_ADDRESS:^printf($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
 	call edx
 
 	pop edi

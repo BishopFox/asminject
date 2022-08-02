@@ -24,8 +24,8 @@ asminject_libc_or_libdl_dlopen:
 	// mode (RTLD_NOW)
 	push 0x2              
 	push edi
-	mov edx, [BASEADDRESS:.+/lib(dl|c)[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
-	add edx, [RELATIVEOFFSET:^dlopen($|@@.+):RELATIVEOFFSET]
+
+	mov edx, [FUNCTION_ADDRESS:^dlopen($|@@.+):IN_BINARY:.+/lib(dl|c)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
 	call edx
 	
 	add esp, 0x10

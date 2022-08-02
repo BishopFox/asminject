@@ -12,6 +12,11 @@ load_dlinject_wrapper_address:
 	mov r2, pc
 	b call_pthread_create
 
+load_library:
+	// load the library path into r0
+	mov r0, pc
+	b call_dlopen
+
 library_path:
 	.ascii "[VARIABLE:librarypath:VARIABLE]\0"
 	.balign 4

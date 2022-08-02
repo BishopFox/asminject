@@ -16,7 +16,7 @@ asminject_libc_printf:
 	
 	mov rcx, 0
 	mov rdx, 0
-	mov r9, [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS] + [RELATIVEOFFSET:^printf($|@@.+):RELATIVEOFFSET]
+	mov r9, [FUNCTION_ADDRESS:^printf($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
 	call r9
 
 	pop rdx

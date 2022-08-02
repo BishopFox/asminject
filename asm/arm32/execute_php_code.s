@@ -61,15 +61,6 @@ load_phpname:
 	pop {r6}
 	pop {r5}
 
-// get the base address of the PHP binary
-// (will be persisted in r9 throughout the remainder of this payload)
-	ldr r9, [pc]
-	b load_zend_eval_string_offset
-
-base_address:
-	.word [BASEADDRESS:.+/php($|[0-9\.]+$):BASEADDRESS]
-	.balign 4
-
 // BEGIN: call zend_eval_string
 // get the offset of the zend_eval_string function
 load_zend_eval_string_offset:
@@ -77,21 +68,18 @@ load_zend_eval_string_offset:
 	b call_zend_eval_string
 
 zend_eval_string_offset:
-	.word [RELATIVEOFFSET:zend_eval_string:RELATIVEOFFSET]
+	.word [FUNCTION_ADDRESS:^zend_eval_string$:IN_BINARY:.+/php($|[0-9\.]+$):FUNCTION_ADDRESS]
 	.balign 4
 
 call_zend_eval_string:
 	mov r0, r6
 	mov r1, #0x0
 	mov r2, r5
-	add r4, r9, r8
 	push {r5}
 	push {r6}
 	push {r7}
 	push {r8}
-	push {r9}
-	blx r4
-	pop {r9}
+	blx r8
 	pop {r8}
 	pop {r7}
 	pop {r6}

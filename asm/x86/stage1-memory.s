@@ -40,7 +40,6 @@ store_addresses:
 	// Also store the block addresses in the new communication address offset
 	mov esi, edx
 	mov edi, ecx
-	#mov ecx, edx
 	push edx
 	push ecx
 	call asminject_set_memory_addresses

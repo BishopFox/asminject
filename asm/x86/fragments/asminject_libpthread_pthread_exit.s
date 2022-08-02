@@ -20,8 +20,7 @@ asminject_libpthread_pthread_exit:
 	
 	push edi
 	
-	mov edx, [BASEADDRESS:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
-	add edx, [RELATIVEOFFSET:^pthread_exit($|@@.+):RELATIVEOFFSET]
+	mov edx, [FUNCTION_ADDRESS:^pthread_exit($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
 	call edx
 	
 	//leave

@@ -29,8 +29,7 @@ asminject_libc_fread:
 	push esi
 	push edi
 	
-	mov edx, [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
-	add edx, [RELATIVEOFFSET:^fread($|@@.+):RELATIVEOFFSET]
+	mov edx, [FUNCTION_ADDRESS:^fread($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
 	call edx
 
 	add esp, 0x10

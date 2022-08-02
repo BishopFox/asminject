@@ -12,7 +12,7 @@ asminject_libpthread_pthread_join:
 	sub rsp, 0x10
 	push r9
 	
-	mov r9, [BASEADDRESS:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS] + [RELATIVEOFFSET:^pthread_join($|@@.+):RELATIVEOFFSET]
+	mov r9, [FUNCTION_ADDRESS:^pthread_join($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
 	call r9
 	
 	pop r9

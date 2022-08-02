@@ -26,8 +26,7 @@ execute_python_code_copy_code:
 	// END: copy the Python string to arbitrary read/write memory
 
 	// BEGIN: call PyGILState_Ensure() and store the handle it returns
-	mov ebx, [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS]
-	add ebx, [RELATIVEOFFSET:PyGILState_Ensure:RELATIVEOFFSET]
+	mov ebx, [FUNCTION_ADDRESS:PyGILState_Ensure:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	call ebx
 	mov ebx, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	mov [ebx], eax
@@ -41,8 +40,7 @@ execute_python_code_copy_code:
 	mov edi, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	add edi, 32
 	push edi
-	mov ebx, [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS]
-	add ebx, [RELATIVEOFFSET:PyRun_SimpleStringFlags:RELATIVEOFFSET]
+	mov ebx, [FUNCTION_ADDRESS:PyRun_SimpleStringFlags:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	call ebx
 	add esp, 0x10
 	pop ebx
@@ -53,8 +51,7 @@ execute_python_code_copy_code:
 	mov ebx, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	mov ebx, [ebx]
 	push ebx
-	mov ebx, [BASEADDRESS:.+/(lib|)python[0-9\.so]+$:BASEADDRESS]
-	add ebx, [RELATIVEOFFSET:PyGILState_Release:RELATIVEOFFSET]
+	mov ebx, [FUNCTION_ADDRESS:PyGILState_Release:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
 	call ebx
 	add esp, 0x10
 	// END: call PyGILState_Release(handle)

@@ -21,8 +21,7 @@ asminject_libpthread_pthread_detach:
 	sub esp, 0xc
 	push edi
 	
-	mov edx, [BASEADDRESS:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS]
-	add edx, [RELATIVEOFFSET:^pthread_detach($|@@.+):RELATIVEOFFSET]
+	mov edx, [FUNCTION_ADDRESS:^pthread_detach($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
 	call edx
 	
 	add esp, 0x10

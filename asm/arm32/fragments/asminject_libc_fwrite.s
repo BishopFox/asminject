@@ -14,32 +14,19 @@ asminject_libc_fwrite:
 	add r11, sp, #0x04
 	sub sp, sp, #0x20
 	push {r10}
-	push {r9}
 
-// store the base address of libc in r10
+// store the address of libc fwrite in r10
 	ldr r10, [pc]
-	b asminject_libc_fwrite_load_fwrite_offset
-
-asminject_libc_fwrite_base_address:
-	.word [BASEADDRESS:.+/libc-[0-9\.]+.so$:BASEADDRESS]
-	.balign 4
-	
-// Store the relative offset of fopen in r9
-asminject_libc_fwrite_load_fwrite_offset:
-	ldr r9, [pc]
 	b asminject_libc_fwrite_call_fwrite
 
-asminject_libc_fwrite_fwrite_offset:
-	.word [RELATIVEOFFSET:^fwrite($|@@.+):RELATIVEOFFSET]
+asminject_libc_fwrite_address:
+	.word [SYMBOL_ADDRESS:^fwrite($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
 
 asminject_libc_fwrite_call_fwrite:
-	// r9 = relative offset + base address
-	add r9, r9, r10
 	// r0-r3 will already be set to the necessary arguments
-	blx r9
+	blx r10
 
-	pop {r9}
 	pop {r10}
 
 	sub sp, r11, #0x04

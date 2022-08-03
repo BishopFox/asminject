@@ -4,15 +4,13 @@
 * [Origins](#origins)
 * [Getting started](#getting-started)
 * [Differences from dlinject.py](#differences-from-dlinjectpy)
-* [Relative offsets](#relative-offsets)
 * [Practice targets](#practice-targets)
 * [Examples](#examples)
-* [Specialized options](#specialized-options)
-  * [Process suspension methods](#process-suspension-methods)
-  * [Specifying non-PIC code](#specifying-non-pic-code)
-  * [Multi-architecture support](#multi-architecture-support)
+* <a href="docs/specialized_options.md">Specialized options</a>
+* [Relative offsets](#relative-offsets)
 * [But what about Yama's ptrace_scope restrictions?](#but-what-about-yamas-ptrace_scope-restrictions)
-* [Version history](#version-history)
+* [Future goals](#future-goals)
+* <a href="docs/version_history.md">Version history</a>
 
 ## Origins
 
@@ -27,7 +25,7 @@ The original `dlinject.py` was designed specifically to load Linux shared librar
 
 ## Getting started
 
-Make sure you have `gcc` installed.
+Make sure you have `gcc`, `objcopy`, and `readelf` installed. `gcc` is generally part of the `gcc` package for most Linux distributions. `objcopy` and `readelf` are generally part of the `binutils` package for most Linux distributions.
 
 In one terminal window, start a Python script that will not exit immediately. For example:
 
@@ -61,9 +59,7 @@ Examine the memory maps for the target process (in this case, PID 3022) to see i
 55ee0b25b000-55ee0b29b000 rw-p 00560000 08:01 3018726                    /usr/bin/python3.10
 ```
 
-In this case, there is no separate `libpython` shared library, so the payload referenced below is `execute_python_code.s`. If you also saw entries for the shared library, the only change to the remainder of this example would be use of the `execute_python_code-libpython.s` payload instead.
-
-Finally, if you're injecting into the main process executable instead of a shared library, determine if it is using position-independent code or not. For example, on my test system, the `python3.9` binary is *not* position-independent, but the `python2.7` and `python3.10` binaries *are*:
+If there is no separate `libpython` listed, determine if the main executable is using position-independent code or not. For example, on my test system, the `python3.9` binary is *not* position-independent, but the `python2.7` and `python3.10` binaries *are*:
 
 ```
 # file /usr/bin/python2.7
@@ -84,7 +80,7 @@ Finally, if you're injecting into the main process executable instead of a share
 
 Determining this can be slightly tricky, and is discussed further in the <a href="docs/specialized_options.md#specifying-non-pic-code">specialized options document</a>. In this case, the target process' main executable is position-independent, because it is running in Python 3.10, but if I were targeting a Python 3.7 or 3.9 process, I'd add the option `--non-pic-binary "/usr/bin/python3\\.[0-9]+"` to the example command below.
 
-Call `asminject.py`, specifying the name of the payload that will inject arbitrary Python code into an existing Python process. In this case, the Python code `print('injected python code');` is specified to give an obvious indication of successful injection.
+Call `asminject.py`, specifying the name of the payload (`execute_python_code.s`), and the `pythoncode` variable name and value. In this case, the Python code `print('injected python code');` is specified to give an obvious indication of successful injection.
 
 ```
 # python3 ./asminject.py 3249 execute_python_code.s \
@@ -144,7 +140,7 @@ injected python code
 
 ## Differences from dlinject.py
 
-`dlinject.py` was written specifically to cause the target process to load a shared library from disk. It does this by injecting code into the target process that calls the `_dl_open` function in the `ld` shared library. This works on some versions of some Linux distributions, but [there is an open issue for the project because that symbol is not consistently exported by the library](https://github.com/DavidBuchanan314/dlinject/issues/8). `asminject.py` extends that basic concept significantly by injecting arbitrary code into the target process, and includes templates to perform a variety of actions (execute arbitrary Python, PHP, or Ruby code inside an existing process for one of those languages, copying files using syscalls, and so on). It also includes a template to load a shared library into the target process using what I believe is a more reliable method: calling the `dlopen` method in `libdl`.
+`dlinject.py` was written specifically to cause the target process to load a shared library from disk. It does this by injecting code into the target process that calls the `_dl_open` function in the `ld` shared library. This works on some versions of some Linux distributions, but [there is an open issue for the project because that symbol is not consistently exported by the library](https://github.com/DavidBuchanan314/dlinject/issues/8). `asminject.py` extends that basic concept significantly by injecting arbitrary code into the target process, and includes templates to perform a variety of actions (execute arbitrary Python, PHP, or Ruby code inside an existing process for one of those languages, copying files using syscalls, and so on). It also includes templates that emulate the original `dlinject.py` and load a shared library into the target process using several different methods, and this is discussed in more detail in <a href="docs/examples-shared_library_injection.md">the shared library injection examples document</a>.
 
 `dlinject.py` writes the second stage code to disk, and the first stage payload reads that file into memory. `asminject.py` sets up a two-way communication channel entirely in process memory, so the target process does not load any potentially suspicious code from the filesystem.
 
@@ -165,6 +161,32 @@ injected python code
 * Memory allocated by payloads can be reused between injections against the same process, to help evade detection
 * Memory allocated by payloads can be actively wiped after the payload is complete, to remove forensic evidence
 * Arbitrary blocks of memory in the target process can be backed up before injection, and restored afterward, to improve results in complex processes and also help remove forensic evidence
+
+
+## Practice targets
+
+The `practice` directory of this repository includes basic looping code that outputs a timestamp and loop iteration to the console, so you can practice injecting various types of code in a controlled environment. These practice loops are referred to in the remaining examples.
+
+## Examples
+
+The basic syntax for calling `asminject.py` is:
+
+```
+# python3 ./asminject.py <target_process_id> <payload> \
+  --arch [x86-64|x86|arm32] --relative-offsets-from-binaries --stop-method "slow" \
+  --var <payload_variable_1_name> <payload_variable_1_value> \
+  # ... \
+  --var <payload_variable_n_name> <payload_variable_n_value>
+```
+
+In most cases, any of the payloads used in the examples will run on any of the supported architectures.
+
+* <a href="docs/examples-basic.md">Basic examples</a> - simple payloads that e.g. cause an existing process to copy files for you
+* <a href="docs/examples-python.md">Python code injection</a>
+* <a href="docs/examples-php.md">PHP code injection</a>
+* <a href="docs/examples-ruby.md">Ruby code injection</a>
+* <a href="docs/examples-shellcode_injection.md">Shellcode/stager injection</a>
+* <a href="docs/examples-shared_library_injection.md">Shared library injection</a>
 
 ## Relative offsets
 
@@ -208,220 +230,21 @@ In this case, you could call exported functions in eight different binaries. Mos
 
 If you are injecting code into a containerized process from outside the container, you'll need to use the copy of each binary *from inside the container*, or you'll get the wrong data. This is why `asminject.py` doesn't just grab the offsets itself by default, like `dlinject.py` does.
 
-## Practice targets
-
-The `practice` directory of this repository includes basic looping code that outputs a timestamp and loop iteration to the console, so you can practice injecting various types of code in a controlled environment. These practice loops are referred to in the remaining examples.
-
-## Examples
-
-This section was getting too lengthy for the main `README.md`, so it's been moved into the following files:
-
-### Architecture-specific
-
-These examples will walk you through a variety of `asminject.py` invocations for each supported CPU architecture:
-
-* <a href="docs/examples-x86-64.md">Example usage for x86-64</a>
-* <a href="docs/examples-arm32.md">Example usage for ARM32</a>
-
-### Language-specific
-
-These examples cover very specific uses of `asminject.py` for different languages that the code for target process may be written in or interpreted by. For example, writing variables and object data to disk. The specific commands are only provided for one architecture, but should work for others as long as you apply the differences discussed in the architecture-specific examples.
-
-* <a href="docs/examples-ruby.md">Ruby examples</a>
-* <a href="docs/examples-python.md">Python examples</a>
-* <a href="docs/examples-php.md">PHP examples</a>
-
-### Other specific example categories
-
-* <a href="docs/examples-sliver.md">Sliver examples</a> using [Bishop Fox's Sliver C2 framework](https://github.com/BishopFox/sliver)
-
-## Specialized options
-
-This section was getting too lengthy for the main `README.md`, so it's been moved into a separate <a href="docs/specialized_options.md">specialized options document</a>.
-
 ## But what about Yama's ptrace_scope restrictions?
 
 If you are an authorized administrator of a Linux system where someone has accidentally set `/proc/sys/kernel/yama/ptrace_scope` to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
-## Version history
+## Future goals
+
+* Allow shellcode to be passed via stdin in addition to the current method of reading from a file.
+* For Python and other script interpreters with APIs for passing in compiled bytecode for execution (versus `eval`-style execution of human-readable script code), provide payloads to take advantage of this ability for even more stealth.
+* If feasible, inject Java code into Java processes via the JNI.
+* Add alternative shared library injection methods for various scenarios.
+* Add options to hook a specific method (or address, etc.) as an alternative to the current "hook the next syscall" technique that was inherited from `dlinject.py`.
+* Provide a way to use the tool for quasi-debugging, e.g. hook a function and output the arguments passed to it every time it's called.
+  * It might make more sense to find a way to inject Frida using `asminject.py` - more research is required.
+* Develop interactive payloads, e.g. instead of injecting a particular line of Python script code into a Python process, `asminject.py` could prompt the operator for a line of code to inject, inject it, return the resulting output, and then prompt the operator for another line of code.
+  * This might also make more sense to handle using Frida, if Frida can be injected into a process using `asminject.py` in a way that avoids Frida's need to invoke the debugger interface temporarily.
+* Provide a way to interact with a target process running on a processor architecture that doesn't match the one where `asminject.py` is running. e.g. interact with a remote device using hardware like a PCI leech, exploit extreme corner cases like devices with `/proc/mem` accessible as root over an NFS share, etc.
+* Add more elaborate obfuscation fragments.
 
-### 0.33 (2022-07-26)
-
-* Added initial support for 32-bit x86 architecture (only the `printf.s` payload has been ported at this time)
-* More flexible regexes for identifying `libc`, `libpthread`, and `libdl`
-
-### 0.32 (2022-07-05)
-
-* Fixed Ruby injection
-* Fixed PHP injection
-* Additional minor bug fixes
-
-### 0.31 (2022-07-01)
-
-* Updated `libdl` fragments to make them work across a wider variety of configurations for that library
-* Updated `libc` fragments to make them work across a wider variety of configurations for that library
-* Some PHP and Ruby injection is currently broken, maybe due to patches to recent versions of those binaries
-
-### 0.30 (2022-07-01)
-
-* Updated `libpthread` fragments to make them work across a wider variety of configurations for that library
-* Added missing entries to `requirements.txt`
-
-### 0.29 (2022-06-29)
-
-* Updated the staging code for both x86-64 and ARM32 to take better advantage of reusable functions
-* Added ``--clear-payload-memory``, ``--clear-payload-memory-value``, and ``--clear-payload-memory-delay`` anti-forensics options
-
-### 0.28 (2022-06-15)
-
-* Added a few more obfuscation fragments for ARM32 to bring it more or less to parity with x86-64
-* Fixed an obfuscation-related bug in the ARM32 stage 2 template
-
-### 0.27 (2022-06-15)
-
-* Payload obfuscation now works correctly for ARM32 payloads (in addition to x86-64).
-* The order of CPU state save/restore instructions in the stage 1 and 2 code is now randomized to make fingerprinting more difficult.
-* Added `--use-stage-1-source` and `--use-stage-2-source` debugging options.
-* Various bug fixes and improvements
-
-### 0.26 (2022-06-14)
-
-* Added payload obfuscation options: `--obfuscate`, `--per-line-obfuscation-percentage`, and `--obfuscation-iterations` (x86-64 only for this release).
-
-### 0.25 (2022-06-10)
-
-* Added `--relative-offsets-from-binaries` option to attempt to load symbol/offset data directly from files referenced in the target process memory map, if the target process is *not* running in a container
-* Fixed some bugs in the ARM32 staging code introduced with the rework
-
-### 0.24 (2022-06-09)
-
-* Reworked the fragment approach so that code fragments are only imported once per payload, and the order is randomized to make payload detection harder
-* The initial script/payload communication area in the stack is now only used briefly, with communication switching to an area in the r/w block allocated by the payload, to make detection harder and reduce the chances of destabilizing the target process
-* The location of the initial script/payload communication area is now randomized, to make detection harder
-* Fixed some bugs related to reusing memory between payloads
-
-### 0.22 (2022-06-03)
-
-* Fixed some bugs that crept into the ARM32 code during the rework
-
-### 0.22 (2022-06-03)
-
-* Fixed the refactoring bug that had broken Python code execution
-* Added `--write-assembly-source-to-disk` debugging option
-* More internal reworking
-
-### 0.21 (2022-06-02)
-
-* Read/write and read/execute memory region sizes are now randomly selected by default to help make detection harder
-* Refactoring some of the inner workings to allow for ongoing improvements
-* Python code execution payload segfaults after execution at the moment
-
-### 0.20 (2022-06-01)
-
-* Added `--restore-memory-region` and `--restore-all-memory-regions` options to allow more of the target process state to be restored after injection.
-
-### 0.19 (2022-05-26)
-
-* Work in progress version with some internal logic redesigned to support new features in a later release
-
-### 0.18 (2022-05-20)
-
-* Added support for reusing the same blocks of memory between runs of the tool, to make detection harder and avoid leaking (small) amounts of memory when injecting into the same process repeatedly
-* Updated all of the existing x86-64 code to use the improved design developed while writing the ARM32 code
-* Fixed ANSI terminal colours
-
-### 0.17 (2022-05-18)
-
-* ARM32 `copy_file_using_libc.s`, `execute_precompiled.s`, `execute_precompiled_threaded.s`, `dlinject.s`, and `dlinject_threaded.s` implemented, bringing ARM32 support to parity with x86-64
-* Implemented regular expression matching for function/label names in relative offset references, to make `glibc's` version-numbers-in-function-names style easier to support
-* Split documentation into separate files and expanded the ARM32 content
-
-### 0.16 (2022-05-17)
-
-* Implemented support for code fragment references in payloads to make more complex ARM32 payloads less unwieldy to write
-* Work in progress on remaining ARM32 payloads
-
-### 0.15 (2022-05-16)
-
-* ARM32 `execute_python_code.s`, `execute_php_code.s`, `execute_ruby_code.s`, and `copy_file_using_syscalls.s` implemented.
-* Improved set/restore of process priorities and affinities in "slow" mode
-* Updated script output to use architecture-specific register names and output hex values more appropriately for architectures of different word sizes
-
-### 0.14 (2022-05-15)
-
-* ARM32 stage 1, stage 2 template, and `printf.s` are working!
-
-### 0.13 (2022-05-13)
-
-* Made asm/<architecture>/ an implicit part of the path to the stage 2 code
-* Progress on ARM32 code, but not ready to use yet
-
-### 0.12 (2022-05-12)
-
-* Bug fixes
-* Documentation updated
-* ARM32 code still needs to be updated
-
-### 0.11 (2022-05-11)
-
-* Added `execute_precompiled.s` and `execute_precompiled_threaded.s` to allow executing inline binary shellcode once again
-* Added `dlinject.s` and `dlinject_threaded.s` to emulate the original dlinject.py's ability to load Linux shared libraries into an existing process
-* A validating assembly operation is now performed on the stage 2 code before any injection takes place, to avoid locking up the target process if stage 1 succeeds but stage 2 fails to assemble (due to missing parameters, etc.)
-* Added `get_relative_offsets.sh` shortcut script to avoid copy/pasting long readelf one-liners
-* Practice loop scripts now include date/timestamp and iteration count to make it easier to see when injection has occurred
-* ARM32 code still needs to be updated
-
-### 0.10 (2022-05-10)
-
-* Python and Ruby injection are working again for x86-64
-* PHP injection works now for x86-64
-* Copy files using only syscalls and copy files using libc calls are working again for x86-64
-* Most of the rearchitecture is complete
-* ARM32 code has not been updated yet
-
-### 0.8 (2022-05-06)
-
-* Lots of things are broken
-* Major rearchitecture in progress
-* No longer crashes python 3 after injected code has finished, though!
-* Only the printf.s shellcode is working right now
-
-### 0.7 (2021-09-02)
-
-* Still an internal development build
-* First version to include basic support for 32-bit ARM targets
-* Made all of the existing x86-64 shellcode files dependent on less specific versions of libraries, where applicable
-* Various other bug fixes and enhancements
-
-### 0.6 (2021-09-01)
-
-* Still an internal development build
-* Added Ruby injection code
-* Improved reliability
-* A few other bug fixes
-
-### 0.5 (2021-08-31)
-
-* Still an internal development build
-* Added copy-file-using-libc code
-
-### 0.4 (2021-08-31)
-
-* Still an internal development build
-* Added copy-file-using-syscalls code
-
-### 0.3 (2021-08-30)
-
-* Still an internal development build
-* Implemented "mem" staging method
-
-### 0.2 (2021-08-30)
-
-* Still an internal development build
-* Implemented "slow" stop method
-* Implemented support for non-PIC binaries, like Python 3.x
-* Various bug fixes
-
-### 0.1 (2021-06-07)
-
-* Internal development build

@@ -11,32 +11,19 @@ asminject_libpthread_pthread_join:
 	add r11, sp, #0x04
 	sub sp, sp, #0x20
 	push {r10}
-	push {r9}
 
 // Load the base address of libpthread into r10
 	ldr r10, [pc]
-	b asminject_libpthread_pthread_join_load_pthread_join_offset
-
-asminject_libpthread_pthread_join_base_address:
-	.word [BASEADDRESS:.+/libpthread-[0-9\.]+.so$:BASEADDRESS]
-	.balign 4
-	
-// Load the relative offset of pthread_join into r9
-asminject_libpthread_pthread_join_load_pthread_join_offset:
-	ldr r9, [pc]
 	b asminject_libpthread_pthread_join_call_pthread_join
 
-asminject_libpthread_pthread_join_pthread_join_offset:
-	.word [RELATIVEOFFSET:^pthread_join($|@@.+):RELATIVEOFFSET]
+asminject_libpthread_pthread_join_address:
+	.word [SYMBOL_ADDRESS:^pthread_join($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
-
-asminject_libpthread_pthread_join_call_pthread_join:
-	// r9 = relative offset + base address
-	add r9, r9, r10 
-	// r0 will already be set
-	blx r9
 	
-	pop {r9}
+asminject_libpthread_pthread_join_call_pthread_join:
+	// r0 will already be set
+	blx r10
+	
 	pop {r10}
 
 	sub sp, r11, #0x04

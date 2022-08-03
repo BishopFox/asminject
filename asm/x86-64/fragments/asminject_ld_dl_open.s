@@ -24,20 +24,38 @@ asminject_ld_dl_open:
 	// stack1 = env
 	
 	// store a pointer to the library path to use as a fake argv and env
-	mov rdx, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
-	add rdx, 0x500
-	mov [rdx], rdi
-	mov r9, rdx
-	push rdx
+	//mov rdx, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
+	//add rdx, 0x500
+	//mov [rdx], rdi
+	//mov r9, rdx
+	//push rdx
 	
-	mov rsi, 2              # mode (RTLD_NOW)
-	mov r9, [FUNCTION_ADDRESS:^_dl_open($|@@.+):IN_BINARY:.+/ld(-linux|)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
-	mov rdx, r9
-	mov rcx, -1
-	mov r8, 1
-	call r9
+	sub rsp, 0x8
+	
+	// these values obtained from symbols exported by libc:
+	// deference pointer to environment variables
+	mov r9, [SYMBOL_ADDRESS:^_environ$:IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
+	mov r9, [r9]
+	push r9
+	// deference pointer to argv
+	mov r9, [SYMBOL_ADDRESS:^__libc_argv$:IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
+	mov r9, [r9]
+	// deference pointer to argc
+	mov r8, [SYMBOL_ADDRESS:^__libc_argc$:IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
+	mov r8, [r8]
+	
+	mov rsi, 0x80000002              # mode (RTLD_NOW|value observed in gdb)
+	//mov rsi, 0x2              # mode (RTLD_NOW)
+	mov rax, [SYMBOL_ADDRESS:^_dl_open($|@@.+):IN_BINARY:.+/ld(-linux|)[a-z\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
+	mov rdx, [VARIABLE:READ_EXECUTE_ADDRESS:VARIABLE]
+	mov rcx, -2
+	//mov rcx, 0
+	//mov r8, 1
+	call rax
 
-	pop rdx
+	pop rax
+	pop rax
+	pop r9
 	
 	pop r9
 	pop r8
@@ -46,46 +64,5 @@ asminject_ld_dl_open:
 	
 	leave
 	ret
-	
-	
-	
-	sub esp, 0x4
-	
-	// set ecx to the address of this function
-	call asminject_ld_dl_open_address_get_next
-asminject_ld_dl_open_address_get_next:
-	pop ecx
-	sub ecx, 0xd
-	jmp asminject_ld_dl_open_call_dl_open
 
-asminject_ld_dl_open_call_dl_open:	
-
-	// use the library path as a fake env value
-	push edx
-	
-	// use the library path as a fake argv
-	push edx
-	
-	// fake argc of 1
-	mov eax, 0x1
-	push eax
-	// hardcoded nsid value observed in gdb:
-	mov eax, 0xfffffffe
-	push eax
-	mov edx, [FUNCTION_ADDRESS:^_dl_open($|@@.+):IN_BINARY:.+/ld(-linux|)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
-	push ecx
-	// (RTLD_NOW)
-	mov eax, 0x2
-	// when observing a real call in gdb, the mode was OR'd with 0x80000000
-	//or eax, 0x80000000
-	// for debugging, the exact value observed in gdb - decodes to RTLD_LAZY | RTLD_DEEPBIND | RTLD_GLOBAL | 0x80000000
-	//mov eax, 0x80000109
-	push eax
-	push edi
-	call edx
-	
-	add esp, 0x3c
-	
-	leave
-	ret
 // END: asminject_ld_dl_open

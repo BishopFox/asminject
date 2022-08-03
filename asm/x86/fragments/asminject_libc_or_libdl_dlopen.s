@@ -25,7 +25,7 @@ asminject_libc_or_libdl_dlopen:
 	push 0x2              
 	push edi
 
-	mov edx, [FUNCTION_ADDRESS:^dlopen($|@@.+):IN_BINARY:.+/lib(dl|c)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	mov edx, [SYMBOL_ADDRESS:^dlopen($|@@.+):IN_BINARY:.+/lib(dl|c)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call edx
 	
 	add esp, 0x10

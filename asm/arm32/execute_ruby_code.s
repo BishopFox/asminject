@@ -37,7 +37,7 @@ load_rb_eval_string_offset:
 	b call_rb_eval_string
 
 rb_eval_string_offset:
-	.word [FUNCTION_ADDRESS:rb_eval_string:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:rb_eval_string:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	.balign 4
 
 call_rb_eval_string:

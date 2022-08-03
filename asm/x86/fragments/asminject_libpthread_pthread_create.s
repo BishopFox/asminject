@@ -26,7 +26,7 @@ asminject_libpthread_pthread_create:
 	push 0x0
 	push edi
 	
-	[FUNCTION_ADDRESS:^pthread_create($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	[SYMBOL_ADDRESS:^pthread_create($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call edx
 	
 	add esp, 0x10

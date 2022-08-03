@@ -16,7 +16,7 @@ asminject_libc_fread:
 	push r9
 	push r14
 	
-	mov r9, [FUNCTION_ADDRESS:^fread($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	mov r9, [SYMBOL_ADDRESS:^fread($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call r9
 
 	pop r14

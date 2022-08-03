@@ -21,7 +21,7 @@
 	pop rdi
 	mov rsi, [VARIABLE:rubycode.length:VARIABLE]
 	sub rsi, 1
-	mov rbx, [FUNCTION_ADDRESS:^rb_str_new$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	mov rbx, [SYMBOL_ADDRESS:^rb_str_new$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	// keep the pointer around
 	mov r10, rax
@@ -41,7 +41,7 @@
 	call asminject_copy_bytes
 	pop rdi
 	mov rsi, [VARIABLE:rubyfunction.length:VARIABLE]
-	mov rbx, [FUNCTION_ADDRESS:^rb_str_new$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	mov rbx, [SYMBOL_ADDRESS:^rb_str_new$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	// keep the pointer around
 	mov r9, rax
@@ -63,7 +63,7 @@
 	call asminject_copy_bytes
 	pop rdi
 	mov rsi, [VARIABLE:globalvariable.length:VARIABLE]
-	mov rbx, [FUNCTION_ADDRESS:^rb_str_new$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	mov rbx, [SYMBOL_ADDRESS:^rb_str_new$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	// keep the pointer around
 	mov r8, rax
@@ -85,7 +85,7 @@
 	// function name string
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 0x400
-	mov rbx, [FUNCTION_ADDRESS:^rb_intern$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	mov rbx, [SYMBOL_ADDRESS:^rb_intern$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	// keep the pointer around
 	mov r13, rax
@@ -110,7 +110,7 @@
 	// global variable name string
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 0x800
-	mov rbx, [FUNCTION_ADDRESS:^rb_gv_get$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	mov rbx, [SYMBOL_ADDRESS:^rb_gv_get$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	// keep the pointer around
 	mov r12, rax
@@ -139,7 +139,7 @@
 	mov rdx, 1
 	// code string
 	mov rcx, r10
-	mov rbx, [FUNCTION_ADDRESS:^rb_funcall$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	mov rbx, [SYMBOL_ADDRESS:^rb_funcall$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	pop rbx
 	pop r8
@@ -154,7 +154,7 @@
 	# // BEGIN: call ruby_cleanup
 	# push rbx
 	# mov rdi, 0
-	# mov rbx, [FUNCTION_ADDRESS:^ruby_cleanup$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	# mov rbx, [SYMBOL_ADDRESS:^ruby_cleanup$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	# call rbx
 	# pop rbx
 	# // END: call ruby_cleanup

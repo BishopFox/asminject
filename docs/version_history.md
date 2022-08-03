@@ -2,16 +2,23 @@
 
 ### 0.37 (2022-08-02)
 
-* Re-engineered relative offset model to tie function names to specific binary paths
+* Re-engineered relative offset model to tie symbol names to specific binary paths
   * This was necessary to fix some issues with the more flexible regular expressions that reference some functions
   * It doesn't change the operator experience, but does affect the assembly code for all architectures
     * Old-style library function reference: `mov r9, [BASEADDRESS:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:BASEADDRESS] + [RELATIVEOFFSET:^fopen($|@@.+):RELATIVEOFFSET]`
-	* New-style library function reference: `mov r9, [FUNCTION_ADDRESS:^printf($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]`
+	* New-style library function reference: `mov r9, [SYMBOL_ADDRESS:^printf($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]`
 	* If you've written custom payloads that reference functions in other binaries, you'll need to convert them to the newer syntax
 	* Payloads for x86 and ARM32 that reference library functions are generally much shorter now
+  * Additionally, use of other types of symbols is now supported and encouraged
+    * For example, the new x86-64 versions of `dlinject-ld.s` and `dlinject-ld-threaded.s` reference the `__libc_argc`,  `__libc_argv`, and `_environ` symbols exported by `libc`	
+* Assembly using `gcc` now uses the following workaround for all architectures:
+  * Assemble the payload normally (i.e. the intermediate output is an ELF, not raw binary/shellcode)
+  * Call `objcopy` to extract 
+  * Previously, `x86-64` simply added the `-Wl,--oformat=binary` flag to `gcc`, and this caused `gcc` to emit a raw binary, with no need to call `objcopy` at all. This worked fine on Debian-derived distributions, but on OpenSUSE, the binary still contained a header, and this broke the injection step.
 * Bug fixes to 32-bit x86 obfuscation code
 * Fixed a bug in the ARM32 library injection fragment that made it unreliable
 * Fixed incomplete ARM32 `dlinject-threaded.s` payload that was broken
+* Added `dlinject-ld.s` and `dlinject-ld-threaded.s` payloads for x86-64
 * Added basic processor architecture autodetection feature
 * Documentation updates
 

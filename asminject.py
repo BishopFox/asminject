@@ -1336,9 +1336,9 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
             log(f"Replacement key: '{rname}', value '{replacements[rname]}'", ansi=injection_params.ansi)  
     
     # Replace function address placeholders
-    # e.g. [FUNCTION_ADDRESS:^printf($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+    # e.g. [SYMBOL_ADDRESS:^printf($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
     function_address_placeholders = []
-    function_address_placeholder_matches = re.finditer(r'(\[FUNCTION_ADDRESS:)(.*?)(:FUNCTION_ADDRESS\])', formatted_source)
+    function_address_placeholder_matches = re.finditer(r'(\[SYMBOL_ADDRESS:)(.*?)(:SYMBOL_ADDRESS\])', formatted_source)
     for match in function_address_placeholder_matches:
         function_and_library = match.group(2)
         if function_and_library not in function_address_placeholders:
@@ -1384,7 +1384,7 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
                                 if injection_params.enable_debugging_output:
                                     log(f"Found a match for '{func_addr_function_regex}' in symbol list for '{lname}': '{symbol_name}'", ansi=injection_params.ansi)
                                 function_address = memory_map_data.get_first_region_for_named_file(lname).get_base_address() + binary_relative_offsets[symbol_name]
-                                replacements[f"[FUNCTION_ADDRESS:{func_addr_placeholder}:FUNCTION_ADDRESS]"] = f"{hex(function_address)}"
+                                replacements[f"[SYMBOL_ADDRESS:{func_addr_placeholder}:SYMBOL_ADDRESS]"] = f"{hex(function_address)}"
                                 found_func_addr_match = True
                                 break
         if not found_func_addr_match:
@@ -1466,7 +1466,7 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
     
     # check for any remaining placeholders in the formatted source code
     # placeholder_types = ['BASEADDRESS', 'RELATIVEOFFSET', 'VARIABLE']
-    placeholder_types = ['FUNCTION_ADDRESS', 'VARIABLE']
+    placeholder_types = ['SYMBOL_ADDRESS', 'VARIABLE']
     missing_values = []
     for pht in placeholder_types:
         missing_placeholders_matches = re.finditer(r'(\[' + pht + ':)(.*?)(:' + pht + '\])', formatted_source)
@@ -1504,9 +1504,13 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
         
         #out_path = f"/tmp/assembled_{os.urandom(8).hex()}.bin"
         #cmd = "gcc -x assembler - -o {0} -nostdlib -Wl,--oformat=binary -m64 -fPIC".format()
-        use_objcopy_workaround = False
+        # the objcopy workaround isn't necessary on Debian-derived x86-64 Linux distributions
+        # but it turns out that it *is* required on e.g. OpenSUSE, so I guess we'll just always use it.
+        #use_objcopy_workaround = False
+        use_objcopy_workaround = True
         
-        argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-Wl,--oformat=binary", "-m64", "-fPIC"]
+        #argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-Wl,--oformat=binary", "-m64", "-fPIC"]
+        argv = ["gcc", "-x", "assembler", "-", "-o", out_path, "-nostdlib", "-fPIC", "-Wl,--build-id=none", "-m64", "-s"]
         
         # ARM gcc doesn't support the raw binary output format, and there is a similar issue with x86
         # it's necessary to pass -Wl,--build-id=none so 
@@ -1565,7 +1569,7 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
                 
                 if injection_params.architecture == "arm32":
                     argv = ["objcopy", "-O", "binary", out_path, obj_out_path]
-                if injection_params.architecture == "x86":
+                if injection_params.architecture in ["x86", "x86-64"]:
                     argv = ["objcopy", "-O", "binary", "--only-section=.text", out_path, obj_out_path]
                 
                 if injection_params.enable_debugging_output:

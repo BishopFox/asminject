@@ -16,7 +16,7 @@ asminject_libpthread_pthread_exit:
 	b asminject_libpthread_pthread_exit_call_pthread_exit
 
 asminject_libpthread_pthread_exit_address:
-	.word [FUNCTION_ADDRESS:^pthread_exit($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:^pthread_exit($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
 	
 asminject_libpthread_pthread_exit_call_pthread_exit:

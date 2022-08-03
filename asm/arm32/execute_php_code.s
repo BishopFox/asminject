@@ -68,7 +68,7 @@ load_zend_eval_string_offset:
 	b call_zend_eval_string
 
 zend_eval_string_offset:
-	.word [FUNCTION_ADDRESS:^zend_eval_string$:IN_BINARY:.+/php($|[0-9\.]+$):FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:^zend_eval_string$:IN_BINARY:.+/php($|[0-9\.]+$):SYMBOL_ADDRESS]
 	.balign 4
 
 call_zend_eval_string:

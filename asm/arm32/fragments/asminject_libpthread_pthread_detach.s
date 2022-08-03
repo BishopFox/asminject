@@ -16,7 +16,7 @@ asminject_libpthread_pthread_detach:
 	b asminject_libpthread_pthread_detach_call_pthread_detach
 
 asminject_libpthread_pthread_detach_address:
-	.word [FUNCTION_ADDRESS:^pthread_detach($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:^pthread_detach($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
 
 asminject_libpthread_pthread_detach_call_pthread_detach:

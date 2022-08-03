@@ -17,7 +17,7 @@ asminject_libc_or_libdl_dlopen:
 	b asminject_libdl_dlopen_call_dlopen
 
 asminject_libdl_dlopen_address:
-	.word [FUNCTION_ADDRESS:^dlopen($|@@.+):IN_BINARY:.+/lib(dl|c)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:^dlopen($|@@.+):IN_BINARY:.+/lib(dl|c)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
 
 asminject_libdl_dlopen_call_dlopen:

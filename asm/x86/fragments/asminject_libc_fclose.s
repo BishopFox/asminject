@@ -22,7 +22,7 @@ asminject_libc_fclose:
 	
 	push edi
 
-	mov edx, [FUNCTION_ADDRESS:^fclose($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	mov edx, [SYMBOL_ADDRESS:^fclose($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call edx
 
 	add esp, 0x10

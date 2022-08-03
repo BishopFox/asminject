@@ -20,7 +20,7 @@ asminject_libc_fread:
 	b asminject_libc_fread_call_fread
 
 asminject_libc_fread_address:
-	.word [FUNCTION_ADDRESS:^fread($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:^fread($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
 
 asminject_libc_fread_call_fread:

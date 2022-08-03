@@ -50,10 +50,10 @@ asminject_ld_dl_open_call_dl_open:
 	// fake argc of 1
 	mov eax, 0x1
 	push eax
-	// hardcoded nsid value observed in gdb:
+	// hardcoded nsid value of -2 observed in gdb:
 	mov eax, 0xfffffffe
 	push eax
-	mov edx, [FUNCTION_ADDRESS:^_dl_open($|@@.+):IN_BINARY:.+/ld(-linux|)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	mov edx, [SYMBOL_ADDRESS:^_dl_open($|@@.+):IN_BINARY:.+/ld(-linux|)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	push ecx
 	// (RTLD_NOW)
 	mov eax, 0x2

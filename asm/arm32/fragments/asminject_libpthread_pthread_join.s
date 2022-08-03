@@ -17,7 +17,7 @@ asminject_libpthread_pthread_join:
 	b asminject_libpthread_pthread_join_call_pthread_join
 
 asminject_libpthread_pthread_join_address:
-	.word [FUNCTION_ADDRESS:^pthread_join($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:^pthread_join($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
 	
 asminject_libpthread_pthread_join_call_pthread_join:

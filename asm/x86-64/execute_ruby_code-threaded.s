@@ -23,7 +23,7 @@
 	push rbx
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 32
-	mov rbx, [FUNCTION_ADDRESS:^rb_eval_string$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	mov rbx, [SYMBOL_ADDRESS:^rb_eval_string$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	pop rbx
 	pop r14

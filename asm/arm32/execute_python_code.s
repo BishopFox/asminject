@@ -37,7 +37,7 @@ load_ensure_offset:
 	b call_ensure
 
 ensure_offset:
-	.word [FUNCTION_ADDRESS:PyGILState_Ensure:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:PyGILState_Ensure:IN_BINARY:.+/(lib|)python[0-9\.so]+$:SYMBOL_ADDRESS]
 	.balign 4
 
 call_ensure:
@@ -60,7 +60,7 @@ call_ensure:
 	b call_run
 
 run_offset:
-	.word [FUNCTION_ADDRESS:PyRun_SimpleStringFlags:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:PyRun_SimpleStringFlags:IN_BINARY:.+/(lib|)python[0-9\.so]+$:SYMBOL_ADDRESS]
 	.balign 4
 
 call_run:
@@ -83,7 +83,7 @@ call_run:
 	b call_release
 
 release_offset:
-	.word [FUNCTION_ADDRESS:PyGILState_Release:IN_BINARY:.+/(lib|)python[0-9\.so]+$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:PyGILState_Release:IN_BINARY:.+/(lib|)python[0-9\.so]+$:SYMBOL_ADDRESS]
 	.balign 4
 
 call_release:

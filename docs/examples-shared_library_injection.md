@@ -137,7 +137,7 @@ Reconnect Interval: 1m0s
 
 ## _dl_open with multithreading
 
-The `dlinject-ld-threaded.s` payload mimics the original `dlinject.py`, calling the `_dl_open` function that some versions of the `ld` library export (e.g. on OpenSUSE), and is multithreaded so that the target process continues executing normally after injection. `dlinject-ld-threaded.s` is currently an experimental feature, and only provided for the x86 architecture.
+The `dlinject-ld-threaded.s` payload mimics the original `dlinject.py`, calling the `_dl_open` function that some versions of the `ld` library export (e.g. on OpenSUSE), and is multithreaded so that the target process continues executing normally after injection. `dlinject-ld-threaded.s` is currently only provided for the x86 and x86-64 architectures, because I haven't found an ARM32 Linux distribution that includes a version of `ld` that exports the `_dl_open` symbol yet.
 
 ```
 # python3 ./asminject.py 30320 dlinject-ld-threaded.s \
@@ -156,7 +156,7 @@ The `dlinject.s` payload is identical to the `dlinject-threaded.s` payload, exce
 
 ## _dl_open without multithreading
 
-The `dlinject-ld.s` payload is identical to `dlinject-ld-threaded.s`, except that it does not call `_dl_open` in a separate thread. Like `dlinject.s`, this means that the `libpthread` library functions are not required, but it also means that the target process will stop doing its normal work in favour of whatever the injected code starts doing. `dlinject-ld.s` is currently an experimental feature, and only provided for the x86 architecture.
+The `dlinject-ld.s` payload is identical to `dlinject-ld-threaded.s`, except that it does not call `_dl_open` in a separate thread. Like `dlinject.s`, this means that the `libpthread` library functions are not required, but it also means that the target process will stop doing its normal work in favour of whatever the injected code starts doing. `dlinject-ld.s` is currently only provided for the x86 and x86-64 architectures, because I haven't found an ARM32 Linux distribution that includes a version of `ld` that exports the `_dl_open` symbol yet.
 
 ```
 # python3 ./asminject.py 30320 dlinject-ld.s \

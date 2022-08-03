@@ -24,7 +24,7 @@ execute_ruby_code_copy_code:
 	
 	mov edi, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	push edi
-	mov ebx, [FUNCTION_ADDRESS:^rb_eval_string$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	mov ebx, [SYMBOL_ADDRESS:^rb_eval_string$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call ebx
 	
 	sub esp, 0xc

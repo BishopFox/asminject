@@ -25,7 +25,7 @@ The original `dlinject.py` was designed specifically to load Linux shared librar
 
 ## Getting started
 
-Make sure you have `gcc` and `readelf` installed. `readelf` is generally part of the `binutils` package for most Linux distributions.
+Make sure you have `gcc`, `objcopy`, and `readelf` installed. `gcc` is generally part of the `gcc` package for most Linux distributions. `objcopy` and `readelf` are generally part of the `binutils` package for most Linux distributions.
 
 In one terminal window, start a Python script that will not exit immediately. For example:
 

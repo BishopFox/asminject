@@ -20,7 +20,7 @@ asminject_libc_fwrite:
 	b asminject_libc_fwrite_call_fwrite
 
 asminject_libc_fwrite_address:
-	.word [FUNCTION_ADDRESS:^fwrite($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:FUNCTION_ADDRESS]
+	.word [SYMBOL_ADDRESS:^fwrite($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
 
 asminject_libc_fwrite_call_fwrite:

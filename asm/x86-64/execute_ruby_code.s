@@ -6,7 +6,7 @@
 	# lea rdx, ruby_argc[rip]	# fake argc data
 	# mov rsi, rdx
 	# mov rdi, rax
-	# mov rbx, [FUNCTION_ADDRESS:^ruby_sysinit$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	# mov rbx, [SYMBOL_ADDRESS:^ruby_sysinit$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	# call rbx
 	# pop rbx
 	# // END: call ruby_sysinit
@@ -15,21 +15,21 @@
 	# push rbx
 	# lea rax, [RBP - 8]
 	# mov rdi, rax
-	# mov rbx, [FUNCTION_ADDRESS:^ruby_init_stack$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	# mov rbx, [SYMBOL_ADDRESS:^ruby_init_stack$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	# call rbx
 	# pop rbx
 	# // END: call ruby_init_stack
 	
 	# // BEGIN: call ruby_init
 	# push rbx
-	# mov rbx, [FUNCTION_ADDRESS:^ruby_init$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	# mov rbx, [SYMBOL_ADDRESS:^ruby_init$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	# call rbx
 	# pop rbx
 	# // END: call ruby_init
 	
 	# // BEGIN: call ruby_init_loadpath
 	# push rbx
-	# mov rbx, [FUNCTION_ADDRESS:^ruby_init_loadpath$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	# mov rbx, [SYMBOL_ADDRESS:^ruby_init_loadpath$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	# call rbx
 	# pop rbx
 	# // END: call ruby_init_loadpath
@@ -55,7 +55,7 @@
 	//lea rdi, ruby_code[rip]
 	mov rdi, arbitrary_read_write_data_address[rip]
 	xor rsi, rsi
-	mov rbx, [FUNCTION_ADDRESS:^rb_eval_string$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	mov rbx, [SYMBOL_ADDRESS:^rb_eval_string$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	pop rbx
 	pop rdx
@@ -65,7 +65,7 @@
 	# // BEGIN: call ruby_cleanup
 	# push rbx
 	# mov rdi, 0
-	# mov rbx, [FUNCTION_ADDRESS:^ruby_cleanup$:IN_BINARY:.+/libruby[0-9\.so\-]+$:FUNCTION_ADDRESS]
+	# mov rbx, [SYMBOL_ADDRESS:^ruby_cleanup$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	# call rbx
 	# pop rbx
 	# // END: call ruby_cleanup

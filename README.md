@@ -36,7 +36,7 @@ In one terminal window, start a Python script that will not exit immediately. Fo
 2022-08-03T18:00:50.486070 - Loop count 2
 ```
 
-In a second terminal window, `su` to `root`. Install the requirements for the package, then locate the `bash` loop process. For example:
+In a second terminal window, `su` to `root`. Install the requirements for the package, then locate the Python loop process. For example:
 
 ```
 # pip3 install requirements.txt

@@ -21,7 +21,9 @@ asminject_libpthread_pthread_exit_address:
 	
 asminject_libpthread_pthread_exit_call_pthread_exit:
 	// r0 will already be set
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
 	blx r10
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
 
 	pop {r10}
 

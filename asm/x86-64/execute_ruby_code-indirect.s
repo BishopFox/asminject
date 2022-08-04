@@ -3,8 +3,6 @@
 // https://blog.peterzhu.ca/creating-ruby-strings-c/
 // https://blog.peterzhu.ca/ruby-c-ext/
 
-[FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
-
 	push r13
 
 	// copy the Ruby code string to arbitrary read/write memory
@@ -17,14 +15,16 @@
 	mov rcx, [VARIABLE:rubycode.length:VARIABLE]
 	add rcx, 2												# null terminator
 	push rdi
-	call asminject_copy_bytes
+	rep movsb
 	pop rdi
+	[INLINE:stack_align-r8-pre.s:INLINE]
 	mov rsi, [VARIABLE:rubycode.length:VARIABLE]
 	sub rsi, 1
 	mov rbx, [SYMBOL_ADDRESS:^rb_str_new$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	// keep the pointer around
 	mov r10, rax
+	[INLINE:stack_align-r8-post.s:INLINE]
 	pop r14
 	// END: copy the Ruby code string to arbitrary read/write memory
 	
@@ -38,13 +38,15 @@
 	mov rcx, [VARIABLE:rubyfunction.length:VARIABLE]
 	add rcx, 2												# null terminator
 	push rdi
-	call asminject_copy_bytes
+	rep movsb
 	pop rdi
+	[INLINE:stack_align-r8-pre.s:INLINE]
 	mov rsi, [VARIABLE:rubyfunction.length:VARIABLE]
 	mov rbx, [SYMBOL_ADDRESS:^rb_str_new$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	// keep the pointer around
 	mov r9, rax
+	[INLINE:stack_align-r8-post.s:INLINE]
 	pop r10
 	pop r14
 	// END: copy the Ruby function name string to arbitrary read/write memory
@@ -60,13 +62,15 @@
 	mov rcx, [VARIABLE:globalvariable.length:VARIABLE]
 	add rcx, 2												# null terminator
 	push rdi
-	call asminject_copy_bytes
+	rep movsb
 	pop rdi
+	[INLINE:stack_align-r8-pre.s:INLINE]
 	mov rsi, [VARIABLE:globalvariable.length:VARIABLE]
 	mov rbx, [SYMBOL_ADDRESS:^rb_str_new$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	// keep the pointer around
 	mov r8, rax
+	[INLINE:stack_align-r8-post.s:INLINE]
 	pop r9
 	pop r10
 	pop r14
@@ -80,15 +84,15 @@
 	push r9
 	push r8
 	push rbx
-	// function name Ruby string
-	//mov rdi, r9
 	// function name string
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 0x400
+	[INLINE:stack_align-r8-pre.s:INLINE]
 	mov rbx, [SYMBOL_ADDRESS:^rb_intern$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	// keep the pointer around
 	mov r13, rax
+	[INLINE:stack_align-r8-post.s:INLINE]
 	pop rbx
 	pop r8
 	pop r9
@@ -105,15 +109,15 @@
 	push r9
 	push r8
 	push rbx
-	// global variable name Ruby string
-	//mov rdi, r8
 	// global variable name string
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 0x800
+	[INLINE:stack_align-r8-pre.s:INLINE]
 	mov rbx, [SYMBOL_ADDRESS:^rb_gv_get$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
 	// keep the pointer around
 	mov r12, rax
+	[INLINE:stack_align-r8-post.s:INLINE]
 	pop rbx	
 	pop r8
 	pop r9
@@ -139,8 +143,10 @@
 	mov rdx, 1
 	// code string
 	mov rcx, r10
+	[INLINE:stack_align-r8-pre.s:INLINE]
 	mov rbx, [SYMBOL_ADDRESS:^rb_funcall$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
+	[INLINE:stack_align-r8-post.s:INLINE]
 	pop rbx
 	pop r8
 	pop r9

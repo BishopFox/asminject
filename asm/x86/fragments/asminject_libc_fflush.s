@@ -1,18 +1,18 @@
-// BEGIN: asminject_libc_fclose
-// wrapper for the libc fclose function
+// BEGIN: asminject_libc_fflush
+// wrapper for the libc fflush function
 // tested with libc 
-// Assumes the signature for fclose is int fclose(FILE * stream);
-// if your libc has a different signature for fclose, this code will probably fail
+// Assumes the signature for fflush is int fflush(FILE * stream);
+// if your libc has a different signature for fflush, this code will probably fail
 // edi = file handle
 
-// the 32-bit x86 version of calling fclose is handled like this:
+// the 32-bit x86 version of calling fflush is handled like this:
 // subtract 0xc from the stack pointer
 // push the argument to the stack:
 // * pointer to file descriptor
-// Call the fclose function
+// Call the fflush function
 // add 0x10 to the stack pointer
 
-asminject_libc_fclose:
+asminject_libc_fflush:
 	push ebp
 	mov ebp, esp	
 	sub esp, 0x10
@@ -25,7 +25,7 @@ asminject_libc_fclose:
 	
 	push edi
 
-	mov edx, [SYMBOL_ADDRESS:^fclose($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
+	mov edx, [SYMBOL_ADDRESS:^fflush($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call edx
 
 	// pop one argument + alignment placeholder off of stack:
@@ -36,4 +36,4 @@ asminject_libc_fclose:
 	leave
 	ret
 	
-// END: asminject_libc_fclose
+// END: asminject_libc_fflush

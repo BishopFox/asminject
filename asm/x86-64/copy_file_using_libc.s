@@ -1,5 +1,6 @@
 [FRAGMENT:asminject_libc_fopen.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fclose.s:FRAGMENT]
+[FRAGMENT:asminject_libc_fflush.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fread.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fwrite.s:FRAGMENT]
 
@@ -80,6 +81,11 @@ copyLoop:
 	jmp copyLoop
 
 doneCopying:
+
+	// BEGIN: call LIBC fflush against the destination file
+	mov rdi, r13	# file descriptor
+	call asminject_libc_fflush
+	// END: call LIBC fflush
 
 	// close file handles using fclose()
 	

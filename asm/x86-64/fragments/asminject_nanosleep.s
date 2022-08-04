@@ -10,6 +10,8 @@ asminject_nanosleep:
 	
 	push rax
 
+	[INLINE:stack_align-r8-pre.s:INLINE]
+
 	// push rsi and rdi onto the stack and then use the resulting stack pointer
 	// as the value to pass to sys_nanosleep, to avoid having to refer to an 
 	// offset or allocate memory
@@ -27,6 +29,8 @@ asminject_nanosleep:
 	
 	pop rdi
 	pop rsi
+	
+	[INLINE:stack_align-r8-post.s:INLINE]
 	
 	pop rax
 	

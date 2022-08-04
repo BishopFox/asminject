@@ -14,8 +14,12 @@ asminject_libc_fopen:
 	push r9
 	push r14
 	
+	[INLINE:stack_align-r8-pre.s:INLINE]
+	
 	mov r9, [SYMBOL_ADDRESS:^fopen($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call r9
+
+	[INLINE:stack_align-r8-post.s:INLINE]
 	
 	pop r14
 	pop r9

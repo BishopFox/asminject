@@ -16,6 +16,9 @@ asminject_libpthread_pthread_exit:
 	mov ebp, esp
 	sub esp, 0x10
 	
+	[INLINE:stack_align-ebx-eax-pre.s:INLINE]
+	// keep 16 byte stack alignment
+	// function argument count mod 4 == 1, so subtract 0xc
 	sub esp, 0xc
 	
 	push edi
@@ -23,6 +26,10 @@ asminject_libpthread_pthread_exit:
 	mov edx, [SYMBOL_ADDRESS:^pthread_exit($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call edx
 	
-	//leave
-	//ret
+	// pop one argument + alignment placeholder off of stack:
+	add esp, 0x10
+	[INLINE:stack_align-ebx-eax-post.s:INLINE]
+	
+	leave
+	ret
 // END: asminject_libpthread_pthread_exit

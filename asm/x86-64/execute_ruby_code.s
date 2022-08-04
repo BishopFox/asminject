@@ -1,5 +1,3 @@
-[FRAGMENT:asminject_copy_bytes.s:FRAGMENT]
-
 	# // BEGIN: call ruby_sysinit
 	# push rbx
 	# lea rax, ruby_argv[rip]	# fake argv data
@@ -35,12 +33,11 @@
 	# // END: call ruby_init_loadpath
 	
 	// copy the Ruby string to arbitrary read/write memory
-	push r14
+	push r14	
 	mov rdi, arbitrary_read_write_data_address[rip]
 	lea rsi, ruby_code[rip]
 	mov rcx, [VARIABLE:rubycode.length:VARIABLE]
 	add rcx, 2												# null terminator
-	//call asminject_copy_bytes
 	rep movsb
 	pop r14
 	// END: copy the Ruby string to arbitrary read/write memory
@@ -50,10 +47,15 @@
 	push rdx
 	push rbx
 	
+	[INLINE:stack_align-r8-pre.s:INLINE]
+	
 	mov rdi, arbitrary_read_write_data_address[rip]
 	xor rsi, rsi
 	mov rbx, [SYMBOL_ADDRESS:^rb_eval_string$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]
 	call rbx
+
+	[INLINE:stack_align-r8-post.s:INLINE]
+
 	pop rbx
 	pop rdx
 	pop r14

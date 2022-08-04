@@ -21,6 +21,10 @@ asminject_libpthread_pthread_create:
 	sub esp, 0x10
 	push edx
 	
+	[INLINE:stack_align-ebx-eax-pre.s:INLINE]
+	// keep 16 byte stack alignment
+	// function argument count mod 4 == 0, so no extra adjustment necessary
+	
 	push 0x0
 	push edx
 	push 0x0
@@ -29,7 +33,9 @@ asminject_libpthread_pthread_create:
 	mov edx, [SYMBOL_ADDRESS:^pthread_create($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call edx
 	
+	// pop four arguments off of stack:
 	add esp, 0x10
+	[INLINE:stack_align-ebx-eax-post.s:INLINE]
 	
 	pop edx
 	leave

@@ -15,6 +15,11 @@ asminject_libc_printf:
 	push ecx
 	push edx
 	
+	[INLINE:stack_align-ebx-eax-pre.s:INLINE]
+	// keep 16 byte stack alignment
+	// function has two arguments, so subtract 0x8
+	sub esp, 0x8
+	
 	push esi
 	push edi
 	mov ebx, esp
@@ -24,6 +29,9 @@ asminject_libc_printf:
 
 	pop edi
 	pop esi
+
+	add esp, 0x8
+	[INLINE:stack_align-ebx-eax-post.s:INLINE]
 
 	pop edx
 	pop ecx

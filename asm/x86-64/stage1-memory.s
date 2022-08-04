@@ -62,31 +62,7 @@ store_addresses:
 	mov rsi, r14
 	mov rdi, [VARIABLE:STATE_SWITCH_TO_NEW_COMMUNICATION_ADDRESS:VARIABLE]	
 	call asminject_set_payload_state
-# store_addresses:
 
-	# // store values at original communications address
-	# mov rsi, r14
-	# mov rdi, r15
-	# mov rcx, r11
-	# push r11
-	# push r14
-	# push r15
-	# call asminject_set_memory_addresses
-	# pop r15
-	# pop r14
-	# pop r11
-	
-	# // Also store the block addresses in the new communication address offset
-	# mov rsi, r11
-	# mov rdi, r15
-	# mov rcx, r11
-	# push r11
-	# push r14
-	# push r15
-	# call asminject_set_memory_addresses
-	# pop r15
-	# pop r14
-	# pop r11
 ready_for_stage_2:
 
 	// overwrite communications address with [VARIABLE:STATE_READY_FOR_STAGE_TWO_WRITE:VARIABLE]

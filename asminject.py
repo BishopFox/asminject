@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.38
-Ben Lincoln, Bishop Fox, 2022-08-03
+v0.39
+Ben Lincoln, Bishop Fox, 2022-08-04
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -1261,6 +1261,70 @@ def write_source_to_file(injection_params, source_code, description, file_name_s
         except Exception as e:
             log_error(f"Couldn't write {description} assembly source to '{out_path}': {e}", ansi=injection_params.ansi)
 
+def replace_fragments(injection_params, source_code, fragment_tag, inline, replaced_fragment_file_names):
+    fragment_refs_found = True
+    updated_source_code = source_code
+    recursion_count = 0
+    while fragment_refs_found:
+        found_this_iteration = 0
+        fragment_placeholders = []
+        if inline:
+            replaced_fragment_file_names = []
+        fragment_placeholders_matches = re.finditer(r'(\[' + fragment_tag + ':)(.*?)(:' + fragment_tag + '\])', updated_source_code)
+        for match in fragment_placeholders_matches:
+            fragment_file_name = match.group(2)
+            match_text = match.group(0)
+            if fragment_file_name in replaced_fragment_file_names:
+                # fragment has already been incorporated
+                if not inline:
+                    updated_source_code = updated_source_code.replace(match_text, "")
+            else:
+                # new fragment
+                if injection_params.enable_debugging_output:
+                    log(f"Found code fragment placeholder '{fragment_file_name}' in assembly code", ansi=injection_params.ansi)
+                fragment_placeholders.append(fragment_file_name)
+                replaced_fragment_file_names.append(fragment_file_name)
+        for fragment_file_name in fragment_placeholders:
+            new_fragment_source = get_code_fragment(injection_params, fragment_file_name)
+            string_to_replace = f"[{fragment_tag}:{fragment_file_name}:{fragment_tag}]"
+            if injection_params.enable_debugging_output:
+                log(f"Replacing '{string_to_replace}' with the content of file '{fragment_file_name}' in assembly code", ansi=injection_params.ansi)
+            updated_source_code = updated_source_code.replace(string_to_replace, new_fragment_source)
+        if len(fragment_placeholders) == 0:
+            fragment_refs_found = False
+        else:
+            recursion_count += 1
+            if recursion_count > injection_params.max_fragment_recursion:
+                recursion_reference_string = ""
+                recursion_reference_keys = []
+                for rck in recursion_count_list.keys():
+                    if rck not in recursion_reference_keys:
+                        recursion_reference_keys.append(rck)
+                recursion_reference_keys.sort()
+                for ref_key in recursion_reference_keys:
+                    new_key_string = f"{ref_key}: {recursion_count_list:ref_key} references"
+                    if recursion_reference_string == "":
+                        recursion_reference_string = new_key_string
+                    else:
+                        recursion_reference_string = f"{recursion_reference_string}, {new_key_string}"
+                log_error(f"Reached maximum recursion count of {injection_params.max_fragment_recursion} while importing assembly code fragments. This is usually due to a reference loop, such as fragment A referencing fragment B, while fragment B also references fragment A. The fragment files with the highest counts in the following list are most likely responsible: {recursion_reference_string}", ansi=injection_params.ansi)
+                return None
+    return updated_source_code
+
+global_sequential_number = 0
+# BEGIN: https://stackoverflow.com/questions/7293750/python-regex-how-to-replace-each-instance-of-an-occurrence-with-a-different-val
+def global_sequential_number_callback(match):
+    global global_sequential_number
+    step = 0
+    try:
+        step += int(match.group(2))
+    except Exception as e:
+        log_error(f"Couldn't convert '{match.group(2)}' in placeholder '{match.group(0)}' to an integer: {e}", ansi=injection_params.ansi)
+        sys.exit(1)
+    global_sequential_number += step
+    return str(global_sequential_number)
+# END: https://stackoverflow.com/questions/7293750/python-regex-how-to-replace-each-instance-of-an-occurrence-with-a-different-val
+
 def assemble(source, injection_params, memory_map_data, file_name_suffix, replacements = {}):
     formatted_source = source
     memory_map_path_names = memory_map_data.get_unique_path_names()
@@ -1288,51 +1352,12 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
     for i in range (0, len(initial_fragment_list_shuffled)):
         fragment_source = f"{fragment_source}{os.linesep}{os.linesep}{initial_fragment_list_shuffled[i]}"
 
-    fragment_refs_found = True
-    recursion_count = 0
-    while fragment_refs_found:
-        found_this_iteration = 0
-        fragment_placeholders = []
-        fragment_placeholders_matches = re.finditer(r'(\[FRAGMENT:)(.*?)(:FRAGMENT\])', fragment_source)
-        for match in fragment_placeholders_matches:
-            fragment_file_name = match.group(2)
-            match_text = match.group(0)
-            if fragment_file_name in replaced_fragment_file_names:
-                # fragment has already been incorporated
-                fragment_source = fragment_source.replace(match_text, "")
-            else:
-                # new fragment
-                if injection_params.enable_debugging_output:
-                    log(f"Found code fragment placeholder '{fragment_file_name}' in assembly code", ansi=injection_params.ansi)
-                fragment_placeholders.append(fragment_file_name)
-                replaced_fragment_file_names.append(fragment_file_name)
-        for fragment_file_name in fragment_placeholders:
-            new_fragment_source = get_code_fragment(injection_params, fragment_file_name)
-            string_to_replace = f"[FRAGMENT:{fragment_file_name}:FRAGMENT]"
-            if injection_params.enable_debugging_output:
-                log(f"Replacing '{string_to_replace}' with the content of file '{fragment_file_name}' in assembly code", ansi=injection_params.ansi)
-            fragment_source = fragment_source.replace(string_to_replace, new_fragment_source)
-        if len(fragment_placeholders) == 0:
-            fragment_refs_found = False
-        else:
-            recursion_count += 1
-            if recursion_count > injection_params.max_fragment_recursion:
-                recursion_reference_string = ""
-                recursion_reference_keys = []
-                for rck in recursion_count_list.keys():
-                    if rck not in recursion_reference_keys:
-                        recursion_reference_keys.append(rck)
-                recursion_reference_keys.sort()
-                for ref_key in recursion_reference_keys:
-                    new_key_string = f"{ref_key}: {recursion_count_list:ref_key} references"
-                    if recursion_reference_string == "":
-                        recursion_reference_string = new_key_string
-                    else:
-                        recursion_reference_string = f"{recursion_reference_string}, {new_key_string}"
-                log_error(f"Reached maximum recursion count of {injection_params.max_fragment_recursion} while importing assembly code fragments. This is usually due to a reference loop, such as fragment A referencing fragment B, while fragment B also references fragment A. The fragment files with the highest counts in the following list are most likely responsible: {recursion_reference_string}", ansi=injection_params.ansi)
-                return None
+    fragment_source = replace_fragments(injection_params, fragment_source, "FRAGMENT", False, replaced_fragment_file_names)
     
     formatted_source = formatted_source.replace(injection_params.fragment_placeholder, fragment_source)
+    
+    # replace inline fragments recursively
+    formatted_source = replace_fragments(injection_params, formatted_source, "INLINE", True, [])
     
     for rname in replacements.keys():
         if injection_params.enable_debugging_output:
@@ -1467,9 +1492,19 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
         if injection_params.obfuscate_payloads:
             pre_obfuscation_source = pre_obfuscation_source.replace(search_text, replacements[search_text])
     
+    # replace any special values
+    # global sequential number (to avoid duplicate labels, etc.)
+    global global_sequential_number
+    global_sequential_number = 0
+    formatted_source = re.sub(r'\[(GLOBAL_SEQUENTIAL_NUMBER):([^]]+)\]', global_sequential_number_callback, formatted_source)
+    if injection_params.obfuscate_payloads:
+        global_sequential_number = 0
+        pre_obfuscation_source = re.sub(r'\[(GLOBAL_SEQUENTIAL_NUMBER):([^]]+)\]', global_sequential_number_callback, pre_obfuscation_source)
+    
+    
     # check for any remaining placeholders in the formatted source code
     # placeholder_types = ['BASEADDRESS', 'RELATIVEOFFSET', 'VARIABLE']
-    placeholder_types = ['SYMBOL_ADDRESS', 'VARIABLE']
+    placeholder_types = ['SYMBOL_ADDRESS', 'VARIABLE', 'FRAGMENT', 'INLINE']
     missing_values = []
     for pht in placeholder_types:
         missing_placeholders_matches = re.finditer(r'(\[' + pht + ':)(.*?)(:' + pht + '\])', formatted_source)
@@ -1658,7 +1693,7 @@ def get_syscall_values(injection_params, pid):
         else:
             log(f"Couldn't retrieve current syscall values", ansi=injection_params.ansi)
     except Exception as e:
-        log_error(f"Couldn't retrieve current syscall values: {e}", ansi=injection_params.ansi)
+        log_error(f"Couldn't retrieve current syscall values: {e}. Please verify that you are running as an account that has access to ptrace the target application, and that /proc/sys/kernel/yama/ptrace_scope is set to 0 or 1.", ansi=injection_params.ansi)
     return result
 
 def wait_for_payload_communication_state(injection_params, pid, communication_address, wait_for_value):
@@ -2008,7 +2043,7 @@ def asminject(injection_params):
             output_process_priority_and_affinity(injection_params, "Pre-injection")
 
         except Exception as e:
-            log_error(f"Couldn't set process information for 'slow' mode: {e}", ansi=injection_params.ansi)
+            log_error(f"Couldn't set process information for 'slow' mode: {e}. Please verify that you are running as an account that has access to ptrace the target application, and that /proc/sys/kernel/yama/ptrace_scope is set to 0 or 1.", ansi=injection_params.ansi)
             sys.exit(1)
     else:
         log.warn("We're not going to stop the process first!", ansi=injection_params.ansi)

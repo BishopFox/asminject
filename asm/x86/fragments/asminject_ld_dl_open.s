@@ -30,6 +30,9 @@ asminject_ld_dl_open:
 	add edx, 0x500
 	mov [edx], edi
 	
+	[INLINE:stack_align-ebx-eax-pre.s:INLINE]
+	// keep 16 byte stack alignment
+	// function argument count mod 4 == 3, so subtract 0x4
 	sub esp, 0x4
 	
 	// set ecx to the address of this function
@@ -80,7 +83,11 @@ asminject_ld_dl_open_call_dl_open:
 	push edi
 	call edx
 	
-	add esp, 0x3c
+	// add esp, 0x3c
+	// pop seven arguments + alignment placeholder off of stack:
+	add esp, 0x20
+	[INLINE:stack_align-ebx-eax-post.s:INLINE]
+	
 	
 	leave
 	ret

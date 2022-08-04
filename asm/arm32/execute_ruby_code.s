@@ -33,7 +33,7 @@ copy_code_to_rw_memory:
 // BEGIN: call rb_eval_string
 // get the offset of the rb_eval_string function
 load_rb_eval_string_offset:
-	ldr r8, [pc]
+	ldr r6, [pc]
 	b call_rb_eval_string
 
 rb_eval_string_offset:
@@ -44,11 +44,11 @@ call_rb_eval_string:
 	mov r0, r7
 	add r0, r0, #0x80
 	push {r7}
-	push {r8}
-	push {r9}
-	blx r8
-	pop {r9}
-	pop {r8}
+	push {r6}
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
+	blx r6
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
+	pop {r6}
 	pop {r7}
 	// store handle in read/write memory
 	str r0, [r7]

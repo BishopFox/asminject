@@ -1,7 +1,8 @@
+[FRAGMENT:asminject_libc_fclose.s:FRAGMENT]
+[FRAGMENT:asminject_libc_fflush.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fopen.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fread.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fwrite.s:FRAGMENT]
-[FRAGMENT:asminject_libc_fclose.s:FRAGMENT]
 
 // load the address of the source file string into r0
 	mov r0, pc
@@ -85,9 +86,9 @@ copyLoop:
 	pop {r11}
 	cmp r0, #0x0
 	beq doneCopying
+	mov r2, r0		@ elements to write
 	mov r0, r7		@ buffer
 	mov r1, #1		@ element size (1 byte)
-	mov r2, #256	@ max elements to read/write (256)
 	mov r3, r8
 	push {r11}
 	push {r9}
@@ -101,6 +102,18 @@ copyLoop:
 	b copyLoop
 
 doneCopying:
+
+// flush output buffer()
+	mov r0, r8
+	push {r11}
+	push {r9}
+	push {r8}
+	push {r7}
+	bl asminject_libc_fflush
+	pop {r7}
+	pop {r8}
+	pop {r9}
+	pop {r11}
 
 // close destination file handle using fclose()
 	mov r0, r8

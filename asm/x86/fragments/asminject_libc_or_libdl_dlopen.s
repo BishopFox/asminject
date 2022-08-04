@@ -19,6 +19,10 @@ asminject_libc_or_libdl_dlopen:
 	sub esp, 0x10
 	push edx
 	
+	//sub esp, 0x8
+	[INLINE:stack_align-ebx-eax-pre.s:INLINE]
+	// keep 16 byte stack alignment
+	// function argument count mod 4 == 2, so subtract 0x8
 	sub esp, 0x8
 	
 	// mode (RTLD_NOW)
@@ -28,7 +32,10 @@ asminject_libc_or_libdl_dlopen:
 	mov edx, [SYMBOL_ADDRESS:^dlopen($|@@.+):IN_BINARY:.+/lib(dl|c)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call edx
 	
+	// pop two arguments + alignment placeholder off of stack:
 	add esp, 0x10
+	[INLINE:stack_align-ebx-eax-post.s:INLINE]
+	//add esp, 0x10
 	
 	pop edx
 	leave

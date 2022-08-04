@@ -64,7 +64,7 @@ load_phpname:
 // BEGIN: call zend_eval_string
 // get the offset of the zend_eval_string function
 load_zend_eval_string_offset:
-	ldr r8, [pc]
+	ldr r4, [pc]
 	b call_zend_eval_string
 
 zend_eval_string_offset:
@@ -78,9 +78,9 @@ call_zend_eval_string:
 	push {r5}
 	push {r6}
 	push {r7}
-	push {r8}
-	blx r8
-	pop {r8}
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
+	blx r4
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
 	pop {r7}
 	pop {r6}
 	pop {r5}

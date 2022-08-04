@@ -24,6 +24,10 @@ asminject_libc_fread:
 	sub esp, 0x10
 	push edx
 	
+	[INLINE:stack_align-ecx-edx-pre.s:INLINE]
+	// keep 16 byte stack alignment
+	// function argument count mod 4 == 0, so no extra adjustment necessary
+	
 	push ebx
 	push eax
 	push esi
@@ -32,7 +36,9 @@ asminject_libc_fread:
 	mov edx, [SYMBOL_ADDRESS:^fread($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call edx
 
+	// pop four arguments off of stack:
 	add esp, 0x10
+	[INLINE:stack_align-ecx-edx-post.s:INLINE]
 
 	pop edx
 	leave

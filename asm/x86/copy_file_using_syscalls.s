@@ -81,6 +81,11 @@ copyByteLoop:
 
 doneCopying:
 
+	// flush the output file buffer
+	mov eax, 118	# SYS_FSYNC
+	mov ebx, ecx	# file descriptor
+	int 0x80
+
 	// discard the buffer stack variable
 	pop eax
 	

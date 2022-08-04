@@ -55,6 +55,11 @@ copyByteLoop:
 
 doneCopying:
 
+	// flush the output file buffer
+	mov rax, 74		# SYS_FSYNC   
+	mov rdi, r12	# file descriptor
+	syscall
+
 	// discard the buffer stack variable
 	pop rax
 	

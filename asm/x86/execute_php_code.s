@@ -45,7 +45,11 @@ execute_php_code_copy_phpcode:
 	push ebx
 	push eax
 	
+	[INLINE:stack_align-ebx-eax-pre.s:INLINE]
+	// keep 16 byte stack alignment
+	// function argument count mod 4 == 3, so subtract 0x4
 	sub esp, 0x4
+	
 	// arbitrary name
 	mov eax, [VARIABLE:ARBITRARY_READ_WRITE_DATA_ADDRESS:VARIABLE]
 	push eax
@@ -57,7 +61,10 @@ execute_php_code_copy_phpcode:
 	mov edx, [SYMBOL_ADDRESS:^zend_eval_string$:IN_BINARY:.+/php($|[0-9\.]+$):SYMBOL_ADDRESS]
 	call edx
 
+	// pop three arguments + alignment placeholder off of stack:
 	add esp, 0x10
+	[INLINE:stack_align-ebx-eax-post.s:INLINE]
+
 	pop eax
 	pop ebx
 	pop ecx

@@ -24,7 +24,9 @@ asminject_libc_fopen_address:
 asminject_libc_fopen_call_fopen:
 	// r0 will already be set to the path to the file
 	// r1 will already be set to the mode string
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
 	blx r10
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
 
 	pop {r10}
 

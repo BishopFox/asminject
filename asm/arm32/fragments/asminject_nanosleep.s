@@ -17,8 +17,12 @@ asminject_nanosleep:
 	mov r0, sp	            					@ normal wait
 	mov r1, r0	            					@ wait if interrupted (same)
 
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
+
 	mov r7, #162             					@ sys_nanosleep
 	swi 0x0										@ syscall
+	
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
 
 	pop {r0}
 	pop {r1}

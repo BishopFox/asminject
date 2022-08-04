@@ -11,26 +11,6 @@ asminject_libc_or_libdl_dlopen:
 	add r11, sp, #0x04
 	sub sp, sp, #0x20
 	push {r10}
-	push {r9}
-	push {r8}
-	
-	// ensure the stack is 16-byte aligned, because some versions of libpthread are super picky about this
-asminject_libc_or_libdl_dlopen_align_stack:
-	mov r8, sp
-	sub r8, r8, #0x4	// one more register will be pushed onto the stack after this check
-	and r9, r8, #0x8
-	cmp r9, #8
-	bne asminject_libc_or_libdl_dlopen_push_one
-	push {r8}
-	push {r8}
-	asminject_libc_or_libdl_dlopen_push_one:
-	and r9, r8, #0x4
-	cmp r9, #4
-	bne asminject_libc_or_libdl_dlopen_load_address
-	push {r8}
-
-asminject_libc_or_libdl_dlopen_load_address:
-	push {r8}
 	
 // store the address of dlopen in r10
 	ldr r10, [pc]
@@ -43,26 +23,10 @@ asminject_libdl_dlopen_address:
 asminject_libc_or_libdl_dlopen_call_inner:
 	// r0 will already be set to the handle
 	// r1 will already be set to the mode
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
 	blx r10
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
 
-	pop {r8}
-	
-// remove extra values from the stack if any were added to align it
-
-	and r9, r8, #0x8
-	cmp r9, #8
-	bne asminject_libc_or_libdl_dlopen_pop_one
-	pop {r8}
-	pop {r8}
-asminject_libc_or_libdl_dlopen_pop_one:
-	and r9, r8, #0x4
-	cmp r9, #4
-	bne asminject_libc_or_libdl_dlopen_cleanup
-	pop {r8}
-
-asminject_libc_or_libdl_dlopen_cleanup:
-	pop {r8}
-	pop {r9}
 	pop {r10}
 
 	sub sp, r11, #0x04

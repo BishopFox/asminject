@@ -23,7 +23,9 @@ asminject_libc_printf_address:
 
 asminject_libc_printf_call_printf:
 	// r0, r1, and so on will already be set by the caller
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
 	blx r10
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
 
 	pop {r10}
 

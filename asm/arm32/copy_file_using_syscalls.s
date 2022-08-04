@@ -68,6 +68,11 @@ copyByteLoop:
 
 doneCopying:
 	
+	// flush the output file buffer
+	mov r7, #118		@ SYS_FSYNC   
+	mov r0, r10			@ fd
+	swi 0x0				@ syscall
+	
 	// discard the buffer stack variable
 	add sp,sp,#0x10
 

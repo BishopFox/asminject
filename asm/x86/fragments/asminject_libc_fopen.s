@@ -22,14 +22,20 @@ asminject_libc_fopen:
 	sub esp, 0x10
 	push edx
 
+	[INLINE:stack_align-ecx-edx-pre.s:INLINE]
+	// keep 16 byte stack alignment
+	// function argument count mod 4 == 2, so subtract 0x8
 	sub esp, 0x8
+	
 	push esi
 	push edi
 	
 	mov edx, [SYMBOL_ADDRESS:^fopen($|@@.+):IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call edx
 
+	// pop two arguments + alignment placeholder off of stack:
 	add esp, 0x10
+	[INLINE:stack_align-ecx-edx-post.s:INLINE]
 	
 	pop edx
 	leave

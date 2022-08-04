@@ -33,7 +33,7 @@ copy_code_to_rw_memory:
 // BEGIN: call PyGILState_Ensure
 // get the offset of the PyGILState_Ensure function
 load_ensure_offset:
-	ldr r8, [pc]
+	ldr r4, [pc]
 	b call_ensure
 
 ensure_offset:
@@ -44,11 +44,9 @@ call_ensure:
 	mov r0, #0x0
 	mov r1, #0x0
 	push {r7}
-	push {r8}
-	push {r9}
-	blx r8
-	pop {r9}
-	pop {r8}
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
+	blx r4
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
 	pop {r7}
 	// store handle in read/write memory
 	str r0, [r7]
@@ -56,7 +54,7 @@ call_ensure:
 
 // BEGIN: call PyRun_SimpleStringFlags("arbitrary Python code here", NULL)
 // get the offset of the PyRun_SimpleStringFlags function
-	ldr r8, [pc]
+	ldr r4, [pc]
 	b call_run
 
 run_offset:
@@ -69,17 +67,15 @@ call_run:
 	add r0, r0, #0x80	@ Offset of copied string
 	mov r1, #0x0			@ NULL	
 	push {r7}
-	push {r8}
-	push {r9}
-	blx r8
-	pop {r9}
-	pop {r8}
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
+	blx r4
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
 	pop {r7}
 // END: call PyRun_SimpleStringFlags("arbitrary Python code here", NULL)
 	
 // BEGIN: call PyGILState_Release(handle)
 // get the offset of the PyGILState_Release(handle) function
-	ldr r8, [pc]
+	ldr r4, [pc]
 	b call_release
 
 release_offset:
@@ -90,11 +86,9 @@ call_release:
 	// load handle from read/write memory
 	ldr r0, [r7]
 	push {r7}
-	push {r8}
-	push {r9}
-	blx r8
-	pop {r9}
-	pop {r8}
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
+	blx r4
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
 	pop {r7}
 
 // END: call PyGILState_Release(handle)

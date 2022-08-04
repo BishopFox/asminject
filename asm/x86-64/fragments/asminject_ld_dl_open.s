@@ -15,6 +15,8 @@ asminject_ld_dl_open:
 	push r8
 	push r9
 	
+	[INLINE:stack_align-r8-pre.s:INLINE]
+	
 	// rdi = pointer to file path
 	// rsi = mode 
 	// rdx = caller_dlopen
@@ -30,6 +32,8 @@ asminject_ld_dl_open:
 	//mov r9, rdx
 	//push rdx
 	
+	// subtract 8 from the stack pointer to keep it 16-byte aligned
+	// because one argument is pushed onto the stack for the next function call
 	sub rsp, 0x8
 	
 	// these values obtained from symbols exported by libc:
@@ -53,9 +57,13 @@ asminject_ld_dl_open:
 	//mov r8, 1
 	call rax
 
-	pop rax
-	pop rax
-	pop r9
+	//pop rax
+	//pop rax
+	//pop r9
+	
+	add rsp, 0x8
+	
+	[INLINE:stack_align-r8-post.s:INLINE]
 	
 	pop r9
 	pop r8

@@ -1,5 +1,6 @@
-[FRAGMENT:asminject_libc_fopen.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fclose.s:FRAGMENT]
+[FRAGMENT:asminject_libc_fflush.s:FRAGMENT]
+[FRAGMENT:asminject_libc_fopen.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fread.s:FRAGMENT]
 [FRAGMENT:asminject_libc_fwrite.s:FRAGMENT]
 
@@ -113,10 +114,24 @@ doneCopying:
 	pop ebx
 	pop eax
 
+	// BEGIN: call LIBC fflush against the destination file
+	# save source FD in case fclose stomps on it
+	push eax
+	push ebx
+	push ecx
+	push edx
+	mov edi, ecx	# file descriptor
+	call asminject_libc_fflush
+	pop edx
+	pop ecx
+	pop ebx
+	pop eax
+	// END: call LIBC fflush
+
 	// close file handles using fclose()
 	
 	// BEGIN: call LIBC fclose against the destination file
-	# save source FD in case fclose stops on it
+	# save source FD in case fclose stomps on it
 	push eax
 	push ebx
 	push ecx

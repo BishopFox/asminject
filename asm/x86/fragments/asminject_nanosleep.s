@@ -13,6 +13,10 @@ asminject_nanosleep:
 	push ecx
 	push edx
 
+	[INLINE:stack_align-ebx-eax-pre.s:INLINE]
+	// keep 16 byte stack alignment
+	// function argument count mod 4 == 0, so no extra adjustment necessary
+	
 	// push esi and edi onto the stack and then use the resulting stack pointer
 	// as the value to pass to sys_nanosleep, to avoid having to refer to an 
 	// offset or allocate memory
@@ -30,6 +34,8 @@ asminject_nanosleep:
 	
 	pop edi
 	pop esi
+	
+	[INLINE:stack_align-ebx-eax-post.s:INLINE]
 	
 	pop edx
 	pop ecx

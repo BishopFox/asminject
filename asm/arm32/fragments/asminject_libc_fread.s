@@ -25,7 +25,9 @@ asminject_libc_fread_address:
 
 asminject_libc_fread_call_fread:
 	// r0-r3 will already be set to the necessary arguments
+	[INLINE:stack_align-r8-r9-pre.s:INLINE]
 	blx r10
+	[INLINE:stack_align-r8-r9-post.s:INLINE]
 
 	pop {r10}
 

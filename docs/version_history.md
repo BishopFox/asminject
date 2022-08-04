@@ -1,5 +1,13 @@
 ## asminject.py - Version history
 
+### 0.39 (2022-08-04)
+
+* Implemented inline code fragment support
+* Used the new inline code fragment feature to implement standardized stack-alignment code across all calls to library functions in payloads and code fragments included with `asminject.py`. This should greatly improve reliability when running the payloads on Linux distributions where `asminject.py` has not been explicitly tested. It also makes most of the code fragments a lot smaller and easier to understand.
+* Added a call to the `fsync` syscall in the `copy_file_using_syscalls.s` payload for all architectures to help ensure that no trailing data is omitted.
+* Created an `asminject_libc_fflush.s` fragment for all architectures and modified the `copy_file_using_libc.s` payload for all architectures to help ensure that no trailing data is omitted.
+* Fixed a bug in the ARM32 version of the `copy_file_using_libc.s` payload that was causing it to attempt to write the incorrect number of bytes to the destination file during its last loop iteration.
+
 ### 0.38 (2022-08-03)
 
 * 32-bit x86 `dlinject-ld-threaded.s` and `dlinject-ld.s` payloads now use the real `__libc_argc`,  `__libc_argv`, and `_environ` symbols exported by `libc`, like the x86-64 versions introduced in version 0.37

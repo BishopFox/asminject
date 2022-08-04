@@ -1,5 +1,14 @@
 ## asminject.py - Version history
 
+### 0.38 (2022-08-03)
+
+* 32-bit x86 `dlinject-ld-threaded.s` and `dlinject-ld.s` payloads now use the real `__libc_argc`,  `__libc_argv`, and `_environ` symbols exported by `libc`, like the x86-64 versions introduced in version 0.37
+* Fixed a stack-misalignment bug in `asminject_libpthread_pthread_create.s`, `asminject_libc_or_libdl_dlopen.s`, and `asminject_libc_printf.s` fragments.
+* Fixed a stack-misalignment bug in `execute_php_code.s` that only affected Ubuntu.
+* Fixed a typo in the updated `get_relative_offsets.sh` script
+* Fixed a bug in recursively applying fragment references that seemed to only affect ARM32 payloads
+* Documentation updates
+
 ### 0.37 (2022-08-02)
 
 * Re-engineered relative offset model to tie symbol names to specific binary paths

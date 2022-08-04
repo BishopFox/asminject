@@ -23,9 +23,9 @@ pop rdi
 call asminject_libpthread_pthread_detach
 
 [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]:
+	jmp cleanup_and_return
 
-# inlined shellcode will go after this delimiter
-SHELLCODE_SECTION_DELIMITER
+// Removed delimiter as workaround
 
 [VARIABLE:INLINE_SHELLCODE:VARIABLE]
 

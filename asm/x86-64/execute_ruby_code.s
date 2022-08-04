@@ -49,10 +49,7 @@
 	push r14
 	push rdx
 	push rbx
-	//mov rdi, arbitrary_read_write_data_address[rip]
-	//add rdi, 32
-	//xor rsi, rsi
-	//lea rdi, ruby_code[rip]
+	
 	mov rdi, arbitrary_read_write_data_address[rip]
 	xor rsi, rsi
 	mov rbx, [SYMBOL_ADDRESS:^rb_eval_string$:IN_BINARY:.+/libruby[0-9\.so\-]+$:SYMBOL_ADDRESS]

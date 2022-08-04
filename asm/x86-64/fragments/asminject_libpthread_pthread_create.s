@@ -11,12 +11,36 @@ asminject_libpthread_pthread_create:
 	mov rbp, rsp
 	sub rsp, 0x10
 	push r9
+	push r8
+	
+	// ensure the stack is 16-byte aligned
+	mov r8, rsp
+	and r8, 0x8
+	cmp r8, 0x8
+	je asminject_libpthread_pthread_create_call_inner
+	push r8
+
+asminject_libpthread_pthread_create_call_inner:
+	push r8
+	// rdi = pointer to a memory location to represent the pthread_t struct
+	// rsi = attributes 
+	// rdx = pointer to function to launch in a separate thread
+	// rcx = arguments
 	
 	mov rcx, 0
 	mov rsi, 0
 	mov r9, [SYMBOL_ADDRESS:^pthread_create($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	call r9
+
+	pop r8
 	
+	// remove extra value from the stack if one was added to align it
+	cmp r8, 0x8
+	je asminject_libpthread_pthread_cleanup
+	pop r8
+
+asminject_libpthread_pthread_cleanup:
+	pop r8
 	pop r9
 	leave
 	ret

@@ -10,64 +10,31 @@ _start:
 
 
 // let the script know it can restore the previous data
-	//ldr r0, [pc]
 	ldr r1, [pc]
 	b store_state_ready_for_memory_restore
 
 state_ready_for_memory_restore:
 	.word [VARIABLE:STATE_READY_FOR_MEMORY_RESTORE:VARIABLE]
-	.balign 4
+	.balign 16
 
 store_state_ready_for_memory_restore:
-	//str r0, [r11]
 	mov r0, r11
 	bl asminject_set_payload_state
 	
 // wait for the script to have restored memory, then proceed
 // load the value that indicates memory_restored into r1
-	//ldr r8, [pc]
 	ldr r1, [pc]
 	b begin_waiting1
 
 state_memory_restored:
 	.word [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE]
-	.balign 4
+	.balign 16
 
 begin_waiting1:
 	// r0 = communications address
 	// r1 = value to wait for
 	mov r0, r11
 	bl asminject_wait_for_script_state
-	
-// store the sys_nanosleep timer data
-	//mov r5, pc
-	//b begin_waiting2
-
-//nanosleep_timespec:
-//	.word [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
-//	.word [VARIABLE:STAGE_SLEEP_SECONDS:VARIABLE]
-//	.balign 4
-
-//begin_waiting2:
-
-// store the sys_nanosleep timer data
-//	mov r0, r5
-//	mov r1, r5
-
-// wait for value at communications address to be [VARIABLE:STATE_MEMORY_RESTORED:VARIABLE] before proceeding
-//wait_for_script:
-
-	// sleep 1 second
-	//mov r7, #162             					@ sys_nanosleep
-	//mov r0, r5
-	//mov r1, r5
-	//swi 0x0										@ syscall
-
-	//ldr r7, [r11]
-	//cmp r7, r8
-	//beq execute_inner_payload
-	
-	//b wait_for_script
 
 execute_inner_payload:
 	
@@ -89,7 +56,7 @@ cleanup_and_return:
 
 state_ready_for_cleanup:
 	.word [VARIABLE:STATE_PAYLOAD_READY_FOR_SCRIPT_CLEANUP:VARIABLE]
-	.balign 4
+	.balign 16
 
 store_state_ready_for_cleanup:
 	mov r0, r11
@@ -101,7 +68,7 @@ store_state_ready_for_cleanup:
 
 state_script_cleanup_complete:
 	.word [VARIABLE:STATE_SCRIPT_CLEANUP_COMPLETE:VARIABLE]
-	.balign 4
+	.balign 16
 
 begin_waiting2:
 	mov r0, r11

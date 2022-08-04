@@ -7,7 +7,6 @@
 * [Practice targets](#practice-targets)
 * [Examples](#examples)
 * <a href="docs/specialized_options.md">Specialized options</a>
-* [Relative offsets](#relative-offsets)
 * [But what about Yama's ptrace_scope restrictions?](#but-what-about-yamas-ptrace_scope-restrictions)
 * [Future goals](#future-goals)
 * <a href="docs/version_history.md">Version history</a>
@@ -32,8 +31,9 @@ In one terminal window, start a Python script that will not exit immediately. Fo
 ```
 % python3 practice/python_loop.py 
 
-2022-07-01T18:00:59.138716 - Loop count 0
-2022-07-01T18:01:04.144467 - Loop count 1
+2022-08-03T18:00:40.474030 - Loop count 0
+2022-08-03T18:00:45.480180 - Loop count 1
+2022-08-03T18:00:50.486070 - Loop count 2
 ```
 
 In a second terminal window, `su` to `root`. Install the requirements for the package, then locate the `bash` loop process. For example:
@@ -43,20 +43,20 @@ In a second terminal window, `su` to `root`. Install the requirements for the pa
 
 # ps auxww | grep python3
 
-user        3022  0.2  0.2  17632  9132 pts/0    S+   11:00   0:00 python3 practice/python_loop.py
+user        1565376  [...] python3 practice/python_loop.py
 ...omitted for brevity...
 ```
 
 Examine the memory maps for the target process (in this case, PID 3022) to see if this version of Python was compiled with all functionality in the main executable, or to place it in a separate `libpython` file:
 
 ```
-# cat /proc/3022/maps | grep python
+# cat /proc/1565376/maps | grep python
 
-55ee0acfa000-55ee0ad66000 r--p 00000000 08:01 3018726                    /usr/bin/python3.10
-55ee0ad66000-55ee0b014000 r-xp 0006c000 08:01 3018726                    /usr/bin/python3.10
-55ee0b014000-55ee0b254000 r--p 0031a000 08:01 3018726                    /usr/bin/python3.10
-55ee0b255000-55ee0b25b000 r--p 0055a000 08:01 3018726                    /usr/bin/python3.10
-55ee0b25b000-55ee0b29b000 rw-p 00560000 08:01 3018726                    /usr/bin/python3.10
+55ee0acfa000-55ee0ad66000 r--p [...] /usr/bin/python3.10
+55ee0ad66000-55ee0b014000 r-xp [...] /usr/bin/python3.10
+55ee0b014000-55ee0b254000 r--p [...] /usr/bin/python3.10
+55ee0b255000-55ee0b25b000 r--p [...] /usr/bin/python3.10
+55ee0b25b000-55ee0b29b000 rw-p [...] /usr/bin/python3.10
 ```
 
 If there is no separate `libpython` listed, determine if the main executable is using position-independent code or not. For example, on my test system, the `python3.9` binary is *not* position-independent, but the `python2.7` and `python3.10` binaries *are*:
@@ -83,9 +83,9 @@ Determining this can be slightly tricky, and is discussed further in the <a href
 Call `asminject.py`, specifying the name of the payload (`execute_python_code.s`), and the `pythoncode` variable name and value. In this case, the Python code `print('injected python code');` is specified to give an obvious indication of successful injection.
 
 ```
-# python3 ./asminject.py 3249 execute_python_code.s \
-  --arch x86-64 --relative-offsets-from-binaries --stop-method "slow" \
-  --var pythoncode "print('injected python code');"
+# python3 ./asminject.py 1565376 execute_python_code.s \
+   --relative-offsets-from-binaries \
+   --var pythoncode "print('injected python code')"
 
                      .__            __               __
   _____  ___/\  ____ |__| ____     |__| ____   _____/  |_  ______ ___.__.
@@ -95,47 +95,34 @@ Call `asminject.py`, specifying the name of the payload (`execute_python_code.s`
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.29
-Ben Lincoln, Bishop Fox, 2022-06-29
+v0.38
+Ben Lincoln, Bishop Fox, 2022-08-03
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
 
-[*] Using '/tmp/2022070118105745678686b6a36' as the base temporary directory
-[*] Starting at 2022-07-01T18:10:57.461600 (UTC)
+[*] Using autodetected processor architecture 'x86-64'
+[*] Using '/tmp/202208031804573049878cbf670' as the base temporary directory
+[*] Starting at 2022-08-03T18:04:57.311457 (UTC)
 ...omitted for brevity...
+[*] Validation assembly of stage 2 succeeded
 [*] Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...
 ...omitted for brevity...
-[*] Using: 0x91cd86 for 'ready for stage two write' state value
-[*] Using: 0x142b62 for 'stage two written' state value
-[*] Using: 0x90d76 for 'ready for memory restore' state value
-[*] Wrote first stage shellcode at 0x7f1ea8d24fc4 in target process 3249
+[*] Wrote first stage shellcode at 0x7ffff7cfcfc4 in target process 1565435
 [*] Returning to normal time
 ...omitted for brevity...
-[*] Waiting for stage 1 to indicate that it is ready to switch to a new communication address
+[*] Writing stage 2 to 0x7ffff749b000 in target memory
 ...omitted for brevity...
-[*] Waiting for stage 1 to indicate that it has allocated additional memory and is ready for the script to write stage 2
-...omitted for brevity...
-[*] Writing stage 2 to 0x7f1ea8564000 in target memory
-...omitted for brevity...
-[+] Payload has been instructed to launch stage 2
-[*] Waiting for stage 2 to indicate that it is ready for process memory to be restored
-...omitted for brevity...
-[*] Restoring original memory content
-[*] Waiting for payload to indicate that it is ready for cleanup
-[*] Waiting for payload to update the state value to payload_ready_for_script_cleanup (0x7cf398) at address 0x7f1ea8590000
-[*] Notifying payload that cleanup is complete
-...omitted for brevity...
-[*] Finished at 2022-07-01T18:11:02.213313 (UTC)
-[*] Deleting the temporary directory '/tmp/2022070118105745678686b6a36' and all of its contents
+[*] Finished at 2022-08-03T18:05:01.125542 (UTC)
+[*] Deleting the temporary directory '/tmp/202208031804573049878cbf670' and all of its contents
 ```
 
 In the first terminal window, observe that the injected code has executed:
 
 ```
-2022-07-01T18:10:53.359356 - Loop count 4
+2022-08-03T18:04:53.024458 - Loop count 11
 injected python code
-2022-07-01T18:11:02.374622 - Loop count 5
+2022-08-03T18:05:02.037101 - Loop count 12
 ```
 
 ## Differences from dlinject.py
@@ -162,7 +149,6 @@ injected python code
 * Memory allocated by payloads can be actively wiped after the payload is complete, to remove forensic evidence
 * Arbitrary blocks of memory in the target process can be backed up before injection, and restored afterward, to improve results in complex processes and also help remove forensic evidence
 
-
 ## Practice targets
 
 The `practice` directory of this repository includes basic looping code that outputs a timestamp and loop iteration to the console, so you can practice injecting various types of code in a controlled environment. These practice loops are referred to in the remaining examples.
@@ -188,54 +174,14 @@ In most cases, any of the payloads used in the examples will run on any of the s
 * <a href="docs/examples-shellcode_injection.md">Shellcode/stager injection</a>
 * <a href="docs/examples-shared_library_injection.md">Shared library injection</a>
 
-## Relative offsets
-
-Very basic `asminject.py` payloads can be written in pure assembly without referring to libraries. Some of the included payloads are of that design. Most interesting payloads require references to libraries that are loaded by the target process, so that functions in them can be called. The payloads included with `asminject.py` include comments describing which binaries they need relative offsets for. The references are handled as regular expressions, to hopefully make them more portable across versions.
-
-Starting with version 0.25, `asminject.py` can attempt to load this symbol/offset data automatically from the binaries that are referenced in the memory map, by including the `--relative-offsets-from-binaries` option in the command line. This will *only* work if the target process is not running in a container, or if the container has the exact same library versions as the host OS. Note that this functionality requires the `elftools` Python library, which is not included with a standard Python installation. You'll need to install it via `pip3 install -r requirements.txt` or similar.
-
-If your target process is running in a container, or you need to specify an explicit list of offsets for another reason, use the process below:
-
-Examine the list of binaries and libraries that your target process is using, e.g.:
-
-```
-# ps auxww | grep python2
-
-user     2144330  0.2  0.1  13908  7864 pts/2    S+   15:30   0:00 python2 ./calling_script.py
-                                                                                                                                    
-# cat /proc/2144330/maps
-
-560a14849000-560a14896000 r--p [...] /usr/bin/python2.7
-...omitted for brevity...
-7fc63884b000-7fc638870000 r--p [...] /usr/lib/x86_64-linux-gnu/libc-2.31.so
-...omitted for brevity...
-7fc638a10000-7fc638a1f000 r--p [...] /usr/lib/x86_64-linux-gnu/libm-2.31.so
-...omitted for brevity...
-7fc638b54000-7fc638b57000 r--p [...] /usr/lib/x86_64-linux-gnu/libz.so.1.2.11
-...omitted for brevity...
-7fc638b71000-7fc638b72000 r--p [...] /usr/lib/x86_64-linux-gnu/libutil-2.31.so
-...omitted for brevity...
-7fc638b76000-7fc638b77000 r--p [...] /usr/lib/x86_64-linux-gnu/libdl-2.31.so
-...omitted for brevity...
-7fc638b7c000-7fc638b83000 r--p [...] /usr/lib/x86_64-linux-gnu/libpthread-2.31.so
-...omitted for brevity...
-7fc638bc3000-7fc638bc4000 r--p [...] /usr/lib/x86_64-linux-gnu/ld-2.31.so                                                                                                               
-```
-
-In this case, you could call exported functions in eight different binaries. Most of the example payloads will only use one or two, and will match their names based on regexes, but you'll still need to generate a list of the offsets for `asminject.py` to use. E.g. for this specific copy of `/usr/bin/python2.7`:
-
-```
-./get_relative_offsets.sh /usr/bin/python2.7 > relative_offsets-python2.7.txt
-```
-
-If you are injecting code into a containerized process from outside the container, you'll need to use the copy of each binary *from inside the container*, or you'll get the wrong data. This is why `asminject.py` doesn't just grab the offsets itself by default, like `dlinject.py` does.
-
 ## But what about Yama's ptrace_scope restrictions?
 
 If you are an authorized administrator of a Linux system where someone has accidentally set `/proc/sys/kernel/yama/ptrace_scope` to 3, or are conducting an authorized penetration test of an environment where that value has been set, see the <a href="ptrace_scope_kernel_module/">ptrace_scope_kernel_module directory</a>.
 
 ## Future goals
 
+* Implement inline code fragments to supplement the existing "import each fragment only once because they're all functions" model.
+  * This is specifically to support a reusable pair of stack-alignment macro that can be used right before and after calls to library functions instead of the existing ad hoc inline code.
 * Allow shellcode to be passed via stdin in addition to the current method of reading from a file.
 * For Python and other script interpreters with APIs for passing in compiled bytecode for execution (versus `eval`-style execution of human-readable script code), provide payloads to take advantage of this ability for even more stealth.
 * If feasible, inject Java code into Java processes via the JNI.

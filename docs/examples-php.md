@@ -37,7 +37,7 @@ Note that on ARM32 Linux, you may need to flag the `php` binary as non-PIC code,
 # python3 ./asminject.py 483 execute_php_code.s \
    --relative-offsets-from-binaries \
    --var phpcode "echo \\\"Injected PHP code\\\n\\\";" \
-   --var phpname PHP
+   --var phpname PHP \
    --non-pic-binary 'bin/php'
 ```
 

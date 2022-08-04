@@ -36,11 +36,23 @@ When `asminject.py` was originally developed, `dlinject.py` was hardcoded to loo
       * `ld` library does not export `_dl_open`
       * `libc` library exports `__libc_dlopen_mode`
       * `libdl` library exports `dlopen` with signature `void *dlopen([const] char *filename, int flags);`
+  * Ubuntu
+    * Ubuntu 22.04, x86-64
+      * `libc` version is GLIBC 2.35-0ubuntu3.1
+      * `ld` library does not export `_dl_open`
+      * `libc` library exports `dlopen`
+      * `libdl` library does not export `dlopen`
 * OpenSUSE
   * OpenSUSE Tumbleweed 20220719, x86 (32-bit) and OpenSUSE Tumbleweed 20220731, x86-64
     * `libc` version is GNU libc 2.35
     * `ld` library exports `_dl_open`, and the signature should be `void * _dl_open(const char *file, int mode, const void *caller_dlopen, Lmid_t nsid, int argc, char *argv[], char *env[]);`
 	* `libc` library exports `dlopen` with signature `void *dlopen([const] char *filename, int flags);`
+	* `libdl` library does not export `dlopen`
+* Arch
+  * Arch 20220701, x86-64
+    * `libc` version is GNU libc 2.36
+    * `ld` library does not export `_dl_open`
+	* `libc` library exports `dlopen`
 	* `libdl` library does not export `dlopen`
 
 Some (older?) versions of `ld` allegedly use(d?) a simpler signature for `_dl_open`: `void * _dl_open(const char *file, int mode, const void *caller_dlopen);`, but I haven't run across this yet in order to test it.

@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.37
-Ben Lincoln, Bishop Fox, 2022-08-02
+v0.38
+Ben Lincoln, Bishop Fox, 2022-08-03
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -1270,21 +1270,23 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
     
     # Recursively replace any fragment references with actual file content
     initial_fragment_list = []
+    replaced_fragment_file_names = []
     # build a list of just the unique fragment references
     fragment_placeholders_matches = re.finditer(r'(\[FRAGMENT:)(.*?)(:FRAGMENT\])', formatted_source)
     for match in fragment_placeholders_matches:
         match_text = match.group(0)
         fragment_file_name = match.group(2)
-        if fragment_file_name not in initial_fragment_list:
-            initial_fragment_list.append(match.group(0))
+        if fragment_file_name not in replaced_fragment_file_names:
+            initial_fragment_list.append(match_text)
+            #replaced_fragment_file_names.append(fragment_file_name)
             formatted_source = formatted_source.replace(match_text, "")
     
     # randomize initial fragment order
     #random.shuffle(initial_fragment_list, asminject_parameters.get_random_float_for_shuffle)
-    initial_fragment_list = asminject_parameters.get_securely_shuffled_array(initial_fragment_list)
+    initial_fragment_list_shuffled = asminject_parameters.get_securely_shuffled_array(initial_fragment_list)
     fragment_source = ""
-    for i in range (0, len(initial_fragment_list)):
-        fragment_source = f"{fragment_source}{os.linesep}{os.linesep}{initial_fragment_list[i]}"
+    for i in range (0, len(initial_fragment_list_shuffled)):
+        fragment_source = f"{fragment_source}{os.linesep}{os.linesep}{initial_fragment_list_shuffled[i]}"
 
     fragment_refs_found = True
     recursion_count = 0
@@ -1295,7 +1297,7 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
         for match in fragment_placeholders_matches:
             fragment_file_name = match.group(2)
             match_text = match.group(0)
-            if fragment_file_name in fragment_placeholders:
+            if fragment_file_name in replaced_fragment_file_names:
                 # fragment has already been incorporated
                 fragment_source = fragment_source.replace(match_text, "")
             else:
@@ -1303,6 +1305,7 @@ def assemble(source, injection_params, memory_map_data, file_name_suffix, replac
                 if injection_params.enable_debugging_output:
                     log(f"Found code fragment placeholder '{fragment_file_name}' in assembly code", ansi=injection_params.ansi)
                 fragment_placeholders.append(fragment_file_name)
+                replaced_fragment_file_names.append(fragment_file_name)
         for fragment_file_name in fragment_placeholders:
             new_fragment_source = get_code_fragment(injection_params, fragment_file_name)
             string_to_replace = f"[FRAGMENT:{fragment_file_name}:FRAGMENT]"
@@ -1920,7 +1923,7 @@ def asminject(injection_params):
                     else:
                         precompiled_shellcode_as_hex = f"{precompiled_shellcode_as_hex}, {hex(precompiled_payload[byte_num])}"
                 
-                shellcode_as_inline_bytes = f"{injection_params.precompiled_shellcode_label}:\n\t.byte {precompiled_shellcode_as_hex}\n\n"
+                shellcode_as_inline_bytes = f"{injection_params.precompiled_shellcode_label}:\n\t.byte {precompiled_shellcode_as_hex}\n\t.balign 16\n\n"
                 if shellcode_data_section == "":
                     stage2_source_code = stage2_source_code.replace(injection_params.inline_shellcode_placeholder, shellcode_as_inline_bytes)
                 else:

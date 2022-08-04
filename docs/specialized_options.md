@@ -1,5 +1,6 @@
 # asminject.py - Specialized Options
 
+* [Manually specifying relative offsets](#manually-specifying-relative-offsets)
 * [Multi-architecture support](#multi-architecture-support)
 * [Process suspension methods](#process-suspension-methods)
 * [Specifying non-PIC code](#specifying-non-pic-code)
@@ -9,6 +10,54 @@
 * [Restoring more of the target process's memory](#restoring-more-of-the-target-processs-memory)
 * [Payload obfuscation](#payload-obfuscation)
 * [Debugging/troubleshooting options](#debuggingtroubleshooting-options)
+
+## Manually specifying relative offsets
+
+Very basic `asminject.py` payloads can be written in pure assembly without referring to libraries. Some of the included payloads are of that design. Most interesting payloads require references to libraries that are loaded by the target process, so that functions in them can be called. The payloads included with `asminject.py` include comments describing which binaries they need relative offsets for. The references are handled as regular expressions, to hopefully make them more portable across versions.
+
+Starting with version 0.25, `asminject.py` can attempt to load this symbol/offset data automatically from the binaries that are referenced in the memory map, by including the `--relative-offsets-from-binaries` option in the command line. This will *only* work if the target process is not running in a container, or if the container has the exact same library versions as the host OS. Note that this functionality requires the `elftools` Python library, which is not included with a standard Python installation. You'll need to install it via `pip3 install -r requirements.txt` or similar.
+
+If your target process is running in a container, or you need to specify an explicit list of offsets for another reason, use the process below:
+
+Examine the list of binaries and libraries that your target process is using, e.g.:
+
+```
+# ps auxww | grep python2
+
+user     2144330  [...] python2 ./calling_script.py
+                                                                                                                                    
+# cat /proc/2144330/maps
+
+560a14849000-560a14896000 r--p [...] /usr/bin/python2.7
+...omitted for brevity...
+7fc63884b000-7fc638870000 r--p [...] /usr/lib/x86_64-linux-gnu/libc-2.31.so
+...omitted for brevity...
+7fc638a10000-7fc638a1f000 r--p [...] /usr/lib/x86_64-linux-gnu/libm-2.31.so
+...omitted for brevity...
+7fc638b54000-7fc638b57000 r--p [...] /usr/lib/x86_64-linux-gnu/libz.so.1.2.11
+...omitted for brevity...
+7fc638b71000-7fc638b72000 r--p [...] /usr/lib/x86_64-linux-gnu/libutil-2.31.so
+...omitted for brevity...
+7fc638b76000-7fc638b77000 r--p [...] /usr/lib/x86_64-linux-gnu/libdl-2.31.so
+...omitted for brevity...
+7fc638b7c000-7fc638b83000 r--p [...] /usr/lib/x86_64-linux-gnu/libpthread-2.31.so
+...omitted for brevity...
+7fc638bc3000-7fc638bc4000 r--p [...] /usr/lib/x86_64-linux-gnu/ld-2.31.so                                                                                                               
+```
+
+In this case, you could call exported functions in eight different binaries. Most of the example payloads will only use one or two, and will match their names based on regexes, but you'll still need to generate a list of the offsets for `asminject.py` to use. E.g. for this specific copy of `/usr/bin/python2.7`:
+
+```
+./get_relative_offsets.sh /usr/bin/python2.7 > relative_offsets-python2.7.txt
+```
+
+You can then reference the file in your call to `asminject.py` like this:
+
+```
+--relative-offsets /usr/bin/python2.7 relative_offsets-python2.7.txt
+```
+
+If you are injecting code into a containerized process from outside the container, you'll need to use the copy of each binary *from inside the container*, or you'll get the wrong data. This is why `asminject.py` doesn't just grab the offsets itself by default, like `dlinject.py` does.
 
 ## Multi-architecture support
 
@@ -54,7 +103,7 @@ The `slow` method has worked so well in testing that it's the default in current
 
 ## Specifying non-PIC code
 
-Some binaries are compiled without the position-independent code build option (including, strangely enough, x86-64 builds of Python 3.x, even though 2.x for x86-64 had it enabled). This means that the offsets in the corresponding ELF are absolute instead of relative to the base address. If `asminject.py` detects a low base address (typically indicative of this condition), it will include a warning:
+Some binaries are compiled without the position-independent code build option. This means that the offsets in the corresponding ELF are absolute instead of relative to the base address. If `asminject.py` detects a low base address (typically indicative of this condition), it will include a warning:
 
 ```
 [*] '/usr/bin/python3.9' has a base address of 4194304, which is very low 

@@ -41,17 +41,32 @@ asminject_ld_dl_open_address_get_next:
 
 asminject_ld_dl_open_call_dl_open:	
 
-	// use the library path as a fake env value
+	// env, argv, and argc values obtained from symbols exported by libc:
+	// deference pointer to environment variables
+	mov edx, [SYMBOL_ADDRESS:^_environ$:IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
+	mov edx, [edx]
 	push edx
+	// deference pointer to argv
+	mov edx, [SYMBOL_ADDRESS:^__libc_argv$:IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
+	mov edx, [edx]
+	push edx
+	// deference pointer to argc
+	mov edx, [SYMBOL_ADDRESS:^__libc_argc$:IN_BINARY:.+/libc[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
+	mov edx, [edx]
+	push edx
+
+	// use the library path as a fake env value
+	//push edx
 	
 	// use the library path as a fake argv
-	push edx
+	//push edx
 	
 	// fake argc of 1
-	mov eax, 0x1
-	push eax
+	//mov eax, 0x1
+	//push eax
 	// hardcoded nsid value of -2 observed in gdb:
-	mov eax, 0xfffffffe
+	//mov eax, 0xfffffffe
+	mov eax, -2
 	push eax
 	mov edx, [SYMBOL_ADDRESS:^_dl_open($|@@.+):IN_BINARY:.+/ld(-linux|)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	push ecx

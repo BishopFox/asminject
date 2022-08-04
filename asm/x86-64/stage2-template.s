@@ -38,12 +38,12 @@ execute_inner_payload:
 	
 	[VARIABLE:SHELLCODE_SOURCE:VARIABLE]
 
+cleanup_and_return:
+
 	pop r15
 	pop r14
 	pop r11
-
-cleanup_and_return:
-
+	
 	// restore fancy registers
 	push rax
 	mov rax, read_write_address[rip]

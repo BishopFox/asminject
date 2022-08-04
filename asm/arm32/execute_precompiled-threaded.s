@@ -30,8 +30,9 @@ call_pthread_create:
 
 [VARIABLE:POST_SHELLCODE_LABEL:VARIABLE]:
 
-# inlined shellcode will go after this delimiter
-SHELLCODE_SECTION_DELIMITER
+	b cleanup_and_return
+	
+// removed delimiter as workaround
 
 load_shellcode_address:
 // Add 0x1000 to avoid overwriting backed-up data

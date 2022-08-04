@@ -11,21 +11,59 @@ asminject_libpthread_pthread_create:
 	add r11, sp, #0x04
 	sub sp, sp, #0x20
 	push {r10}
+	push {r9}
+	push {r8}
+	
+	// ensure the stack is 16-byte aligned, because some versions of libpthread are super picky about this
+asminject_libpthread_pthread_create_align_stack:
+	mov r8, sp
+	sub r8, r8, #0x4	// one more register will be pushed onto the stack after this check
+	and r9, r8, #0x8
+	cmp r9, #8
+	bne asminject_libpthread_pthread_create_push_one
+	push {r8}
+	push {r8}
+	asminject_libpthread_pthread_create_push_one:
+	and r9, r8, #0x4
+	cmp r9, #4
+	bne asminject_libpthread_pthread_create_load_address
+	push {r8}
+
+asminject_libpthread_pthread_create_load_address:
+	push {r8}
 
 // Load the address of libpthread pthread_create into r10
 	ldr r10, [pc]
-	b asminject_libpthread_pthread_create_call_pthread_create
+	b asminject_libpthread_pthread_create_call_inner
 
 asminject_libpthread_pthread_create_address:
 	.word [SYMBOL_ADDRESS:^pthread_create($|@@.+):IN_BINARY:.+/lib(c|pthread)[\-0-9so\.]*.(so|so\.[0-9]+)$:SYMBOL_ADDRESS]
 	.balign 4
 
-asminject_libpthread_pthread_create_call_pthread_create:
+asminject_libpthread_pthread_create_call_inner:
 	// r0 and r2 will already be set
 	mov r1, #0x0
 	mov r3, #0x0
 	blx r10
 
+	pop {r8}
+	
+// remove extra value from the stack if one was added to align it
+
+	and r9, r8, #0x8
+	cmp r9, #8
+	bne asminject_libpthread_pthread_create_pop_one
+	pop {r8}
+	pop {r8}
+asminject_libpthread_pthread_create_pop_one:
+	and r9, r8, #0x4
+	cmp r9, #4
+	bne asminject_libpthread_pthread_create_cleanup
+	pop {r8}
+
+asminject_libpthread_pthread_create_cleanup:
+	pop {r8}
+	pop {r9}
 	pop {r10}
 
 	sub sp, r11, #0x04

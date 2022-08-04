@@ -181,7 +181,7 @@ If you are an authorized administrator of a Linux system where someone has accid
 ## Future goals
 
 * Implement inline code fragments to supplement the existing "import each fragment only once because they're all functions" model.
-  * This is specifically to support a reusable pair of stack-alignment macro that can be used right before and after calls to library functions instead of the existing ad hoc inline code.
+  * This is specifically to support a reusable pair of stack-alignment macros that can be used right before and after calls to library functions instead of the existing ad hoc inline code.
 * Allow shellcode to be passed via stdin in addition to the current method of reading from a file.
 * For Python and other script interpreters with APIs for passing in compiled bytecode for execution (versus `eval`-style execution of human-readable script code), provide payloads to take advantage of this ability for even more stealth.
 * If feasible, inject Java code into Java processes via the JNI.

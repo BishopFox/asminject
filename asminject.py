@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.39
-Ben Lincoln, Bishop Fox, 2022-08-04
+v0.40
+Ben Lincoln, Bishop Fox, 2022-08-05
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -489,6 +489,7 @@ class asminject_parameters:
         self.target_affinity_original = None
         self.target_process = None
         self.shared_affinity = None
+        self.captured_initial_process_priority = False
         
         self.shellcode_section_delimiter = "SHELLCODE_SECTION_DELIMITER"
         self.precompiled_shellcode_label = "precompiled_shellcode"
@@ -549,15 +550,12 @@ class asminject_parameters:
         self.target_affinity = self.target_process.cpu_affinity()
         
         # Only set these the first time
-        if not self.asminject_priority_original:
+        if not self.captured_initial_process_priority:
+            self.captured_initial_process_priority = True
             self.asminject_priority_original = self.asminject_priority
-        if not self.target_priority_original:
             self.target_priority_original = self.target_priority
-        if not self.asminject_affinity_original:
             self.asminject_affinity_original = self.asminject_affinity
-        if not self.target_affinity_original:
             self.target_affinity_original = self.target_affinity
-        if not self.shared_affinity:
             if len(self.asminject_affinity) == 1:
                 self.shared_affinity = self.asminject_affinity
             else:

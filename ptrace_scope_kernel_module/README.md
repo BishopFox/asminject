@@ -15,13 +15,30 @@ This kernel module was based in part on the following:
 * https://stackoverflow.com/questions/58512430/how-to-write-to-protected-pages-in-the-linux-kernel
 * https://gist.github.com/ulexec/7eaa4c4042e66b37d310cfbd645ac10b
 
-To build and install:
-	apt-get install build-essential linux-headers-`uname -r`
-	make
-	sudo insmod mod_set_ptrace_scope.ko
+To build:
+
+Install the Linux headers and typical software build tools. For example, on Debian and derivatives: 
+```
+apt-get install build-essential linux-headers-`uname -r`
+```
+
+Run the following commands:
+```
+make
+sudo insmod mod_set_ptrace_scope.ko
+```
+
+Note that for some distributions, you may need to manually set the `CPATH` environment variable to the include directory that contains the `stddef.h` header file before running `make`. For example, on the x86-64 version of Arch Linux:
+
+```
+export CPATH=/usr/lib/gcc/x86_64-pc-linux-gnu/12.1.1/include
+```
 
 To uninstall after use:
-	sudo rmmod mod_set_ptrace_scope
+
+```
+sudo rmmod mod_set_ptrace_scope
+```
 	
 In use:
 

@@ -37,10 +37,24 @@ Users with the ability to load arbitrary kernel modules can reset the value back
 * An administrator has accidentally set the ptrace_scope value to 3, and wants to use ptrace capabilities to resolve a production issue without causing an outage.
 * A penetration tester wishes to illustrate the futility of enforcing kernel-level security controls against users with the ability to execute code in the kernel.
 
-To build and install:
-	apt-get install build-essential linux-headers-`uname -r`
-	make
-	sudo insmod mod_set_ptrace_scope.ko
+To build:
+
+Install the Linux headers and typical software build tools. For example, on Debian and derivatives: 
+```
+apt-get install build-essential linux-headers-`uname -r`
+```
+
+Run the following commands:
+```
+make
+sudo insmod mod_set_ptrace_scope.ko
+```
+
+Note that for some distributions, you may need to manually set the `CPATH` environment variable to the include directory that contains the `stddef.h` header file before running `make`. For example, on the x86-64 version of Arch Linux:
+
+```
+export CPATH=/usr/lib/gcc/x86_64-pc-linux-gnu/12.1.1/include
+```
 
 To uninstall after use:
 	sudo rmmod mod_set_ptrace_scope

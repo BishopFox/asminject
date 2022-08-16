@@ -37,8 +37,13 @@ When `asminject.py` was originally developed, `dlinject.py` was hardcoded to loo
       * `libc` library exports `__libc_dlopen_mode`
       * `libdl` library exports `dlopen` with signature `void *dlopen([const] char *filename, int flags);`
   * Ubuntu
+    * Ubuntu 20.04.4, Aarch64/ARM64
+	  * `libc` version is Ubuntu GLIBC 2.31-0ubuntu9.2
+      * `ld` library does not export `_dl_open`
+      * `libc` library exports `dlopen` and `__libc_dlopen_mode`
+      * `libdl` library does not export `dlopen`
     * Ubuntu 22.04, x86-64
-      * `libc` version is GLIBC 2.35-0ubuntu3.1
+      * `libc` version is Ubuntu GLIBC 2.35-0ubuntu3.1
       * `ld` library does not export `_dl_open`
       * `libc` library exports `dlopen`
       * `libdl` library does not export `dlopen`

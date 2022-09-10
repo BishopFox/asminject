@@ -1,4 +1,6 @@
-## asminject.py - differences from dlinject.py
+# asminject.py - differences from dlinject.py
+
+<a href="../README.md">[ Back to the main README.md ]</a>
 
 `dlinject.py` was written specifically to cause the target process to load a shared library from disk. It does this by injecting code into the target process that calls the `_dl_open` function in the `ld` shared library. This works on some versions of some Linux distributions, but [there is an open issue for the project because that symbol is not consistently exported by the library](https://github.com/DavidBuchanan314/dlinject/issues/8). `asminject.py` extends that basic concept significantly by injecting arbitrary code into the target process, and includes templates to perform a variety of actions (execute arbitrary Python, PHP, or Ruby code inside an existing process for one of those languages, copying files using syscalls, and so on). It also includes templates that emulate the original `dlinject.py` and load a shared library into the target process using several different methods, and this is discussed in more detail in <a href="docs/examples-shared_library_injection.md">the shared library injection examples document</a>.
 

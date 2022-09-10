@@ -1,4 +1,7 @@
 # asminject.py examples - PHP
+
+<a href="../README.md">[ Back to the main README.md ]</a>
+
 * [Execute arbitrary PHP code inside an existing PHP process](#execute-arbitrary-php-code-inside-an-existing-php-process)
 * [Write all variables to standard out](#write-all-variables-to-standard-out)
 * [Write all variables to a file](#write-all-variables-to-a-file)

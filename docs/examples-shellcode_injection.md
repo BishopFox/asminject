@@ -1,5 +1,7 @@
 # asminject.py examples - Shellcode/stager injection
 
+<a href="../README.md">[ Back to the main README.md ]</a>
+
 * [Background](#background)
 * [Important](#important)
 * [Shellcode injection with multithreading](#shellcode-injection-with-multithreading)

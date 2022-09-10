@@ -1,4 +1,6 @@
-## asminject.py - Getting started
+# asminject.py - Getting started
+
+<a href="../README.md">[ Back to the main README.md ]</a>
 
 Make sure you have `gcc`, `objcopy`, and `readelf` installed. `gcc` is generally part of the `gcc` package for most Linux distributions. `objcopy` and `readelf` are generally part of the `binutils` package for most Linux distributions.
 

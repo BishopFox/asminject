@@ -13,6 +13,7 @@ Separate, more detailed documentation:
 * <a href="docs/getting_started.md">Getting started</a>
 * <a href="docs/differences_from_dlinject.md">Differences from dlinject.py</a>
 * <a href="docs/specialized_options.md">Specialized options</a>
+* <a href="docs/troubleshooting.md">Troubleshooting</a>
 * <a href="docs/version_history.md">Version history</a>
 
 ## Origins

@@ -1,4 +1,7 @@
 # asminject.py examples - Ruby
+
+<a href="../README.md">[ Back to the main README.md ]</a>
+
 * [Execute arbitrary Ruby code inside an existing Ruby process](#execute-arbitrary-ruby-code-inside-an-existing-ruby-process)
 * [Write all global variables to standard out](#write-all-global-variables-to-standard-out)
 * [Write a text representation of all objects in memory to disk](#write-a-text-representation-of-all-objects-in-memory-to-disk)

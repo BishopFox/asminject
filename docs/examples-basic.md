@@ -1,4 +1,7 @@
 # asminject.py examples - Basic examples
+
+<a href="../README.md">[ Back to the main README.md ]</a>
+
 * [Create a world-readable copy of a file using only Linux syscalls](#create-a-world-readable-copy-of-a-file-using-only-linux-syscalls)
 * [Create a copy of a file using buffered read/write libc calls](#create-a-copy-of-a-file-using-buffered-readwrite-libc-calls)
 * [Print text to standard output](#print-text-to-standard-output)

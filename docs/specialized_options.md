@@ -1,5 +1,7 @@
 # asminject.py - Specialized Options
 
+<a href="../README.md">[ Back to the main README.md ]</a>
+
 * [Manually specifying relative offsets](#manually-specifying-relative-offsets)
 * [Multi-architecture support](#multi-architecture-support)
 * [Process suspension methods](#process-suspension-methods)

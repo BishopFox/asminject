@@ -56,7 +56,24 @@ The exported content will also include a lot of additional data, such as JSON de
 
 [PyInstaller](https://pyinstaller.org/) strips the source code property from objects, but there is still enough metadata left to reconstruct most of the same information from a process running in memory.
 
-Begin the same way as when extracting content from a regular Python process. Transform the `recursive_marshal.py` script into a giant one-liner and then pass it to `asminject.py`, e.g.:
+For example, generate a PyInstaller package for the example Python script that references a library:
+
+```
+# pip3 install pyinstaller
+
+# cd practice
+
+# pyinstaller python_loop-with_library.py
+```
+
+Launch the resulting `dist/python_loop-with_library/python_loop-with_library` binary and locate the process ID:
+
+```
+# ps auxww | grep python_loop                                                                                            
+user      237465  [...] practice/dist/python_loop-with_library/python_loop-with_library
+```
+
+The process is virtually identical to extracting content from a regular Python process. Transform the `recursive_marshal.py` script into a giant one-liner and then pass it to `asminject.py`, e.g.:
 
 ```
 # export PYTHONSCRIPT="`cat tools/python/recursive_marshal.py | sed -z 's/\n/\\\\n/g' | sed 's.".\\\\".g'`"
@@ -105,7 +122,7 @@ print('A very secret value that is only defined in the static_print_ihv function
 The marshalled binary version of code from the main/initial script should be located in `__main__/_pyi_main_co.bin`, e.g.:
 
 ```
-% pycdc -c -v 3.10 /tmp/marshalled-01-pyinstaller/__main__/_pyi_main_co.bin
+% pycdc -c -v 3.10 /tmp/marshalled/__main__/_pyi_main_co.bin
  
 ...omitted for brevity...
 import time
@@ -122,7 +139,7 @@ for i in range(0, 1000000):
 Interesting properties may also be found in the JSON-formatted object tree exports, e.g.:
 
 ```
-% jq . __main__/___exported_object_metadata___.json
+% jq . /tmp/marshalled/__main__/___exported_object_metadata___.json
 
 {
 ...omitted for brevity...
@@ -131,7 +148,87 @@ Interesting properties may also be found in the JSON-formatted object tree expor
 ...omitted for brevity...
 ```
 
-The combination of decompiled source code and the JSON files should allow a scripted reconstruction of something closer to the original code base, and this page will eventually be updated to describe that process.
+The combination of data output by the script and Decompyle++ can be used to reconstruct an approximation of the original source code tree in the style of [This Dust Remembers What It Once Was](https://www.beneaththewaves.net/Software/This_Dust_Remembers_What_It_Once_Was.html), via the `tools/python/reconstruct_source.py` script include in this repository. Please note that `reconstruct_source.py` is currently an alpha-quality prototype, and the output includes a lot of "noise" in the form of shared library code that is referenced in multiple locations.
+
+For example, using the output generated previously for the PyInstaller-packaged version of `python_loop-with_library`:
+
+```
+% python3 tools/python/reconstruct_source.py --input-dir /tmp/marshalled \
+	--output-dir /home/user/reconstructed-03-loop_with_library \
+	--pycdc-path /home/user/pycdc/pycdc
+
+reconstruct_source.py
+v0.1
+Ben Lincoln, Bishop Fox, 2022-09-12
+https://github.com/BishopFox/asminject
+
+Processing module at '/tmp/marshalled/example_python_library.important_thing'
+Processing class at '/tmp/marshalled/example_python_library.important_thing/important_class_1'
+Processing function at '/tmp/marshalled/example_python_library.important_thing/important_class_1/__init__.json'
+Processing function at '/tmp/marshalled/example_python_library.important_thing/important_class_1/ic1_print_ihv.json'
+Processing function at '/tmp/marshalled/example_python_library.important_thing/important_class_1/ic1_static_print_ihv.json'
+Processing function at '/tmp/marshalled/example_python_library.important_thing/it_print_itsv.json'
+...omitted for brevity...
+
+
+% cat /home/user/reconstructed-03-loop_with_library/___base_path___/practice/dist/python_loop-with_library/python_loop-with_library.py
+
+# Module name: __main__
+# Package: None
+# Original file path: /[REDACTED]/practice/dist/python_loop-with_library/python_loop-with_library.py
+
+# Source Generated with Decompyle++
+# File: _pyi_main_co.bin (Python 3.10)
+
+import time
+import datetime
+import example_python_library
+import example_python_library.important_thing as example_python_library
+example_global_var_1 = 'AKIASADF9370235SUAS0'
+example_global_var_2 = 'This value should not be disclosed'
+for i in range(0, 1000000):
+    print(datetime.datetime.utcnow().isoformat() + ' - Loop count ' + str(i))
+    time.sleep(5)
+...omitted for brevity...
+
+
+% cat /home/user/reconstructed-03-loop_with_library/___base_path___/practice/dist/python_loop-with_library/example_python_library/important_thing.py
+
+# Module name: example_python_library.important_thing
+# Package: example_python_library
+# Original file path: /mnt/hgfs/c/Users/blincoln/Documents/Projects/Research/asminject/Memory_Injection_Code/asminject/devel-2022-05-05-01/practice/dist/python_loop-with_library/example_python_library/important_thing.pyc
+
+important_thing_secret_value = "A very secret value that is only defined in example_python_library/important_thing.py"
+
+class important_class_1:
+
+	def __init__(self):
+        # Source Generated with Decompyle++
+        # File: __init__.bin (Python 3.10)
+
+        self.important_hardcoded_value = 'A very secret value that is only defined in the __init__ function for important_class_1 in example_python_library/important_thing.py'
+
+
+	def ic1_print_ihv(self):
+        # Source Generated with Decompyle++
+        # File: ic1_print_ihv.bin (Python 3.10)
+
+        print(self.important_hardcoded_value)
+
+
+	def ic1_static_print_ihv():
+        # Source Generated with Decompyle++
+        # File: ic1_static_print_ihv.bin (Python 3.10)
+
+		print('A very secret value that is only defined in the static_print_ihv function for important_class_1 in example_python_library/important_thing.py')
+
+def it_print_itsv():
+	# Source Generated with Decompyle++
+	# File: it_print_itsv.bin (Python 3.10)
+
+	print(important_thing_secret_value)
+```
+
 
 It's also possible to perform a more targeted analysis without the lengthy custom script, e.g.:
 

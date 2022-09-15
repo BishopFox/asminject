@@ -30,30 +30,32 @@ class process_params:
         self.include_builtins = False
         self.include_delimiter_comments = False
 
+def get_data_from_text_file(file_path):
+    result = None
+    # Try to read the file in all possible encodings that Python 2 and 3 might have generated
+    for enc in [ "utf-8", "ascii", "latin-1" ]:
+        if not result:
+            try:
+                file_text = ""
+                with open(file_path, "r", encoding=enc) as text_file:
+                    file_text_array = text_file.readlines()
+                    for ft in file_text_array:
+                        file_text += ft
+                result = file_text
+            except Exception as e:
+                result = None
+    if not result:
+        print(f"Could not read the text file at path {file_path} in any known encoding")
+        sys.exit(1)
+    return result
+
 def get_data_from_json_file(file_path):
     result = None
     try:
-        file_text = ""
-        with open(file_path, "r") as json_file:
-            file_text_array = json_file.readlines()
-            for ft in file_text_array:
-                file_text += ft
+        file_text = get_data_from_text_file(file_path)
         result = json.loads(file_text)
     except Exception as e:
         print(f"Error processing JSON file at path {file_path}: {e}")
-    return result
-
-def get_data_from_text_file(file_path):
-    result = None
-    try:
-        file_text = ""
-        with open(file_path, "r") as text_file:
-            file_text_array = text_file.readlines()
-            for ft in file_text_array:
-                file_text += ft
-            result = file_text
-    except Exception as e:
-        print(f"Error reading text file at path {file_path}: {e}")
     return result
 
 def get_output_relative_path(params, input_path):
@@ -88,7 +90,6 @@ def append_content_to_reconstructed_source(params, reconstructed_content_type, i
     except Exception as e:
         print(f"Error creating output directory {output_dir}: {e}")
         return
-
     try:
         #print(f"Debug: writing {reconstructed_content_type} to '{output_path}'")
         with open(output_path, "a") as output_file:
@@ -258,13 +259,15 @@ def process_function(params, module_output_file_path, function_json_path, indent
         is_function = False
     if is_function:
         if "object_type" in function_data.keys():
-            if function_data["object_type"] != "function":
+            if function_data["object_type"] not in [ "function", "method" ]:
                 is_function = False
     if not is_function:
         #print(f"Ignoring '{function_json_path}' because it is not a function")
         return
     
-    print(f"Processing function at '{function_json_path}'")
+    function_type = function_data["object_type"]
+    
+    print(f"Processing {function_type} at '{function_json_path}'")
     
     function_name = None
     function_signature = None
@@ -293,7 +296,7 @@ def process_function(params, module_output_file_path, function_json_path, indent
 
     if not params.only_reconstructed_source:
         if function_source_code_file:
-            append_content_to_reconstructed_source(params, "original function source code", function_source_code_file, module_output_file_path, get_data_from_text_file(function_source_code_file))
+            append_content_to_reconstructed_source(params, "original {function_type} source code", function_source_code_file, module_output_file_path, get_data_from_text_file(function_source_code_file))
             got_function_source = True
     
     # Only attempt to decompile code objects if no embedded source was retrieved
@@ -307,7 +310,7 @@ def process_function(params, module_output_file_path, function_json_path, indent
                     reconstructed_function_header += indent
                     reconstructed_function_header += l
                     reconstructed_function_header += "\n"
-        append_content_to_reconstructed_source(params, "reconstructed function source code", function_marshalled_file, module_output_file_path, reconstructed_function_header)
+        append_content_to_reconstructed_source(params, "reconstructed {function_type} source code", function_marshalled_file, module_output_file_path, reconstructed_function_header)
 
 
 def process_class(params, module_output_file_path, class_directory_path):    
@@ -337,9 +340,10 @@ def process_class(params, module_output_file_path, class_directory_path):
     if "name" in class_data.keys():
         class_name = class_data["name"]
     
-    if "member_metadata" in class_data.keys():
-        mm = class_data["member_metadata"]        
-        (submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, None, mm, submodules_to_process, classes_to_process, functions_to_process)
+    #if "member_metadata" in class_data.keys():
+    #    mm = class_data["member_metadata"]        
+    #    (submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, None, mm, submodules_to_process, classes_to_process, functions_to_process)
+    (submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, None, class_data, submodules_to_process, classes_to_process, functions_to_process)
     
     got_class_source = False
     reconstructed_class_header = None
@@ -362,29 +366,56 @@ def process_class(params, module_output_file_path, class_directory_path):
         for func in functions_to_process:
             process_function(params, module_output_file_path, os.path.join(class_directory_path, f"{func}.json"), indent = "        ")
 
+def get_subobject_path(base_value, path_prefix):
+    if not path_prefix:
+        return base_value
+    return os.path.join(path_prefix, base_value)
+    
 def get_child_object_list(params, path_prefix, key_value_collection, submodule_list, class_list, function_list):
     #print(f"Debug: k/v collection: {key_value_collection}")
+    # if hasattr(key_value_collection, "keys"):
+        # for mdk in key_value_collection.keys():
+            # mdv = key_value_collection[mdk]
+            # dir_name = mdk
+            # if path_prefix:
+                # dir_name = os.path.join(path_prefix, dir_name)
+            # if mdv and isinstance(mdv, str):
+                # if params.include_builtins or "built-in" not in mdv.lower():
+                    # if 'function ' in mdv or 'method ' in mdv:
+                        # if mdk not in [ "__doc__" ]:
+                            # function_list.append(dir_name)
+                    # if 'class ' in mdv:
+                        # if mdk not in [ "__doc__" ]:
+                            # class_list.append(dir_name)
+                    # if 'module ' in mdv:
+                        # include_module = True
+                        # if mdk in params.ignored_modules:
+                            # include_module = False
+                        # if mdk in params.processed_modules:
+                            # include_module = False
+                        # submodule_list.append(dir_name)
     if hasattr(key_value_collection, "keys"):
-        for mdk in key_value_collection.keys():
-            mdv = key_value_collection[mdk]
-            dir_name = mdk
-            if path_prefix:
-                dir_name = os.path.join(path_prefix, dir_name)
-            if mdv and isinstance(mdv, str):
-                if params.include_builtins or "built-in" not in mdv.lower():
-                    if 'function ' in mdv:
-                        if mdk not in [ "__doc__" ]:
-                            function_list.append(dir_name)
-                    if 'class ' in mdv:
-                        if mdk not in [ "__doc__" ]:
-                            class_list.append(dir_name)
-                    if 'module ' in mdv:
-                        include_module = True
-                        if mdk in params.ignored_modules:
-                            include_module = False
-                        if mdk in params.processed_modules:
-                            include_module = False
-                        submodule_list.append(dir_name)
+        if "imported_modules" in key_value_collection.keys():
+            for im in key_value_collection["imported_modules"]:
+                include_module = True
+                if im in params.ignored_modules:
+                    include_module = False
+                if im in params.processed_modules:
+                    include_module = False
+                if include_module:
+                    submodule_list.append(get_subobject_path(im, path_prefix))
+        if "classes" in key_value_collection.keys():
+            for c in key_value_collection["classes"]:
+                if c not in [ "__doc__" ]:
+                    class_list.append(get_subobject_path(c, path_prefix))
+        if "functions" in key_value_collection.keys():
+            for f in key_value_collection["functions"]:
+                if f not in [ "__doc__" ]:
+                    function_list.append(get_subobject_path(f, path_prefix))     
+        if "methods" in key_value_collection.keys():
+            for m in key_value_collection["methods"]:
+                if m not in [ "__doc__" ]:
+                    function_list.append(get_subobject_path(m, path_prefix))
     return (submodule_list, class_list, function_list)
 
 def process_module(params, directory_path):
@@ -439,11 +470,17 @@ def process_module(params, directory_path):
                 if "__package__" in mm.keys():
                     module_package = mm["__package__"]
             
-                (submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, None, mm, submodules_to_process, classes_to_process, functions_to_process)
+                #(submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, None, mm, submodules_to_process, classes_to_process, functions_to_process)
+                
 
-                if "__builtins__" in mm.keys():
-                    (submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, "__builtins__", mm["__builtins__"], submodules_to_process, classes_to_process, functions_to_process)
-                    
+                #if "__builtins__" in mm.keys():
+                    #(submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, "__builtins__", mm["__builtins__"], submodules_to_process, classes_to_process, functions_to_process)
+                    #(submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, "__builtins__", module_data["__builtins__"], submodules_to_process, classes_to_process, functions_to_process)
+            
+            
+        (submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, None, module_data, submodules_to_process, classes_to_process, functions_to_process)
+        
+        
         if not module_output_file_path:
             without_input_dir = directory_path
             l_id = len(params.input_dir)

@@ -26,13 +26,13 @@ def escape_json_value(json_string):
     result = json_string
     # backslash
     result = escape_json_value_inner(result, 92)
-    for i in range(0, 31):
+    for i in range(0, 32):
         #result = result.replace(chr(i), '\\\\u00' + '{0:0{1}x}'.format(i, 2))
         result = escape_json_value_inner(result, i)
     # double quote
     result = escape_json_value_inner(result, 34)
     # high ASCII characters - will cause problems with reconstruction
-    for i in range(127, 255):
+    for i in range(127, 256):
         result = escape_json_value_inner(result, i)
     return result
 
@@ -79,17 +79,17 @@ def dump_code_object(parent_object_type, object_type, code_object, current_path,
             out_name_src = f"{out_name_base}.py"
             with open(out_name_src, "w") as source_file:
                 source_file.write(co_source)
-                print(f"Wrote source code for {current_path}/{name} to {out_name_src}")
+                print(f"Wrote source code for {object_type} {current_path}/{name} to {out_name_src}")
         except Exception as e:
-            print(f"Couldn't get source code for {current_path}")
+            print(f"Couldn't get source code for {object_type} {current_path}")
             out_name_src = ""
         try:
             out_name_bin = f"{out_name_base}.bin"
-            print(f"Writing code to {out_name_bin}")
+            print(f"Writing {object_type} code to {out_name_bin}")
             with open(out_name_bin, "wb") as marshal_file:
                 marshal.dump(code_object, marshal_file)
         except Exception as e:
-            print(f"Couldn't write marshalled code object for {current_path}: {e}")
+            print(f"Couldn't write marshalled {object_type} code object for {current_path}: {e}")
             out_name_bin = ""
         co_metadata = { "parent_type": parent_object_type, "object_type": object_type, "is_builtin": is_builtin, "object_name": name, "path": current_path, "python_version": sys.version_info }
         if out_name_src != "":
@@ -103,9 +103,9 @@ def dump_code_object(parent_object_type, object_type, code_object, current_path,
             with open(out_name_json, "w") as json_file:
                 json_file.write(json_dump_string(co_metadata))
         except Exception as e:
-            print(f"Couldn't write JSON data for {current_path}: {e}")
+            print(f"Couldn't write JSON data for {object_type} {current_path}: {e}")
     except Exception as e:
-        print("Couldn't export code object {0}: {1}".format(current_path, e))
+        print(f"Couldn't export {object_type} code object {current_path}: {e}")
 
 def get_user_attributes(c):
     class_attributes = dir(c)
@@ -151,6 +151,9 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
     member_imports = []
     member_attributes = {}
     member_code_objects = []
+    member_classes = []
+    member_functions = []
+    member_methods = []
     
     try:
         for name, obj in inspect.getmembers(o):
@@ -173,16 +176,21 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
                         obj_to_recurse = obj
                         recurse_obj_type = "module"
                 if inspect.isclass(obj):
+                    member_classes.append(name)
                     if name not in ["__class__", "__base__", "__ctype_be__", "__ctype_le__"]:
                         #print(f"Class: {name}")
                         #print_members(obj)
                         obj_to_recurse = obj.__dict__
                         recurse_obj_type = "class"
-                #if inspect.ismethod(obj):
-                    #print(f"Method: {name}")
+                if inspect.ismethod(obj):
+                    member_methods.append(name)
+                    #print("Method: {}".format(name))
                     #print_members(obj)
+                    signature = get_method_sig(obj.__func__)
+                    dump_code_object(object_type, "method", obj.__func__.__code__, current_path, name, is_builtin, signature)
                     #dump_code_object(obj, current_path, name)
                 if inspect.isfunction(obj):
+                    member_functions.append(name)
                     #print(f"Function: {name}")
                     #print_members(obj)
                     signature = inspect.signature(obj)
@@ -201,6 +209,9 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
     object_metadata["member_attributes"] = member_attributes
     object_metadata["imported_modules"] = member_imports
     object_metadata["code_objects"] = member_code_objects
+    object_metadata["classes"] = member_classes
+    object_metadata["functions"] = member_functions
+    object_metadata["methods"] = member_methods
     with open(out_name_json, "w") as json_file:
         json_file.write(json_dump_string(object_metadata))
 

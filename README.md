@@ -64,6 +64,7 @@ Values of 3 or higher cannot be unset without a reboot. However, if you are an a
 
 * Add support for ARM64 (Aarch64).
 * Allow shellcode to be passed via stdin in addition to the current method of reading from a file.
+* Investigate using [Keystone](https://www.keystone-engine.org/) for shellcode assembly instead of calling the OS-level `gcc` command.
 * For Python and other script interpreters with APIs for passing in compiled bytecode for execution (versus `eval`-style execution of human-readable script code), provide payloads to take advantage of this ability for even more stealth.
 * If feasible, inject Java code into Java processes via the JNI.
 * Add alternative shared library injection methods for various scenarios.

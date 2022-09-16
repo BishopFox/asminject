@@ -193,6 +193,7 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
     member_classes = []
     member_functions = []
     member_methods = []
+    member_routines = []
     
     
     try:
@@ -222,6 +223,7 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
                         #print_members(obj)
                         obj_to_recurse = obj.__dict__
                         recurse_obj_type = "class"
+                got_code_object = False
                 if inspect.ismethod(obj):
                     member_methods.append(name)
                     #print("Method: {}".format(name))
@@ -229,12 +231,28 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
                     signature = get_method_sig(obj.__func__)
                     dump_code_object(object_type, "method", obj.__func__.__code__, current_path, name, is_builtin, signature)
                     #dump_code_object(obj, current_path, name)
+                    got_code_object = True
                 if inspect.isfunction(obj):
                     member_functions.append(name)
                     #print("Function: {}".format(name))
                     #print_members(obj)
                     signature = get_method_sig(obj)
                     dump_code_object(object_type, "function", obj.__code__, current_path, name, is_builtin, signature)
+                    got_code_object = True
+                if not got_code_object:
+                    if inspect.isroutine(obj):
+                        member_routines.append(name)
+                        #print("Routine: {}".format(name))
+                        #print_members(obj)
+                        object_function = None
+                        if hasattr(obj, "__func__"):
+                            object_function = obj.__func__
+                        if not object_function:
+                            if hasattr(obj, "__code__"):
+                                object_function = obj
+                        if object_function:
+                            signature = get_method_sig(object_function)
+                            dump_code_object(object_type, "routine", object_function.__code__, current_path, name, is_builtin, signature)
                 
                 if obj_to_recurse and d < max_d:
                     if obj_path not in iterated_objects:
@@ -249,6 +267,7 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
     object_metadata["classes"] = member_classes
     object_metadata["functions"] = member_functions
     object_metadata["methods"] = member_methods
+    object_metadata["routines"] = member_routines
     with open(out_name_json, "w") as json_file:
         json_file.write(json_dump_string(object_metadata))
 

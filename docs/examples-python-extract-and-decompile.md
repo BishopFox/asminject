@@ -4,12 +4,13 @@
 
 * [Extract Python code from a running Python process](#extract-python-code-from-a-running-python-process)
 * [Extract and Decompile Python code from a running PyInstaller-based process](#extract-and-decompile-python-code-from-a-running-pyinstaller-based-process)
+* [Automated source code tree reconstruction](#automated-source-code-tree-reconstruction)
 
 ## Extract Python code from a running Python process
 
 Often, using a standard Python decompilation tool such as [Decompyle++](https://github.com/zrax/pycdc), [Uncompyle6](https://github.com/rocky/python-uncompyle6), or [Decompyle3](https://github.com/rocky/python-decompile3) against files on disk (e.g. `.pyc` files) will meet your needs. If so, you should probably go ahead and do that. But sometimes those tools can't parse the files you have access to, or the content no longer exists on disk and is only present in memory.
 
-The `tools/python` directory of the `asminject.py` repository contains a Python script named `recursive_marshal.py` that will attempt to dump just about everything it can about a Python (including PyInstaller-generated binary) process. It is hardcoded to write output to a directory tree beginning with `/tmp/marshalled`, so edit the `recursive_marshal_base_dir` variable if you'd like it to go somewhere else. Please note that for legacy Python 2 processes, you can try using `recursive_marshal-27.py` instead, but it may require modifications to work with Python versions prior to 2.7.
+The `tools/python` directory of the `asminject.py` repository contains a Python script named `recursive_marshal.py` that will attempt to dump just about everything it can about a Python (including PyInstaller-generated binary) process. It is hardcoded to write output to a directory tree beginning with `/tmp/marshalled`, so edit the `recursive_marshal_base_dir` variable if you'd like it to go somewhere else. For legacy Python 2 processes, you should use `recursive_marshal-27.py` instead, but it may require modifications to work with Python versions prior to 2.7.
 
 Transform the script into a giant one-liner and then pass it to `asminject.py`, e.g.:
 
@@ -52,6 +53,8 @@ def it_static_print_itsv():
 
 The exported content will also include a lot of additional data, such as JSON definitions of object trees, source code for individual functions, and so on. This information is typically not necessary when the target process is a regular Python script running in a Python interpreter, but is important for other cases, and discussed further below.
 
+The [Automated source code tree reconstruction](#automated-source-code-tree-reconstruction) section, below, describes a scripted process that attempts to reconstruct the original source code tree from the exported data.
+
 ## Extract and Decompile Python code from a running PyInstaller-based process
 
 [PyInstaller](https://pyinstaller.org/) strips the source code property from objects, but there is still enough metadata left to reconstruct most of the same information from a process running in memory.
@@ -73,7 +76,7 @@ Launch the resulting `dist/python_loop-with_library/python_loop-with_library` bi
 user      237465  [...] practice/dist/python_loop-with_library/python_loop-with_library
 ```
 
-The process is virtually identical to extracting content from a regular Python process. Transform the `recursive_marshal.py` script into a giant one-liner and then pass it to `asminject.py`, e.g.:
+The process is virtually identical to extracting content from a regular Python process. Transform the `recursive_marshal.py` script (or `recursive_marshal.py`, for Python into a giant one-liner and then pass it to `asminject.py`, e.g.:
 
 ```
 # export PYTHONSCRIPT="`cat tools/python/recursive_marshal.py | sed -z 's/\n/\\\\n/g' | sed 's.".\\\\".g'`"
@@ -148,87 +151,7 @@ Interesting properties may also be found in the JSON-formatted object tree expor
 ...omitted for brevity...
 ```
 
-The combination of data output by the script and Decompyle++ can be used to reconstruct an approximation of the original source code tree in the style of [This Dust Remembers What It Once Was](https://www.beneaththewaves.net/Software/This_Dust_Remembers_What_It_Once_Was.html), via the `tools/python/reconstruct_source.py` script include in this repository. Please note that `reconstruct_source.py` is currently an alpha-quality prototype, and the output includes a lot of "noise" in the form of shared library code that is referenced in multiple locations.
-
-For example, using the output generated previously for the PyInstaller-packaged version of `python_loop-with_library`:
-
-```
-% python3 tools/python/reconstruct_source.py --input-dir /tmp/marshalled \
-	--output-dir /home/user/reconstructed-03-loop_with_library \
-	--pycdc-path /home/user/pycdc/pycdc
-
-reconstruct_source.py
-v0.1
-Ben Lincoln, Bishop Fox, 2022-09-12
-https://github.com/BishopFox/asminject
-
-Processing module at '/tmp/marshalled/example_python_library.important_thing'
-Processing class at '/tmp/marshalled/example_python_library.important_thing/important_class_1'
-Processing function at '/tmp/marshalled/example_python_library.important_thing/important_class_1/__init__.json'
-Processing function at '/tmp/marshalled/example_python_library.important_thing/important_class_1/ic1_print_ihv.json'
-Processing function at '/tmp/marshalled/example_python_library.important_thing/important_class_1/ic1_static_print_ihv.json'
-Processing function at '/tmp/marshalled/example_python_library.important_thing/it_print_itsv.json'
-...omitted for brevity...
-
-
-% cat /home/user/reconstructed-03-loop_with_library/___base_path___/practice/dist/python_loop-with_library/python_loop-with_library.py
-
-# Module name: __main__
-# Package: None
-# Original file path: /[REDACTED]/practice/dist/python_loop-with_library/python_loop-with_library.py
-
-# Source Generated with Decompyle++
-# File: _pyi_main_co.bin (Python 3.10)
-
-import time
-import datetime
-import example_python_library
-import example_python_library.important_thing as example_python_library
-example_global_var_1 = 'AKIASADF9370235SUAS0'
-example_global_var_2 = 'This value should not be disclosed'
-for i in range(0, 1000000):
-    print(datetime.datetime.utcnow().isoformat() + ' - Loop count ' + str(i))
-    time.sleep(5)
-...omitted for brevity...
-
-
-% cat /home/user/reconstructed-03-loop_with_library/___base_path___/practice/dist/python_loop-with_library/example_python_library/important_thing.py
-
-# Module name: example_python_library.important_thing
-# Package: example_python_library
-# Original file path: /mnt/hgfs/c/Users/blincoln/Documents/Projects/Research/asminject/Memory_Injection_Code/asminject/devel-2022-05-05-01/practice/dist/python_loop-with_library/example_python_library/important_thing.pyc
-
-important_thing_secret_value = "A very secret value that is only defined in example_python_library/important_thing.py"
-
-class important_class_1:
-
-	def __init__(self):
-        # Source Generated with Decompyle++
-        # File: __init__.bin (Python 3.10)
-
-        self.important_hardcoded_value = 'A very secret value that is only defined in the __init__ function for important_class_1 in example_python_library/important_thing.py'
-
-
-	def ic1_print_ihv(self):
-        # Source Generated with Decompyle++
-        # File: ic1_print_ihv.bin (Python 3.10)
-
-        print(self.important_hardcoded_value)
-
-
-	def ic1_static_print_ihv():
-        # Source Generated with Decompyle++
-        # File: ic1_static_print_ihv.bin (Python 3.10)
-
-		print('A very secret value that is only defined in the static_print_ihv function for important_class_1 in example_python_library/important_thing.py')
-
-def it_print_itsv():
-	# Source Generated with Decompyle++
-	# File: it_print_itsv.bin (Python 3.10)
-
-	print(important_thing_secret_value)
-```
-
+The [Automated source code tree reconstruction](#automated-source-code-tree-reconstruction) section, below, describes a scripted process that attempts to reconstruct the original source code tree from the exported data.
 
 It's also possible to perform a more targeted analysis without the lengthy custom script, e.g.:
 
@@ -284,4 +207,98 @@ for i in range(0, 1000000):
     time.sleep(5)
 ```
 
+## Automated source code tree reconstruction
 
+The combination of data output by the marshalling script and Decompyle++ can be used to reconstruct an approximation of the original source code tree in the style of [This Dust Remembers What It Once Was](https://www.beneaththewaves.net/Software/This_Dust_Remembers_What_It_Once_Was.html), via the `tools/python/reconstruct_source.py` script include in this repository. Please note that `reconstruct_source.py` is currently an alpha-quality prototype, but it does produce very useful output.
+
+If the data extracted by the script includes embedded source code, `reconstruct_source.py` will prefer that, as it's generally identical to the original. It's also much more straightforward to retrieve the entire source for a given module all at once. For example, using the output of the `recursive_marshal-27.py` script for `python_loop-with_library.py` running in Python 2.7, the source code is identical :
+
+```
+% python3 tools/python/reconstruct_source.py --input-dir /tmp/marshalled \
+	--output-dir /home/user/reconstructed \
+	--pycdc-path /home/user/pycdc/pycdc
+
+reconstruct_source.py
+v0.2
+Ben Lincoln, Bishop Fox, 2022-09-15
+...omitted for brevity...
+
+% cat /home/user/reconstructed/___base_path___/practice/example_python_library/important_thing.py 
+# Module name: example_python_library.important_thing
+# Package: None
+# Original file path: /[REDACTED]/practice/example_python_library/important_thing.pyc
+
+"""This is the description in example_python_library/important_thing.py"""
+
+important_thing_secret_value = "A very secret value that is only defined in example_python_library/important_thing.py"
+
+class important_class_1:
+    class_variable_1 = "this is a class variable"
+
+    def __init__(self):
+        """This is the description in important_class_1.__init__()"""
+        self.important_hardcoded_value = "A very secret value that is only defined in the __init__ function for important_class_1 in example_python_library/important_thing.py"
+    
+    def ic1_print_ihv(self):
+        """This is the description in important_class_1.ic1_print_ihv()"""
+        print(self.important_hardcoded_value)
+    
+    @staticmethod
+    def ic1_static_print_ihv():
+        """This is the description in important_class_1.ic1_static_print_ihv()"""
+        print("A very secret value that is only defined in the static_print_ihv function for important_class_1 in example_python_library/important_thing.py")
+
+def it_print_itsv():
+    """This is the description in important_thing.it_print_itsv()"""
+    print(important_thing_secret_value)
+
+@staticmethod
+def it_static_print_itsv():
+    """This is the description in important_thing.it_static_print_itsv()"""
+    print("A very secret value that is only defined in example_python_library/important_thing.py's static method it_static_print_itsv")
+```
+
+If the data does not contain embedded source code, the script uses the metadata and Decompyle++ to reconstruct the source code instead.
+
+For example, using the output generated previously for the PyInstaller-packaged version of `python_loop-with_library.py`, the source code is virtually identical to the original source, except that class- and function-level doc strings are missing, and the script is not able to differentiate between class-level static methods and regular functions.
+
+```
+% python3 tools/python/reconstruct_source.py --input-dir /tmp/marshalled \
+	--output-dir /home/user/reconstructed \
+	--pycdc-path /home/user/pycdc/pycdc
+
+reconstruct_source.py
+v0.2
+Ben Lincoln, Bishop Fox, 2022-09-15
+...omitted for brevity...
+
+% cat /home/user/reconstructed/___base_path___/practice/dist/python_loop-with_library/example_python_library/important_thing.py
+
+# Module name: example_python_library.important_thing
+# Package: example_python_library
+# Original file path: /mnt/hgfs/c/Users/blincoln/Documents/Projects/Research/asminject/Memory_Injection_Code/asminject/devel-2022-05-05-01/practice/dist/python_loop-with_library/example_python_library/important_thing.pyc
+"""This is the description in example_python_library/important_thing.py"""
+
+
+important_thing_secret_value = "A very secret value that is only defined in example_python_library/important_thing.py"
+
+class important_class_1:
+
+    class_variable_1 = "this is a class variable"
+
+    def __init__(self):
+        self.important_hardcoded_value = 'A very secret value that is only defined in the __init__ function for important_class_1 in example_python_library/important_thing.py'
+
+    def ic1_print_ihv(self):
+        print(self.important_hardcoded_value)
+
+    def ic1_static_print_ihv():
+        print('A very secret value that is only defined in the static_print_ihv function for important_class_1 in example_python_library/important_thing.py')
+
+def it_print_itsv():
+    print(important_thing_secret_value)
+
+@staticmethod
+def it_static_print_itsv():
+    print("A very secret value that is only defined in example_python_library/important_thing.py's static method it_static_print_itsv")
+```

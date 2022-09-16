@@ -8,8 +8,8 @@ import subprocess
 import sys
 
 BANNER = r"""reconstruct_source.py
-v0.1
-Ben Lincoln, Bishop Fox, 2022-09-12
+v0.2
+Ben Lincoln, Bishop Fox, 2022-09-15
 https://github.com/BishopFox/asminject
 """
 
@@ -29,6 +29,7 @@ class process_params:
         self.only_reconstructed_source = False
         self.include_builtins = False
         self.include_delimiter_comments = False
+        self.include_decompyle_banner = False
 
 def get_data_from_text_file(file_path):
     result = None
@@ -82,44 +83,35 @@ def get_output_relative_path(params, input_path):
     
     return result
 
-def append_content_to_reconstructed_source(params, reconstructed_content_type, input_path, output_path, content):
-    output_dir = os.path.dirname(output_path)
+def append_content_to_reconstructed_source(params, output_file_content, reconstructed_content_type, input_path, output_path, content):
+    output_file_array = []
+    #print(f"Debug: output_file_content keys: {output_file_content.keys()}")
+    if output_path in output_file_content.keys():
+        output_file_array = output_file_content[output_path]
     try:
-        #print(f"Debug: creating '{output_dir}'")
-        os.makedirs(output_dir, exist_ok=True)
-    except Exception as e:
-        print(f"Error creating output directory {output_dir}: {e}")
-        return
-    try:
-        #print(f"Debug: writing {reconstructed_content_type} to '{output_path}'")
-        with open(output_path, "a") as output_file:
-            if params.include_delimiter_comments:
-                output_file.write("# BEGIN: ")
-                output_file.write(reconstructed_content_type)
-                output_file.write(" from '")
-                output_file.write(input_path)
-                output_file.write("'\n")
-            output_file.write(content)
-            if params.include_delimiter_comments:
-                output_file.write("# END: ")
-                output_file.write(reconstructed_content_type)
-                output_file.write(" from '")
-                output_file.write(input_path)
-                output_file.write("'")
-            output_file.write("\n\n")
+        output_content = ""
+        if params.include_delimiter_comments:
+            output_content += "# BEGIN: "
+            output_content += reconstructed_content_type
+            output_content += " from '"
+            output_content += input_path
+            output_content += "'\n"
+        output_content += content
+        if params.include_delimiter_comments:
+            output_content += "# END: "
+            output_content += reconstructed_content_type
+            output_content += " from '"
+            output_content += input_path
+            output_content += "'"
+        if output_content not in output_file_array:
+            output_file_array.append(output_content)
+            output_file_content[output_path] = output_file_array
+            #print(f"Debug: added the following content for {output_path}: {output_content}")
+        #else:
+            #print(f"Debug: skipped the following duplicate content for {output_path}: {output_content}")
     except IOException as e:
-        print(f"Error writing content to {output_path}: {e}")
-
-def get_import_reconstruction(params, object_metadata_json):
-    result = ""
-    if "imported_modules" in object_metadata_json.keys():
-        ma = object_metadata_json["imported_modules"]
-        for att in ma:
-            if att not in [ "__builtins__" ]:
-                result += "import " 
-                result += att
-                result += "\n"
-    return result
+        print(f"Error appending content to potential output for {output_path}: {e}")
+    return output_file_content
 
 def escape_string_value_inner(input_string, chr_num):
     return input_string.replace(chr(chr_num), '\\x' + '{0:0{1}x}'.format(chr_num, 2))
@@ -136,40 +128,44 @@ def escape_string_value(string_value):
         result = escape_json_value_inner(result, i)
     return result
 
-def get_member_attribute_reconstruction(params, object_metadata_json):
-    result = ""
-    if "member_attributes" in object_metadata_json.keys():
-        ma = object_metadata_json["member_attributes"]
-        for att in ma.keys():
-            result += att
-            result += " = " 
-            string_rep = str(ma[att])
-            if isinstance(ma[att], str):
-                string_rep = '"' + string_rep + '"'
-            result += string_rep
-            result += "\n"
+def remove_decompyle_banner(code_string):
+    result = code_string
+    result = result.replace("# Source Generated with Decompyle++\n", "")
+    result = re.sub('# File: [^\n]+ \(Python [^\)]+\)\n', '', result)
+    while len(result) > 0 and result[0:1] == "\n":
+        result = result[1:]
     return result
+
+def get_indented_code(code, indent):
+    result = ""
+    for l in code.splitlines():
+        result += indent
+        result += l
+        result += "\n"
+    return result
+
+def get_indented_doc_string(doc_string, indent):
+    result = '"""'
+    result += doc_string
+    result += '"""\n\n'
+    return get_indented_code(result, indent)
 
 def get_decompiled_code_object(params, python_version, marshalled_file_path):
     result = ""
-    #result_temp = None
     if params.pycdc_path:
         try:
             argv = [params.pycdc_path, "-c", "-v", python_version, marshalled_file_path]
             run_result = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             result = run_result.stdout.decode()
+            result += "\n"
+            if not params.include_decompyle_banner:
+                result = remove_decompyle_banner(result)
         except Exception as e:
             result += f"Error decompiling '{marshalled_file_path}': {e}"
             print(f"Error decompiling '{marshalled_file_path}': {e}")
         
     else:
         result = "# No path to Decompyle++ / pycdc was specified"
-    # work around weird debugging output in current version of Decompyle++
-    #if result_temp:
-    #    for l in result_temp.splitlines():
-    #        ltrim = l.rstrip()
-            
-    
     return result
 
 def get_first_digit_match(input_string, regex_string):
@@ -198,7 +194,36 @@ def get_code_version(obj):
             result = f"{obj[0]}.{obj[1]}"
     return result
 
-def process_code_object(params, module_output_file_path, code_object_json_path):
+def get_import_reconstruction(params, object_metadata_json, indent = ""):
+    result = ""
+    if "imported_modules" in object_metadata_json.keys():
+        ma = object_metadata_json["imported_modules"]
+        for att in ma:
+            if att not in [ "__builtins__" ]:
+                result += indent 
+                result += "import " 
+                result += att
+                result += "\n"
+        result += "\n"
+    return result
+    
+def get_member_attribute_reconstruction(params, object_metadata_json, indent = ""):
+    result = ""
+    if "member_attributes" in object_metadata_json.keys():
+        ma = object_metadata_json["member_attributes"]
+        for att in ma.keys():
+            result += indent 
+            result += att
+            result += " = " 
+            string_rep = str(ma[att])
+            if isinstance(ma[att], str):
+                string_rep = '"' + string_rep + '"'
+            result += string_rep
+            result += "\n"
+        result += "\n"
+    return result
+
+def process_code_object(params, output_file_content, module_output_file_path, code_object_json_path, indent = ""):
     is_code_object = True
     code_object_data = {}
     if os.path.isfile(code_object_json_path):
@@ -213,14 +238,14 @@ def process_code_object(params, module_output_file_path, code_object_json_path):
                 is_code_object = False
     if not is_code_object:
         #print(f"Ignoring '{code_object_json_path}' because it is not a code object")
-        return
+        return output_file_content
     
     print(f"Processing code_object at '{code_object_json_path}'")
     
     code_object_python_version = None
     code_object_source_code_file = None
     code_object_marshalled_file = None
-       
+
     if "python_version" in code_object_data.keys():
         pv = code_object_data["python_version"]
         code_object_python_version = get_code_version(pv)
@@ -232,23 +257,25 @@ def process_code_object(params, module_output_file_path, code_object_json_path):
         code_object_marshalled_file = code_object_data["marshalled_file"]
     
     got_code_object_source = False
-    reconstructed_code_object_header = None
+    reconstructed_code_object_source = None
 
     if not params.only_reconstructed_source:
         if code_object_source_code_file:
-            append_content_to_reconstructed_source(params, "original code object source code", code_object_source_code_file, module_output_file_path, get_data_from_text_file(code_object_source_code_file))
+            output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original code object source code", code_object_source_code_file, module_output_file_path, get_data_from_text_file(code_object_source_code_file))
             got_code_object_source = True
     
     # Only attempt to decompile code objects if no embedded source was retrieved
     if not got_code_object_source:
-        reconstructed_code_object_header = f""
+        reconstructed_code_object_source = f""
         if code_object_marshalled_file:
             decompiled = get_decompiled_code_object(params, code_object_python_version, code_object_marshalled_file)
             if decompiled:
-                reconstructed_code_object_header += decompiled
-        append_content_to_reconstructed_source(params, "reconstructed code object source code", code_object_marshalled_file, module_output_file_path, reconstructed_code_object_header)
+                reconstructed_code_object_source += decompiled
+        output_file_content = append_content_to_reconstructed_source(params, output_file_content, "reconstructed code object source code", code_object_marshalled_file, module_output_file_path, reconstructed_code_object_source)
+    
+    return output_file_content
 
-def process_function(params, module_output_file_path, function_json_path, indent = "    "):
+def process_function(params, function_type, output_file_content, module_output_file_path, function_json_path, indent = "    "):
     is_function = True
     function_data = {}
     if os.path.isfile(function_json_path):
@@ -258,14 +285,16 @@ def process_function(params, module_output_file_path, function_json_path, indent
     if not function_data:
         is_function = False
     if is_function:
-        if "object_type" in function_data.keys():
-            if function_data["object_type"] not in [ "function", "method" ]:
-                is_function = False
+        #if "object_type" in function_data.keys():
+        #    if function_data["object_type"] not in [ "function", "method" ]:
+        #        is_function = False
+        if function_type not in [ "function", "method", "routine" ]:
+            is_function = False
     if not is_function:
         #print(f"Ignoring '{function_json_path}' because it is not a function")
-        return
+        return output_file_content
     
-    function_type = function_data["object_type"]
+    #function_type = function_data["object_type"]
     
     print(f"Processing {function_type} at '{function_json_path}'")
     
@@ -274,16 +303,30 @@ def process_function(params, module_output_file_path, function_json_path, indent
     function_python_version = None
     function_source_code_file = None
     function_marshalled_file = None
+    function_doc = None
+    function_parent_type = "function"
     
     if "object_name" in function_data.keys():
         function_name = function_data["object_name"]
+    else:
+        print(f"Error: could not find object_name key in {function_json_path}")
+    
+    if "__doc__" in function_data.keys():
+        function_doc = function_data["__doc__"]
+    
+    if "parent_type" in function_data.keys():
+        function_parent_type = function_data["parent_type"]
     
     if "signature" in function_data.keys():
         function_signature = function_data["signature"]
+    else:
+        print(f"Error: could not find signature key in {function_json_path}")
     
     if "python_version" in function_data.keys():
         pv = function_data["python_version"]
         function_python_version = get_code_version(pv)
+    else:
+        print(f"Error: could not find python_version key in {function_json_path}")
     
     if "source_code_file" in function_data.keys():
         function_source_code_file = function_data["source_code_file"]
@@ -292,34 +335,59 @@ def process_function(params, module_output_file_path, function_json_path, indent
         function_marshalled_file = function_data["marshalled_file"]
     
     got_function_source = False
-    reconstructed_function_header = None
+    reconstructed_function_source = None
 
     if not params.only_reconstructed_source:
         if function_source_code_file:
-            append_content_to_reconstructed_source(params, "original {function_type} source code", function_source_code_file, module_output_file_path, get_data_from_text_file(function_source_code_file))
+            output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original {function_type} source code", function_source_code_file, module_output_file_path, get_data_from_text_file(function_source_code_file))
             got_function_source = True
     
     # Only attempt to decompile code objects if no embedded source was retrieved
     if not got_function_source:
-        reconstructed_function_header = f"{indent}def {function_name}{function_signature}:\n"
+        reconstructed_function_source = ""
+        # Python 2.7:
+        # For module-level code, @staticmethods are routines, and other functions are functions
+        # but for classes, @staticmethods are classified as functions, and other functions are methods
+        # Python 3:
+        # For module-level code, @staticmethods are routines, and other functions are functions
+        # For classes, they both show up as functions!
+        is_static_method = False
+        if function_parent_type == "module":
+            if function_type == "routine":
+                reconstructed_function_source += indent
+                reconstructed_function_source += "@staticmethod\n"
+        else:
+            if len(function_python_version) > 0 and function_python_version[0] == "2":
+                if function_type == "function":
+                    reconstructed_function_source += indent
+                    reconstructed_function_source += "@staticmethod\n"
+        reconstructed_function_source += f"{indent}def {function_name}{function_signature}:\n"
+        if function_doc:
+            reconstructed_function_source += get_indented_doc_string(function_doc, indent)
         if function_marshalled_file:
             decompiled = get_decompiled_code_object(params, function_python_version, function_marshalled_file)
             if decompiled:
                 for l in decompiled.splitlines():
                     # add indent to each line
-                    reconstructed_function_header += indent
-                    reconstructed_function_header += l
-                    reconstructed_function_header += "\n"
-        append_content_to_reconstructed_source(params, "reconstructed {function_type} source code", function_marshalled_file, module_output_file_path, reconstructed_function_header)
+                    reconstructed_function_source += indent
+                    reconstructed_function_source += "    "
+                    reconstructed_function_source += l
+                    reconstructed_function_source += "\n"
+        output_file_content = append_content_to_reconstructed_source(params, output_file_content, "reconstructed {function_type} source code", function_marshalled_file, module_output_file_path, reconstructed_function_source)
+    
+    return output_file_content
 
 
-def process_class(params, module_output_file_path, class_directory_path):    
+def process_class(params, output_file_content, module_output_file_path, class_directory_path, indent = ""):    
     class_metadata_file_path = os.path.join(class_directory_path, METADATA_FILENAME)
     submodules_to_process = []
     classes_to_process = []
     functions_to_process = []
+    methods_to_process = []
+    routines_to_process = []
     is_class = True
     class_name = None
+    class_doc = None
     class_data = {}
     if os.path.isfile(class_metadata_file_path):
         class_data = get_data_from_json_file(class_metadata_file_path)
@@ -333,67 +401,59 @@ def process_class(params, module_output_file_path, class_directory_path):
                 is_class = False
     if not is_class:
         #print(f"Ignoring '{class_directory_path}' because it is not a class")
-        return
+        return output_file_content
         
     print(f"Processing class at '{class_directory_path}'")
     
     if "name" in class_data.keys():
         class_name = class_data["name"]
     
+    if "__doc__" in class_data.keys():
+        class_doc = class_data["__doc__"]
+    
     #if "member_metadata" in class_data.keys():
     #    mm = class_data["member_metadata"]        
-    #    (submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, None, mm, submodules_to_process, classes_to_process, functions_to_process)
-    (submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, None, class_data, submodules_to_process, classes_to_process, functions_to_process)
+    #    (submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process) = get_child_object_list(params, None, mm, submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process)
+    (submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process) = get_child_object_list(params, None, class_data, submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process)
     
     got_class_source = False
-    reconstructed_class_header = None
+    reconstructed_class_source = None
 
     if not params.only_reconstructed_source:
         if "source_code_file" in class_data.keys():
             class_source_code_file = class_data["source_code_file"]
-            append_content_to_reconstructed_source(params, "original class source code", class_source_code_file, module_output_file_path, get_data_from_text_file(class_source_code_file))
+            output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original class source code", class_source_code_file, module_output_file_path, get_data_from_text_file(class_source_code_file))
             got_class_source = True
     
     # Only attempt to decompile code objects if no embedded source was retrieved
     if not got_class_source:
-        reconstructed_class_header = f"class {class_name}:\n"
+        reconstructed_class_source = f"{indent}class {class_name}:\n"
+        if class_doc:
+            reconstructed_class_source += get_indented_doc_string(class_doc, indent)
         #for co in code_objects:
         #    process_code_object(params, module_output_file_path, os.path.join(directory_path, f"{co}.json"))
-        reconstructed_class_header += get_import_reconstruction(params, class_data)
-        reconstructed_class_header += get_member_attribute_reconstruction(params, class_data)
-        append_content_to_reconstructed_source(params, "reconstructed class source code", class_metadata_file_path, module_output_file_path, reconstructed_class_header)
+        next_level_indent = f"{indent}    "
+        reconstructed_class_source += get_import_reconstruction(params, class_data, indent = next_level_indent)
+        reconstructed_class_source += get_member_attribute_reconstruction(params, class_data, indent = next_level_indent)
+        output_file_content = append_content_to_reconstructed_source(params, output_file_content, "reconstructed class source code", class_metadata_file_path, module_output_file_path, reconstructed_class_source)
         
         for func in functions_to_process:
-            process_function(params, module_output_file_path, os.path.join(class_directory_path, f"{func}.json"), indent = "        ")
+            output_file_content = process_function(params, "function", output_file_content, module_output_file_path, os.path.join(class_directory_path, f"{func}.json"), indent = next_level_indent)
+        
+        for m in methods_to_process:
+            output_file_content = process_function(params, "method", output_file_content, module_output_file_path, os.path.join(class_directory_path, f"{m}.json"), indent = next_level_indent)
+        
+        for r in routines_to_process:
+            output_file_content = process_function(params, "routine", output_file_content, module_output_file_path, os.path.join(class_directory_path, f"{r}.json"), indent = next_level_indent)
+    
+    return output_file_content
 
 def get_subobject_path(base_value, path_prefix):
     if not path_prefix:
         return base_value
     return os.path.join(path_prefix, base_value)
     
-def get_child_object_list(params, path_prefix, key_value_collection, submodule_list, class_list, function_list):
-    #print(f"Debug: k/v collection: {key_value_collection}")
-    # if hasattr(key_value_collection, "keys"):
-        # for mdk in key_value_collection.keys():
-            # mdv = key_value_collection[mdk]
-            # dir_name = mdk
-            # if path_prefix:
-                # dir_name = os.path.join(path_prefix, dir_name)
-            # if mdv and isinstance(mdv, str):
-                # if params.include_builtins or "built-in" not in mdv.lower():
-                    # if 'function ' in mdv or 'method ' in mdv:
-                        # if mdk not in [ "__doc__" ]:
-                            # function_list.append(dir_name)
-                    # if 'class ' in mdv:
-                        # if mdk not in [ "__doc__" ]:
-                            # class_list.append(dir_name)
-                    # if 'module ' in mdv:
-                        # include_module = True
-                        # if mdk in params.ignored_modules:
-                            # include_module = False
-                        # if mdk in params.processed_modules:
-                            # include_module = False
-                        # submodule_list.append(dir_name)
+def get_child_object_list(params, path_prefix, key_value_collection, submodule_list, class_list, function_list, method_list, routine_list):
     if hasattr(key_value_collection, "keys"):
         if "imported_modules" in key_value_collection.keys():
             for im in key_value_collection["imported_modules"]:
@@ -415,10 +475,14 @@ def get_child_object_list(params, path_prefix, key_value_collection, submodule_l
         if "methods" in key_value_collection.keys():
             for m in key_value_collection["methods"]:
                 if m not in [ "__doc__" ]:
-                    function_list.append(get_subobject_path(m, path_prefix))
-    return (submodule_list, class_list, function_list)
+                    method_list.append(get_subobject_path(m, path_prefix))
+        if "routines" in key_value_collection.keys():
+            for r in key_value_collection["routines"]:
+                if r not in function_list and r not in method_list:
+                    routine_list.append(get_subobject_path(r, path_prefix))
+    return (submodule_list, class_list, function_list, method_list, routine_list)
 
-def process_module(params, directory_path):
+def process_module(params, output_file_content, directory_path):
     try:
         is_module = True
         module_data = {}
@@ -434,9 +498,12 @@ def process_module(params, directory_path):
         module_output_file_path = None
         module_package = None
         module_source_code_file = None
+        module_doc = None
         submodules_to_process = []
         classes_to_process = []
         functions_to_process = []
+        methods_to_process = []
+        routines_to_process = []
         code_objects = []
         
         if is_module:
@@ -446,7 +513,7 @@ def process_module(params, directory_path):
         
         if not is_module:
             #print(f"Ignoring '{directory_path}' because it is not a module")
-            return
+            return output_file_content
         print(f"Processing module at '{directory_path}'")
 
         if "code_objects" in module_data.keys():
@@ -470,15 +537,18 @@ def process_module(params, directory_path):
                 if "__package__" in mm.keys():
                     module_package = mm["__package__"]
             
-                #(submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, None, mm, submodules_to_process, classes_to_process, functions_to_process)
+                if "__doc__" in mm.keys():
+                    module_doc = mm["__doc__"]
+            
+                #(submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process) = get_child_object_list(params, None, mm, submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process)
                 
 
                 #if "__builtins__" in mm.keys():
-                    #(submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, "__builtins__", mm["__builtins__"], submodules_to_process, classes_to_process, functions_to_process)
-                    #(submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, "__builtins__", module_data["__builtins__"], submodules_to_process, classes_to_process, functions_to_process)
+                    #(submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process) = get_child_object_list(params, "__builtins__", mm["__builtins__"], submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process)
+                    #(submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process) = get_child_object_list(params, "__builtins__", module_data["__builtins__"], submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process)
             
             
-        (submodules_to_process, classes_to_process, functions_to_process) = get_child_object_list(params, None, module_data, submodules_to_process, classes_to_process, functions_to_process)
+        (submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process) = get_child_object_list(params, None, module_data, submodules_to_process, classes_to_process, functions_to_process, methods_to_process, routines_to_process)
         
         
         if not module_output_file_path:
@@ -495,37 +565,49 @@ def process_module(params, directory_path):
         module_metadata = f"# Module name: {module_name}\n"
         module_metadata += f"# Package: {module_package}\n"
         module_metadata += f"# Original file path: {module_original_file_path}\n"
-        append_content_to_reconstructed_source(params, "module metadata", module_metadata_file_path, module_output_file_path, module_metadata)
-        
         got_module_source = False
+        data_contains_source = False
+        if "source_code_file" in module_data.keys() and module_data["source_code_file"] and module_data["source_code_file"] != "None":
+            data_contains_source = True
+        if params.only_reconstructed_source or not data_contains_source:
+            if module_doc:
+                module_metadata += get_indented_doc_string(module_doc, "")
+            
+        output_file_content = append_content_to_reconstructed_source(params, output_file_content, "module metadata", module_metadata_file_path, module_output_file_path, module_metadata)
         
         if not params.only_reconstructed_source:
-            if "source_code_file" in module_data.keys() and module_data["source_code_file"] and module_data["source_code_file"] != "None":
+            if data_contains_source:
                 module_source_code_file = module_data["source_code_file"]
-                append_content_to_reconstructed_source(params, "original module source code", module_source_code_file, module_output_file_path, get_data_from_text_file(module_source_code_file))
+                output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original module source code", module_source_code_file, module_output_file_path, get_data_from_text_file(module_source_code_file))
                 got_module_source = True
         
         # Only attempt to decompile code objects if no embedded source was retrieved
         if not got_module_source:        
             for co in code_objects:
-                process_code_object(params, module_output_file_path, os.path.join(directory_path, f"{co}.json"))
+                output_file_content = process_code_object(params, output_file_content, module_output_file_path, os.path.join(directory_path, f"{co}.json"))
                 
             reconstructed_module_header = ""
             reconstructed_module_header += get_import_reconstruction(params, module_data)
             reconstructed_module_header += get_member_attribute_reconstruction(params, module_data)
-            append_content_to_reconstructed_source(params, "reconstructed module source code", module_metadata_file_path, module_output_file_path, reconstructed_module_header)
+            output_file_content = append_content_to_reconstructed_source(params, output_file_content, "reconstructed module source code", module_metadata_file_path, module_output_file_path, reconstructed_module_header)
         
             for c in classes_to_process:
-                process_class(params, module_output_file_path, os.path.join(directory_path, c))
+                output_file_content = process_class(params, output_file_content, module_output_file_path, os.path.join(directory_path, c))
             for func in functions_to_process:
-                process_function(params, module_output_file_path, os.path.join(directory_path, f"{func}.json"))            
+                output_file_content = process_function(params, "function", output_file_content, module_output_file_path, os.path.join(directory_path, f"{func}.json"), indent = "")  
+            for m in methods_to_process:
+                output_file_content = process_function(params, "method", output_file_content, module_output_file_path, os.path.join(directory_path, f"{m}.json"), indent = "")
+            for r in routines_to_process:
+                output_file_content = process_function(params, "routine", output_file_content, module_output_file_path, os.path.join(directory_path, f"{r}.json"), indent = "")
 
         # process any sub-modules
         for submodule in submodules_to_process:
-            process_module(params, os.path.join(directory_path, submodule))
+            output_file_content = process_module(params, output_file_content, os.path.join(directory_path, submodule))
         
     except IOException as e:
         print(f"Error processing module at path {directory_path}: {e}")
+    
+    return output_file_content
 
 # begin: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
 def str2bool(v):
@@ -579,6 +661,10 @@ if __name__ == "__main__":
         const=True, default=False,
         help="Includes comments in reconstructed source code to make it more clear where the data came from.")
 
+    parser.add_argument("--include-decompyle-banner", type=str2bool, nargs='?',
+        const=True, default=False,
+        help="Includes the Decompyle++ banner in decompiled code.")
+
     args = parser.parse_args()
     
     if args.input_dir:
@@ -609,6 +695,15 @@ if __name__ == "__main__":
     if args.include_delimiter_comments:
         params.include_delimiter_comments = args.include_delimiter_comments
 
+    if args.include_decompyle_banner:
+        params.include_decompyle_banner = args.include_decompyle_banner
+
+    # output file content is handled in memory as a hashtable containing an array of strings
+    # the hash key is the output file name, and each string is a unique chunk of content
+    # this is to prevent duplication of output content when multiple input sources refer
+    # to the same logical data
+    output_file_content = {}
+
     # get top-level modules from input
     top_level_modules = []
     
@@ -619,4 +714,21 @@ if __name__ == "__main__":
             params.processed_modules.append(dir_entry)
     
     for tlm in top_level_modules:
-        process_module(params, tlm)
+        output_file_content = process_module(params, output_file_content, tlm)
+    
+    # write the resulting output files now that all sources of data have been processed
+    for output_file_path in output_file_content.keys():
+        output_dir = os.path.dirname(output_file_path)
+        try:
+            #print(f"Debug: creating '{output_dir}'")
+            os.makedirs(output_dir, exist_ok=True)
+        except Exception as e:
+            print(f"Error creating output directory {output_dir}: {e}")
+        try:
+            print(f"Writing content to '{output_file_path}'")
+            with open(output_file_path, "w") as output_file:
+                for output_entry in output_file_content[output_file_path]:
+                    output_file.write(output_entry)
+        except IOException as e:
+            print(f"Error writing content to {output_file_path}: {e}")
+    

@@ -582,4 +582,16 @@ class DName
 
 From the `Debug` menu, select `Go`, and the process should continue operating normally.
 
+The files can be copied from the output directory (`C:\Users\blincoln\AppData\Local\Temp\marshalled` in the example above) to a Linux system and processed using the `reconstruct_source.py` script discussed above, e.g.:
+
+```
+% python3 tools/python/reconstruct_source.py \
+	--input-dir /mnt/hgfs/c/Users/blincoln/Documents/marshalled-win-03 \
+	--output-dir /home/user/reconstructed-win-03 \
+	--pycdc-path /mnt/hgfs/c/Users/blincoln/Documents/GitHub/pycdc-custom/build/pycdc \
+	--input-path-replacement 'C:\\Users\\blincoln\\AppData\\Local\\Temp\\marshalled' \
+	'/mnt/hgfs/c/Users/blincoln/Documents/marshalled-win-03 \
+	--input-path-replacement 'C:' 'C' \
+	--input-path-replacement '\\' '/'
+```
 

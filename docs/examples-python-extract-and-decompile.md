@@ -5,6 +5,8 @@
 * [Extract Python code from a running Python process](#extract-python-code-from-a-running-python-process)
 * [Extract and Decompile Python code from a running PyInstaller-based process](#extract-and-decompile-python-code-from-a-running-pyinstaller-based-process)
 * [Automated source code tree reconstruction](#automated-source-code-tree-reconstruction)
+* [Stripped PyInstaller binaries](#stripped-pyinstaller-binaries)
+* [Reconstructing source code from Windows PyInstaller binaries](#reconstructing-source-code-from-windows-pyinstaller-binaries)
 
 ## Extract Python code from a running Python process
 
@@ -304,3 +306,280 @@ def it_print_itsv():
 def it_static_print_itsv():
     print("A very secret value that is only defined in example_python_library/important_thing.py's static method it_static_print_itsv")
 ```
+
+## Stripped PyInstaller binaries
+
+Does including the `-s` / `--strip` option when building with PyInstaller prevent injecting new Python code into the process?
+
+```
+# pyinstaller --distpath dist-linux -s python_loop-with_library.py
+
+858 INFO: PyInstaller: 5.3
+859 INFO: Python: 3.10.5
+863 INFO: Platform: Linux-5.18.0-kali2-amd64-x86_64-with-glibc2.33
+...omitted for brevity...
+19332 INFO: Executing - strip/root/.cache/pyinstaller/bincache10_py310_64bit/libcrypto.so.3
+19440 INFO: Executing - strip/root/.cache/pyinstaller/bincache10_py310_64bit/liblzma.so.5
+19481 INFO: Executing - strip/root/.cache/pyinstaller/bincache10_py310_64bit/libbz2.so.1.0
+19541 INFO: Executing - strip/root/.cache/pyinstaller/bincache10_py310_64bit/libssl.so.3
+19705 INFO: Executing - strip/root/.cache/pyinstaller/bincache10_py310_64bit/libpython3.10.so.1.0
+19840 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+
+# readelf -a --wide dist-linux/python_loop-with_library/libpython3.10.so.1.0 | grep PyEval
+
+...omitted for brevity...
+664: 00000000001bd3e0   272 FUNC    GLOBAL DEFAULT   12 PyEval_EvalCode
+...omitted for brevity...
+```
+
+Looks like the symbols `asminject.py` needs are still there, but does injecting code actually work?
+
+```
+% practice/dist-linux/python_loop-with_library/python_loop-with_library 
+2022-09-16T23:34:23.932177 - Loop count 0
+```
+
+```
+# export PYTHONSCRIPT="`cat tools/python/recursive_marshal.py| sed -z 's/\n/\\\\n/g' | sed 's.".\\\\".g'`"
+
+# ps auxww | grep python_loop 
+
+user      945132  [...] practice/dist-linux/python_loop-with_library/python_loop-with_library
+
+# python3 ./asminject.py 945132 execute_python_code.s \
+	--relative-offsets-from-binaries --var pythoncode "${PYTHONSCRIPT}"
+...omitted for brevity...
+```
+
+```
+2022-09-16T23:34:28.938222 - Loop count 1
+...omitted for brevity...
+Couldn't get source code for function __main__/example_python_library/ExampleClass
+Writing function code to /tmp/marshalled/__main__/example_python_library/ExampleClass/__init__.bin
+Couldn't get source code for function __main__/example_python_library/ExampleClass
+Writing function code to /tmp/marshalled/__main__/example_python_library/ExampleClass/ec_static_method_1.bin
+Couldn't get source code for function __main__/example_python_library
+Writing function code to /tmp/marshalled/__main__/example_python_library/ExampleFunction.bin
+Couldn't get source code for routine __main__/example_python_library
+Writing routine code to /tmp/marshalled/__main__/example_python_library/ExampleStaticMethod.bin
+...omitted for brevity...
+```
+
+Maybe injection is possible but the source code tree reconstruction script will fail?
+
+```
+% python3 tools/python/reconstruct_source.py \
+	--input-dir /tmp/marshalled \
+	--output-dir /home/user/reconstructed-08-py3installer-stripped-linux \
+	 --pycdc-path /home/user/pycdc/pycdc
+	 
+...omitted for brevity...
+Processing module at '/tmp/marshalled/example_python_library.important_thing'
+Processing class at '/tmp/marshalled/example_python_library.important_thing/important_class_1'
+Processing function at '/tmp/marshalled/example_python_library.important_thing/important_class_1/__init__.json'
+Processing function at '/tmp/marshalled/example_python_library.important_thing/important_class_1/ic1_print_ihv.json'
+Processing function at '/tmp/marshalled/example_python_library.important_thing/important_class_1/ic1_static_print_ihv.json'
+Processing function at '/tmp/marshalled/example_python_library.important_thing/it_print_itsv.json'
+Processing routine at '/tmp/marshalled/example_python_library.important_thing/it_static_print_itsv.json'
+...omitted for brevity...
+
+ % cat /home/user/reconstructed-08-py3installer-stripped-linux/___base_path___/practice/dist-linux/python_loop-with_library/example_python_library/important_thing.py
+
+# Module name: example_python_library.important_thing
+# Package: example_python_library
+# Original file path: /[REDACTED]/practice/dist-linux/python_loop-with_library/example_python_library/important_thing.pyc
+"""This is the description in example_python_library/important_thing.py"""
+
+
+important_thing_secret_value = "A very secret value that is only defined in example_python_library/important_thing.py"
+
+class important_class_1:
+
+    class_variable_1 = "this is a class variable"
+
+    def __init__(self):
+        self.important_hardcoded_value = 'A very secret value that is only defined in the __init__ function for important_class_1 in example_python_library/important_thing.py'
+
+    def ic1_print_ihv(self):
+        print(self.important_hardcoded_value)
+
+    def ic1_static_print_ihv():
+        print('A very secret value that is only defined in the static_print_ihv function for important_class_1 in example_python_library/important_thing.py')
+
+def it_print_itsv():
+    print(important_thing_secret_value)
+
+@staticmethod
+def it_static_print_itsv():
+    print("A very secret value that is only defined in example_python_library/important_thing.py's static method it_static_print_itsv")
+```
+
+Guess that has no effect on Linux builds. PyInstaller crashes when I add that flag on Windows, so I don't know for sure about that platform. Wait, this works on Windows too?
+
+## Reconstructing source code from Windows PyInstaller binaries
+
+There is currently no Windows support in `asminject.py`, so you'll need to inject one of the recursive-marshalling scripts into the target process using other means. The steps below use [WinDbg](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/getting-started-with-windbg), which is included with every version of the Windows SDK.
+
+Before launching WinDbg, make sure to create the directory `C:\Symbols`, if it doesn't already exist.
+
+WinDbg can call arbitrary functions that exist in the process it's attached to. However, it needs to not only know the address of the function, but its signature, and the signature is not included by default in the Python DLL. There are several ways of remedying this. I found the fastest way to be finding functions in other libraries already loaded by the process that have identical signatures (or at least close enough), and using those with the `/s` (prototype) option for `.call`.
+
+To inject code like `asminject.py` does, that means that the following signatures are required:
+
+* `PyGILState_Ensure()`: no parameters, returns an integer
+* `PyRun_SimpleString(char * command)`: Python script code to execute passed as a pointer to a string, returns an integer
+* `PyGILState_Release(int handle)`: releases the handle returned by `PyGILState_Ensure()`
+
+If you don't care about keeping the target process more or less stable, you can omit the third one.
+
+`PyGILState_Ensure()` is easy, because you just need a function that has no parameters and returns an integer. I used `VCRUNTIME140!_GetImageBase`.
+
+`PyRun_SimpleString(char * command)` was a little harder. I didn't find any functions with signatures in any of the loaded libraries that accepted a single `char *` parameter. Fortunately, all that really matters it that it accepts a single pointer parameter, so I used `VCRUNTIME140!__GetPlatformExceptionInfo`, which has a single `int *` parameter.
+
+For `PyGILState_Release(int handle)`, the closest match I found was `VCRUNTIME140!UnDecorator::getFloatingPoint`, which accepts a single integer parameter, but returns a complex structure. This means that WinDbg will output a nonsense parsing of the return value.
+
+The other requirement is a location in memory to write the injected Python code. `asminject.py` does this dynamically. For this WinDbg process, you'll need about 300 bytes of data that can be safely overwritten. If you are able to launch a new instance of the target binary using WinDbg, this is easily achieved by starting it with an additional command line argument consisting of 300 Xs. If you need to attach to an existing process instead, you'll have to get more creative. Maybe use another tool to inject a DLL that you won't actually use, and overwrite part of it? The remainder of this section assumes that you're launching the process from WinDbg, and including the placeholder command line argument.
+
+After starting WinDbg, go to the `File` menu and choose `Open Executable`. Browse to the binary and select it, but don't open it yet. Before opening it, paste 300 `X` characters into the `Arguments` field, as shown below:
+
+<img src="WinDbg-01-Annotated.PNG" width="572" height="563" alt="[ Adding command line parameter to executable launch options ]">
+
+Here are 300 Xs ready to go:
+
+```
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
+
+Open the binary. From the `Debug` menu, select `Go`.
+
+Wait for the target process to reach a state where all code of interest has been loaded. Then go to the `Debug` menu and choose `Break`.
+
+Run the following two commands in WinDbg to load symbols for the system libraries:
+
+```
+.symfix+ c:\symbols
+.reload
+```
+
+Locate the command-line parameters for the process using the `!peb` WinDbg command. The data of interest is the `ProcessParameters` address, which should have the full `CommandLine` value a few lines after it, and that line should contain your 300 Xs.
+
+```
+0:004> !peb
+PEB at 000000dc7a765000
+...omitted for brevity...
+ProcessParameters: 000002a8165f27e0
+...omitted for brevity...
+CommandLine:  'C:\[REDACTED]\practice\dist-win-unstripped\python_loop-with_library\python_loop-with_library.exe XXXXXXXX[...]XXXXXXXX'
+```
+
+In this example output, `ProcessParameters` is at address `0x000002a8165f27e0`. That value will change on every execution of the binary, so don't just assume it will be the same for you.
+
+Use the WinDbg search-in-memory functionality to find the beginning of the 300 Xs string starting at the `ProcessParameters` address:
+
+```
+0:004> s -a 000002a8165f27e0 L?100000 XXXXXXXX
+
+000002a8`165f489f  58 58 58 58 58 58 58 58-58 58 58 58 58 58 58 58  XXXXXXXXXXXXXXXX
+000002a8`165f48a0  58 58 58 58 58 58 58 58-58 58 58 58 58 58 58 58  XXXXXXXXXXXXXXXX
+...omitted for brevity...
+```
+
+In this example, the string of Xs starts at `0x000002a8165f489f`, but that will also change every time the binary is executed.
+
+Modify the following string to replace `<ASMINJECT_REPO_PATH>` with the location of your copy of the `asminject.py` GitHub repo. Make sure every backslash you include is replaced with four backslashes, like the existing ones:
+
+```
+exec(open('C:\\\\<ASMINJECT_REPO_PATH>\\\\tools\\\\python\\\\recursive_marshal.py', 'r').read())
+```
+
+e.g.:
+
+```
+exec(open('C:\\\\Users\\\\blincoln\\\\Documents\\\\repos\\\\asminject\\\\tools\\\\python\\\\recursive_marshal.py', 'r').read())
+```
+
+Use the WinDbg `eza` (write ASCII C string) command to write the resulting string to the location where the 300 Xs start, e.g.:
+
+```
+0:004> eza 000002a8`165f489f "exec(open('C:\\\\Users\\\\blincoln\\\\Documents\\\\repos\\\\asminject\\\\tools\\\\python\\\\recursive_marshal.py', 'r').read())"
+```
+
+Optionally, verify that it was written successfully, e.g.:
+
+```
+0:004> da /c 8 000002a8`165f489f
+000002a8`165f489f  "exec(ope"
+000002a8`165f48a7  "n('C:\\U"
+000002a8`165f48af  "sers\\bl"
+000002a8`165f48b7  "incoln\\"
+...omitted for brevity...
+```
+
+Edit the `recursive_marshal.py` script referenced in the string above to give it a base directory that's valid on Windows, e.g.:
+
+```
+recursive_marshal_base_dir = "C:\\Users\\blincoln\\AppData\\Local\\Temp\\marshalled"
+```
+
+Use the `.call` WinDbg command and `g` confirmation to execute the three functions. First, `PyGILState_Ensure()`:
+
+```
+0:004> .call /s VCRUNTIME140!_GetImageBase python39!PyGILState_Ensure()
+*** ERROR: Symbol file could not be found.  Defaulted to export symbols for C:\[REDACTED]\practice\dist-win-unstripped\python_loop-with_library\python39.dll - 
+Thread is set up for call, 'g' will execute.
+WARNING: This can have serious side-effects,
+including deadlocks and corruption of the debuggee.
+0:004> g
+.call returns:
+unsigned int64 1
+
+ntdll!DbgBreakPoint:
+00007ff8`0b830af0 cc              int     3
+```
+
+The `unsigned int64 1` return value in the example above is the handle ID for the interpreter lock. In this case, the ID is `1`. Keep that handle for releasing the lock later.
+
+Execute `PyRun_SimpleString`, passing it the address where you wrote the Python script string, e.g.:
+
+```
+0:004> .call /s VCRUNTIME140!__GetPlatformExceptionInfo python39!PyRun_SimpleString(0x000002a8165f489f)
+
+Thread is set up for call, 'g' will execute.
+WARNING: This can have serious side-effects,
+including deadlocks and corruption of the debuggee.
+
+0:004> g
+```
+
+The first time you call the function, you may get some output from the target process like this:
+
+```
+No module named 'inspect'
+```
+
+If there are any Python modules referenced by the recursive-marshalling script that weren't compiled into the PyInstaller binary, you'll need to copy them to the binary's working directory. Copy the module in the error message, then in WinDbg hit the up arrow key twice to go back to the `PyRun_SimpleString` call and re-run it by pressing enter. During my testing, I had to go through four cycles of copying a `.py` file into the working directory, then re-running the function call. In the end, I'd added four files:
+
+* `inspect.py`
+* `ast.py`
+* `dis.py`
+* `opcode.py`
+
+Once the script has executed successfully, release the hold on the Python interpreter. The response will be interpreted as garbage if you use the same prototype that I did, but that doesn't matter.
+
+```
+0:004> .call /s VCRUNTIME140!UnDecorator::getFloatingPoint python39!PyGILState_Release(1)
+
+Thread is set up for call, 'g' will execute.
+WARNING: This can have serious side-effects,
+including deadlocks and corruption of the debuggee.
+0:004> g
+.call returns:
+class DName
+   +0x000 node             : Ptr64 DNameNode
+   +0x008 value            : Uint4B
+...omitted for brevity...
+```
+
+From the `Debug` menu, select `Go`, and the process should continue operating normally.
+
+

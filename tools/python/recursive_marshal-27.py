@@ -44,7 +44,7 @@ def json_dump_string(o):
                 result = "{"
                 n = 0
                 for k in o.keys():
-                    result += '"{}":{},'.format(escape_json_value(k), json_dump_string(o[k]))
+                    result += '{}:{},'.format(json_dump_string(k), json_dump_string(o[k]))
                     n += 1
                 if n > 0:
                     result = result[0:-1]
@@ -63,8 +63,10 @@ def json_dump_string(o):
         result += "]"
         return result
     result = str(o)
-    result = escape_json_value(result)
-    return '"'+result+'"'
+    if isinstance(o, str):
+        result = escape_json_value(result)
+        result = '"' + result + '"'
+    return result
 
 def dump_code_object(parent_object_type, object_type, code_object, current_path, name, is_builtin, signature):
     try:
@@ -268,8 +270,11 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
     object_metadata["functions"] = member_functions
     object_metadata["methods"] = member_methods
     object_metadata["routines"] = member_routines
-    with open(out_name_json, "w") as json_file:
-        json_file.write(json_dump_string(object_metadata))
+    try:
+        with open(out_name_json, "w") as json_file:
+            json_file.write(json_dump_string(object_metadata))
+    except Exception as e:
+        print(f"Error writing JSON to {out_name_json}: {e}")
 
 # avoid dictionary length from changing during iteration errors
 mod_list = []

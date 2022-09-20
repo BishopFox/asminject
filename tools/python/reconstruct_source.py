@@ -8,8 +8,8 @@ import subprocess
 import sys
 
 BANNER = r"""reconstruct_source.py
-v0.2
-Ben Lincoln, Bishop Fox, 2022-09-15
+v0.3
+Ben Lincoln, Bishop Fox, 2022-09-19
 https://github.com/BishopFox/asminject
 """
 
@@ -22,6 +22,7 @@ class process_params:
         self.input_dir = None
         self.output_dir = None
         self.assume_base_path = None
+        self.input_path_replacements = {}
         self.ignored_modules = []
         self.processed_modules = []
         self.pycdc_path = ""
@@ -30,11 +31,23 @@ class process_params:
         self.include_builtins = False
         self.include_delimiter_comments = False
         self.include_decompyle_banner = False
+        self.additional_encodings = []
 
-def get_data_from_text_file(file_path):
+def get_data_from_text_file(params, file_path):
     result = None
-    # Try to read the file in all possible encodings that Python 2 and 3 might have generated
-    for enc in [ "utf-8", "ascii", "latin-1" ]:
+    if not os.path.isfile(file_path):
+        print(f"Error: the file {file_path} does not exist")
+        return None
+    if os.path.getsize(file_path) == 0:
+        print(f"Error: the file {file_path} has no content")
+        return None
+    # Try to read the file in all possible encodings that Python 2 and 3 are likely to have generated
+    # and any that have been manually specified
+    enc_list = params.additional_encodings
+    for add_enc in [ "utf-8", "ascii", "latin-1", "cp1252" ]:
+        if add_enc not in enc_list:
+            enc_list.append(add_enc)
+    for enc in enc_list:
         if not result:
             try:
                 file_text = ""
@@ -50,17 +63,17 @@ def get_data_from_text_file(file_path):
         sys.exit(1)
     return result
 
-def get_data_from_json_file(file_path):
+def get_data_from_json_file(params, file_path):
     result = None
     try:
-        file_text = get_data_from_text_file(file_path)
+        file_text = get_data_from_text_file(params, file_path)
         result = json.loads(file_text)
     except Exception as e:
         print(f"Error processing JSON file at path {file_path}: {e}")
     return result
 
 def get_output_relative_path(params, input_path):
-    result = input_path
+    result = replace_path_elements(params, input_path)
     handled = False
     #print(f"Debug: generating output path for '{input_path}'")
     if params.assume_base_path:
@@ -81,6 +94,28 @@ def get_output_relative_path(params, input_path):
                 result = os.path.join(NO_ORIGINAL_PATH_PLACEHOLDER, result)
         result = os.path.join(params.output_dir, result)
     
+    return result
+
+def unescape_json_value_inner(json_string, chr_num):
+    return json_string.replace('\\u00' + '{0:0{1}x}'.format(chr_num, 2), chr(chr_num))
+
+def unescape_json_value(json_string):
+    result = json_string
+    # backslash
+    result = unescape_json_value_inner(result, 92)
+    for i in range(0, 32):
+        result = unescape_json_value_inner(result, i)
+    # double quote
+    result = unescape_json_value_inner(result, 34)
+    # high ASCII characters - will cause problems with reconstruction
+    for i in range(127, 256):
+        result = unescape_json_value_inner(result, i)
+    return result
+
+def replace_path_elements(params, path_string):
+    result = unescape_json_value(path_string)
+    for pr_key in params.input_path_replacements.keys():
+        result = re.sub(pr_key, params.input_path_replacements[pr_key], result)
     return result
 
 def append_content_to_reconstructed_source(params, output_file_content, reconstructed_content_type, input_path, output_path, content):
@@ -206,7 +241,42 @@ def get_import_reconstruction(params, object_metadata_json, indent = ""):
                 result += "\n"
         result += "\n"
     return result
-    
+
+def get_string_representation(params, obj):
+    result = f"{obj}"
+    handled = False
+    if isinstance(obj, str):
+        str_val = unescape_json_value(result).replace('"', '\\"')
+        result = '"' + str_val + '"'
+        handled = True
+    if not handled:
+        if hasattr(obj, "keys"):
+            keys = getattr(obj, "keys")
+            if callable(keys):
+                result = "{"
+                n = 0
+                for k in obj.keys():
+                    k_val = get_string_representation(params, k)
+                    result += f'{k_val}:{get_string_representation(params, obj[k])},'
+                    n += 1
+                if n > 0:
+                    result = result[0:-1]
+                result += "}"
+                handled = True
+    if not handled:
+        if isinstance(obj, (list, tuple, set)):
+            result = "["
+            n = 0
+            for e in obj:
+                obj_s = get_string_representation(params, e)
+                result += f"{obj_s},"
+                n += 1
+            if n > 0:
+                result = result[0:-1]
+            result += "]"
+            handled = True
+    return result
+
 def get_member_attribute_reconstruction(params, object_metadata_json, indent = ""):
     result = ""
     if "member_attributes" in object_metadata_json.keys():
@@ -215,10 +285,7 @@ def get_member_attribute_reconstruction(params, object_metadata_json, indent = "
             result += indent 
             result += att
             result += " = " 
-            string_rep = str(ma[att])
-            if isinstance(ma[att], str):
-                string_rep = '"' + string_rep + '"'
-            result += string_rep
+            result += get_string_representation(params, ma[att])
             result += "\n"
         result += "\n"
     return result
@@ -227,7 +294,7 @@ def process_code_object(params, output_file_content, module_output_file_path, co
     is_code_object = True
     code_object_data = {}
     if os.path.isfile(code_object_json_path):
-        code_object_data = get_data_from_json_file(code_object_json_path)
+        code_object_data = get_data_from_json_file(params, code_object_json_path)
     else:
         is_code_object = False
     if not code_object_data:
@@ -251,17 +318,17 @@ def process_code_object(params, output_file_content, module_output_file_path, co
         code_object_python_version = get_code_version(pv)
     
     if "source_code_file" in code_object_data.keys():
-        code_object_source_code_file = code_object_data["source_code_file"]
+        code_object_source_code_file = replace_path_elements(params, code_object_data["source_code_file"])
     
     if "marshalled_file" in code_object_data.keys():
-        code_object_marshalled_file = code_object_data["marshalled_file"]
+        code_object_marshalled_file = replace_path_elements(params, code_object_data["marshalled_file"])
     
     got_code_object_source = False
     reconstructed_code_object_source = None
 
     if not params.only_reconstructed_source:
         if code_object_source_code_file:
-            output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original code object source code", code_object_source_code_file, module_output_file_path, get_data_from_text_file(code_object_source_code_file))
+            output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original code object source code", code_object_source_code_file, module_output_file_path, get_data_from_text_file(params, code_object_source_code_file))
             got_code_object_source = True
     
     # Only attempt to decompile code objects if no embedded source was retrieved
@@ -279,7 +346,7 @@ def process_function(params, function_type, output_file_content, module_output_f
     is_function = True
     function_data = {}
     if os.path.isfile(function_json_path):
-        function_data = get_data_from_json_file(function_json_path)
+        function_data = get_data_from_json_file(params, function_json_path)
     else:
         is_function = False
     if not function_data:
@@ -329,17 +396,17 @@ def process_function(params, function_type, output_file_content, module_output_f
         print(f"Error: could not find python_version key in {function_json_path}")
     
     if "source_code_file" in function_data.keys():
-        function_source_code_file = function_data["source_code_file"]
+        function_source_code_file = replace_path_elements(params, function_data["source_code_file"])
     
     if "marshalled_file" in function_data.keys():
-        function_marshalled_file = function_data["marshalled_file"]
+        function_marshalled_file = replace_path_elements(params, function_data["marshalled_file"])
     
     got_function_source = False
     reconstructed_function_source = None
 
     if not params.only_reconstructed_source:
         if function_source_code_file:
-            output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original {function_type} source code", function_source_code_file, module_output_file_path, get_data_from_text_file(function_source_code_file))
+            output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original {function_type} source code", function_source_code_file, module_output_file_path, get_data_from_text_file(params, function_source_code_file))
             got_function_source = True
     
     # Only attempt to decompile code objects if no embedded source was retrieved
@@ -390,7 +457,7 @@ def process_class(params, output_file_content, module_output_file_path, class_di
     class_doc = None
     class_data = {}
     if os.path.isfile(class_metadata_file_path):
-        class_data = get_data_from_json_file(class_metadata_file_path)
+        class_data = get_data_from_json_file(params, class_metadata_file_path)
     else:
         is_class = False
     if not class_data:
@@ -421,8 +488,8 @@ def process_class(params, output_file_content, module_output_file_path, class_di
 
     if not params.only_reconstructed_source:
         if "source_code_file" in class_data.keys():
-            class_source_code_file = class_data["source_code_file"]
-            output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original class source code", class_source_code_file, module_output_file_path, get_data_from_text_file(class_source_code_file))
+            class_source_code_file = replace_path_elements(params, class_data["source_code_file"])
+            output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original class source code", class_source_code_file, module_output_file_path, get_data_from_text_file(params, class_source_code_file))
             got_class_source = True
     
     # Only attempt to decompile code objects if no embedded source was retrieved
@@ -490,7 +557,7 @@ def process_module(params, output_file_content, directory_path):
         if not os.path.isfile(module_metadata_file_path):
             is_module = False
         if is_module:
-            module_data = get_data_from_json_file(module_metadata_file_path)
+            module_data = get_data_from_json_file(params, module_metadata_file_path)
         if not module_data:
             is_module = False
         module_name = None
@@ -524,8 +591,8 @@ def process_module(params, output_file_content, directory_path):
             if hasattr(mm, "keys"):
                 if "__file__" in mm.keys():
                     if mm["__file__"] and mm["__file__"] != "None":
-                        module_original_file_path = mm["__file__"]
-                        mofp = get_output_relative_path(params, module_original_file_path)
+                        module_original_file_path = unescape_json_value(mm["__file__"])
+                        mofp = get_output_relative_path(params, mm["__file__"])
                         mofp_split = os.path.splitext(mofp)                    
                         module_output_file_path = f"{mofp_split[0]}.py"
 
@@ -577,8 +644,8 @@ def process_module(params, output_file_content, directory_path):
         
         if not params.only_reconstructed_source:
             if data_contains_source:
-                module_source_code_file = module_data["source_code_file"]
-                output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original module source code", module_source_code_file, module_output_file_path, get_data_from_text_file(module_source_code_file))
+                module_source_code_file = replace_path_elements(params, module_data["source_code_file"])
+                output_file_content = append_content_to_reconstructed_source(params, output_file_content, "original module source code", module_source_code_file, module_output_file_path, get_data_from_text_file(params, module_source_code_file))
                 got_module_source = True
         
         # Only attempt to decompile code objects if no embedded source was retrieved
@@ -638,6 +705,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--assume-base-path", type=str, 
         help=f"Prefix to remove from output paths when generating the reconstructed source tree (e.g. /home/user/my_script), will be replaced with {BASE_PATH_PLACEHOLDER}")
+    
+    parser.add_argument("--input-path-replacement",action='append',nargs=2, type=str,
+        help="Specify a regular expression and its replacement when processing paths referenced in the input files, e.g. --input-path-replacement 'C:\\Users\\blincoln\\AppData\\Local\\Temp\\marshalled' '/home/user/marshalled-03-win'. May be specified multiple times to perform multiple replacements. Very useful when the raw input has been moved from its original location.")
 
     parser.add_argument("--ignore-module", action='append', nargs='*', required=False,
         help="Ignore (do not attempt to reconstruct) module(s) with the following name. May be specified multiple times, e.g. --ignore-module os --ignore-module sys --ignore-module json. IMPORTANT: applies to modules with the specified name at any point in the tree. For example, --ignore-module sys will ignore the top-level Python 'sys' library, but also a nonstandard 'custom_module.sys'.")
@@ -664,6 +734,9 @@ if __name__ == "__main__":
     parser.add_argument("--include-decompyle-banner", type=str2bool, nargs='?',
         const=True, default=False,
         help="Includes the Decompyle++ banner in decompiled code.")
+    
+    parser.add_argument("--additional-encoding", action='append', nargs='*', required=False,
+        help="When loading text files, try the following encoding before the built-in defaults. Intended to handle cases where the marshalling script was injected into a process on a different platform and/or version of Python. e.g. --additional-encoding utf_16_be. May be specified multiple times.")
 
     args = parser.parse_args()
     
@@ -675,6 +748,10 @@ if __name__ == "__main__":
     
     if args.assume_base_path:
         params.assume_base_path = args.assume_base_path
+    
+    if args.input_path_replacement:
+        for ipr_set in args.input_path_replacement:
+            params.input_path_replacements[ipr_set[0]] = ipr_set[1]
 
     if args.pycdc_path:
         params.pycdc_path = args.pycdc_path
@@ -698,6 +775,22 @@ if __name__ == "__main__":
     if args.include_decompyle_banner:
         params.include_decompyle_banner = args.include_decompyle_banner
 
+    if args.ignore_module:
+        if len(args.ignore_module) > 0:
+            for elem in args.ignore_module:
+                for e in elem:
+                    if e.strip() != "":
+                        if e not in params.ignored_modules:
+                            params.ignored_modules.append(e)
+    
+    if args.additional_encoding:
+        if len(args.additional_encoding) > 0:
+            for elem in args.additional_encoding:
+                for e in elem:
+                    if e.strip() != "":
+                        if e not in params.additional_encodings:
+                            params.additional_encodings.append(e)
+
     # output file content is handled in memory as a hashtable containing an array of strings
     # the hash key is the output file name, and each string is a unique chunk of content
     # this is to prevent duplication of output content when multiple input sources refer
@@ -708,10 +801,11 @@ if __name__ == "__main__":
     top_level_modules = []
     
     for dir_entry in os.listdir(params.input_dir):
-        dir_path = os.path.join(params.input_dir, dir_entry)
-        if os.path.isdir(dir_path):
-            top_level_modules.append(dir_path)
-            params.processed_modules.append(dir_entry)
+        if dir_entry not in params.ignored_modules:
+            dir_path = os.path.join(params.input_dir, dir_entry)
+            if os.path.isdir(dir_path):
+                top_level_modules.append(dir_path)
+                params.processed_modules.append(dir_entry)
     
     for tlm in top_level_modules:
         output_file_content = process_module(params, output_file_content, tlm)

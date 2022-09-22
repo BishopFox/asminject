@@ -9,14 +9,30 @@ import sys
 recursive_marshal_base_dir = "/tmp/marshalled"
 
 obj_counter = 0
-# preload this list with any libraries that are problematic to export, like inspect
-iterated_objects = [ "ctypes", "inspect" ]
+# preload this list with any libraries that are problematic to export, like inspect,
+# very large standard libraries that most people don't care about decompiling,
+# or that you just don't want to spend time exporting
+ignored_modules = [ "asyncio", "concurrent", "ctypes", "encodings", "http", "importlib", "inspect", "io", "linecache", "opcode", "pathlib", "pydoc", "requests", "shlex", "six", "sqlite3", "tokenize", "urllib", "urllib3", "xml"  ]
+iterated_objects = []
+
+MAX_JSON_RECURSION = 3
+MARSHAL_TEXT_FILE_ENCODING = "utf8"
 
 base_class_attributes = dir(type('x', (object,), {}))
 
+def is_iterated_module(module_name):
+    if module_name in iterated_objects:
+        return True
+    for existing_name in ignored_modules:
+        lmn = len(existing_name)
+        if len(module_name) > lmn:
+            if module_name[0:lmn+1] == "{}.".format(existing_name):
+                return True
+    return False
+
 def print_members(o):
     for name, obj in inspect.getmembers(o):
-        print(f"{name}\t{obj}")
+        print("{}\t{}".format(name, obj))
 
 def escape_json_value_inner(json_string, chr_num):
     return json_string.replace(chr(chr_num), '\\\\u00' + '{0:0{1}x}'.format(chr_num, 2))
@@ -24,74 +40,137 @@ def escape_json_value_inner(json_string, chr_num):
 def escape_json_value(json_string):
     #result = json_string.replace('"', '\\\\"')
     result = json_string
-    # backslash
-    result = escape_json_value_inner(result, 92)
-    for i in range(0, 32):
-        #result = result.replace(chr(i), '\\\\u00' + '{0:0{1}x}'.format(i, 2))
-        result = escape_json_value_inner(result, i)
-    # double quote
-    result = escape_json_value_inner(result, 34)
-    # high ASCII characters - will cause problems with reconstruction
-    for i in range(127, 256):
-        result = escape_json_value_inner(result, i)
+    try:
+        # backslash
+        result = escape_json_value_inner(result, 92)
+        for i in range(0, 32):
+            #result = result.replace(chr(i), '\\\\u00' + '{0:0{1}x}'.format(i, 2))
+            result = escape_json_value_inner(result, i)
+        # double quote
+        result = escape_json_value_inner(result, 34)
+        # high ASCII characters - will cause problems with reconstruction
+        for i in range(127, 256):
+            result = escape_json_value_inner(result, i)
+    except BaseException as e:
+        print("Error escaping JSON value '{}': {}".format(json_string, e))
     return result
 
 # faux function because json module is not available by default
-def json_dump_string(o):
+def json_dump_string(o, d, max_d):
     result = ""
-    try:
-        if hasattr(o, "keys"):
-            keys = getattr(o, "keys")
-            if callable(keys):
-                result = "{"
+    if d > max_d:
+        #print("Error: maximum JSON recursion depth reached processing this object - values below this level will be represented as a string regardless of their original type")
+        result = ""
+    else:
+        try:
+            if hasattr(o, "keys"):
+                keys = getattr(o, "keys")
+                if callable(keys):
+                    result = "{"
+                    n = 0
+                    failed_to_convert = False
+                    for k in o.keys():
+                        key_str = ""
+                        try:
+                            key_str = "{}".format(json_dump_string(k, d + 1, max_d))
+                        except BaseException as e:
+                            #print("Error getting representation of key for sub-value: {}".format(e))
+                            failed_to_convert = True 
+                            break
+                        val_str = ""
+                        if not failed_to_convert:
+                            try:
+                                val_str = "{}".format(json_dump_string(o[k], d + 1, max_d))
+                            except BaseException as e:
+                                #print("Error getting representation of sub-value: {}".format(e))
+                                failed_to_convert = True
+                                break
+                        result += f'{key_str}:{val_str},'
+                        n += 1
+                    if not failed_to_convert:
+                        if n > 0:
+                            result = result[0:-1]
+                        result += "}"
+                        return result
+        except BaseException as e:
+            result = ""
+        try:
+            if isinstance(o, (list, tuple, set)):
+                result = "["
                 n = 0
-                for k in o.keys():
-                    result += f'"{json_dump_string(k)}":{json_dump_string(o[k])},'
+                failed_to_convert = False
+                for e in o:
+                    elem_str = ""
+                    try:
+                        elem_str = "{},".format(json_dump_string(e, d + 1, max_d))
+                    except BaseException as e:
+                        #print("Error iterating through list of sub-values: {}".format(e))
+                        #elem_str = str(e) + ','
+                        failed_to_convert = True
+                    result += elem_str
                     n += 1
                 if n > 0:
                     result = result[0:-1]
-                result += "}"
-                return result
-    except Exception as e:
-        result = ""
-    if isinstance(o, (list, tuple, set)):
-        result = "["
-        n = 0
-        for e in o:
-            result += f"{json_dump_string(e)},"
-            n += 1
-        if n > 0:
-            result = result[0:-1]
-        result += "]"
-        return result
-    result = str(o)
-    if isinstance(o, str):
-        result = escape_json_value(result)
-        result = '"' + result + '"'
+                result += "]"
+                if not failed_to_convert:
+                    return result
+        except BaseException as e:
+            result = ""
+    try:
+        #result = str(o)
+        result = "{}".format(o)
+    except BaseException as e:
+        #print("Error getting the string representation of an object during JSON conversion: {}".format(e))
+        return '"Unable to represent this value as a string"'
+    quote_value = True
+    try:
+        if isinstance(o, (int, float)):
+            quote_value = False
+        # if isinstance(o, (bool, complex)):
+            # quote_value = True
+        if isinstance(o, (complex)):
+            quote_value = True
+        if isinstance(o, (bool)):
+            quote_value = False
+    except BaseException as e:
+        quote_value = True
+    if quote_value:
+        escaped_result = result
+        inner_value = result
+        try:
+            inner_value = escape_json_value(result)
+        except BaseException as e:
+            print("Error escaping JSON string representation '{}': {}".format(result, e))
+            # if full escaping doesn't work, at least encode double quotes and backslashes so the JSON isn't broken
+            #inner_value = result.replace('"', '\\\\u0022')
+            #inner_value = inner_value.replace('\\', '\\\\u005c')
+            inner_value = result
+        escaped_result = '"' + inner_value + '"'
+        result = escaped_result
     return result
 
 def dump_code_object(parent_object_type, object_type, code_object, current_path, name, is_builtin, signature):
     try:
-        out_name_base = f"{recursive_marshal_base_dir}/{current_path}/{name}"
+        out_name_base = os.path.join(recursive_marshal_base_dir, current_path, name)
         os.makedirs(os.path.dirname(out_name_base), exist_ok=True)
         out_name_src = ""
         out_name_bin = ""
         try:
             co_source = inspect.getsource(code_object)
-            out_name_src = f"{out_name_base}.py"
-            with open(out_name_src, "w") as source_file:
+            out_name_src = "{}.py".format(out_name_base)
+            with open(out_name_src, "w", encoding=MARSHAL_TEXT_FILE_ENCODING) as source_file:
                 source_file.write(co_source)
-                print(f"Wrote source code for {object_type} {current_path}/{name} to {out_name_src}")
-        except Exception as e:
-            print(f"Couldn't get source code for {object_type} {current_path}")
+                print("Wrote source code for {} {}/{} to {}".format(object_type, current_path, name, out_name_src))
+        except BaseException as e:
+            #print("Couldn't get source code for {} {}".format(object_type, current_path))
             out_name_src = ""
         try:
-            out_name_bin = f"{out_name_base}.bin"
-            print(f"Writing {object_type} code to {out_name_bin}")
+            out_name_bin = "{}.bin".format(out_name_base)
+            print("Writing {} code to {}".format(object_type, out_name_bin))
             with open(out_name_bin, "wb") as marshal_file:
                 marshal.dump(code_object, marshal_file)
-        except Exception as e:
-            print(f"Couldn't write marshalled {object_type} code object for {current_path}: {e}")
+        except BaseException as e:
+            print("Couldn't write marshalled {} code object for {}: {}".format(object_type, current_path, e))
             out_name_bin = ""
         co_metadata = { "parent_type": parent_object_type, "object_type": object_type, "is_builtin": is_builtin, "object_name": name, "path": current_path, "python_version": sys.version_info }
         if out_name_src != "":
@@ -99,15 +178,28 @@ def dump_code_object(parent_object_type, object_type, code_object, current_path,
         if out_name_bin != "":
             co_metadata["marshalled_file"]  = out_name_bin
         if signature:
-            co_metadata["signature"] = f"{signature}"
-        out_name_json = f"{out_name_base}.json"
+            co_metadata["signature"] = "{}".format(signature)
+        out_name_json = "{}.json".format(out_name_base)
+        json_string = ""
         try:
-            with open(out_name_json, "w") as json_file:
-                json_file.write(json_dump_string(co_metadata))
-        except Exception as e:
-            print(f"Couldn't write JSON data for {object_type} {current_path}: {e}")
-    except Exception as e:
-        print(f"Couldn't export {object_type} code object {current_path}: {e}")
+            json_string = json_dump_string(co_metadata, 0, MAX_JSON_RECURSION)
+        except BaseException as e:
+            err_message = "Error converting metadata for {} {} to JSON format: {}".format(object_type, current_path, e)
+            print(err_message)
+            json_string = '{"error_message":"' + err_message + '"}'
+        json_file = None
+        try:
+            json_file = open(out_name_json, "w", encoding=MARSHAL_TEXT_FILE_ENCODING)
+        except BaseException as e:
+            print("Couldn't open output JSON file '{}': {}".format(out_name_json, e))
+            json_file = None
+        if json_file:
+            try:
+                json_file.write(json_string)
+            except BaseException as e:
+                print("Couldn't write JSON data for {} {} to '{}': {}".format(object_type, current_path, out_name_json, e))
+    except BaseException as e:
+        print("Couldn't export {} code object {}: {}".format(object_type, current_path, e))
 
 def get_user_attributes(c):
     class_attributes = dir(c)
@@ -115,35 +207,38 @@ def get_user_attributes(c):
     for att in class_attributes:
         if att in [ "__annotations__", "__builtins__", "__cached__", "__file__", "__loader__", "__name__", "__package__", "__spec__", "iterated_objects", "sys_module" ]:
             continue
-        attv = getattr(c, att)
-        if base_class_attributes.count(att):
-            continue
-        if callable(attv):
-            continue
-        if inspect.ismodule(attv):
-            continue
-        #if inspect.isclass(attv):
-        #    continue
-        #if inspect.isfunction(attv):
-        #    continue
-        result += [att]
+        try:
+            attv = getattr(c, att)
+            if base_class_attributes.count(att):
+                continue
+            if callable(attv):
+                continue
+            if inspect.ismodule(attv):
+                continue
+            #if inspect.isclass(attv):
+            #    continue
+            #if inspect.isfunction(attv):
+            #    continue
+            result.append(att)
+        except BaseException as e:
+            print("Error enumerating attributes: {}".format(e))
     return result
 
 def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d, export_builtins):
     global obj_counter
     global iterated_objects
     object_metadata = { "name": object_name, "path": current_path, "object_type": object_type }
-    out_name_json = f"{recursive_marshal_base_dir}/{current_path}/___exported_object_metadata___.json"
+    out_name_json = os.path.join(recursive_marshal_base_dir, current_path, "___exported_object_metadata___.json")
     os.makedirs(os.path.dirname(out_name_json), exist_ok=True)
    
-    out_name_src = f"{recursive_marshal_base_dir}/{current_path}/___exported_object_source___.py"
+    out_name_src = os.path.join(recursive_marshal_base_dir, current_path, "___exported_object_source___.py")
     try:
         object_source = inspect.getsource(o)        
-        with open(out_name_src, "w") as source_file:
+        with open(out_name_src, "w", encoding=MARSHAL_TEXT_FILE_ENCODING) as source_file:
             source_file.write(object_source)
-            print(f"Wrote entire source code for object {current_path} to {out_name_src}")
-    except Exception as e:
-        print(f"Couldn't get source code for {current_path}: {e}")
+            print("Wrote entire source code for object {} to {}".format(current_path, out_name_src))
+    except BaseException as e:
+        #print("Couldn't get source code for {}: {}".format(current_path, e))
         out_name_src = ""
     
     if out_name_src != "":
@@ -160,71 +255,95 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
     
     try:
         for name, obj in inspect.getmembers(o):
-            member_metadata[name] = obj
-            obj_path = f"{current_path}/{name}"
-            obj_counter +=1
-            obj_to_recurse = None
-            recurse_obj_type = None
-            is_builtin = inspect.isbuiltin(obj)
-            if export_builtins or not is_builtin:
-                if inspect.iscode(obj):
-                    member_code_objects.append(name)
-                    dump_code_object(object_type, "code_object", obj, current_path, name, is_builtin, None)
-                if inspect.ismodule(obj):
-                    #print(f"Module: {name}")
-                    if name not in member_imports:
-                        member_imports.append(name)
-                    if name not in iterated_objects:
-                        iterated_objects.append(name)
-                        obj_to_recurse = obj
-                        recurse_obj_type = "module"
-                if inspect.isclass(obj):
-                    member_classes.append(name)
-                    if name not in ["__class__", "__base__", "__ctype_be__", "__ctype_le__"]:
-                        #print(f"Class: {name}")
+            try:
+                member_metadata[name] = obj
+                obj_path = os.path.join(current_path, name)
+                obj_counter +=1
+                obj_to_recurse = None
+                recurse_obj_type = None
+                is_builtin = inspect.isbuiltin(obj)
+                if export_builtins or not is_builtin:
+                    if inspect.iscode(obj):
+                        member_code_objects.append(name)
+                        dump_code_object(object_type, "code_object", obj, current_path, name, is_builtin, None)
+                    if inspect.ismodule(obj):
+                        #print("Module: {}".format(name))
+                        if name not in member_imports:
+                            member_imports.append(name)
+                        if not is_iterated_module(name):
+                            iterated_objects.append(name)
+                            obj_to_recurse = obj
+                            recurse_obj_type = "module"
+                    if inspect.isclass(obj):
+                        member_classes.append(name)
+                        if name not in ["__class__", "__base__", "__ctype_be__", "__ctype_le__"]:
+                            #print("Class: {}".format(name))
+                            #print_members(obj)
+                            obj_to_recurse = obj.__dict__
+                            recurse_obj_type = "class"
+                    got_code_object = False
+                    if inspect.ismethod(obj):
+                        member_methods.append(name)
+                        #print("Method: {}".format(name))
                         #print_members(obj)
-                        obj_to_recurse = obj.__dict__
-                        recurse_obj_type = "class"
-                got_code_object = False
-                if inspect.ismethod(obj):
-                    member_methods.append(name)
-                    #print("Method: {}".format(name))
-                    #print_members(obj)
-                    signature = inspect.signature(obj.__func__)
-                    dump_code_object(object_type, "method", obj.__func__.__code__, current_path, name, is_builtin, signature)
-                    #dump_code_object(obj, current_path, name)
-                    got_code_object = True
-                if inspect.isfunction(obj):
-                    member_functions.append(name)
-                    #print(f"Function: {name}")
-                    #print_members(obj)
-                    signature = inspect.signature(obj)
-                    dump_code_object(object_type, "function", obj.__code__, current_path, name, is_builtin, signature)
-                    got_code_object = True
-                if not got_code_object:
-                    if inspect.isroutine(obj):
-                        member_routines.append(name)
-                        #print("Routine: {}".format(name))
+                        signature = None
+                        try:
+                            signature = inspect.signature(obj.__func__)
+                        except BaseException as e:
+                            #print("Error getting signature of {} in {}: {}".format(name, current_path, e))
+                            signature = "(<unknown>)"
+                        dump_code_object(object_type, "method", obj.__func__.__code__, current_path, name, is_builtin, signature)
+                        #dump_code_object(obj, current_path, name)
+                        got_code_object = True
+                    if inspect.isfunction(obj):
+                        member_functions.append(name)
+                        #print("Function: {}".format(name))
                         #print_members(obj)
-                        object_function = None
-                        if hasattr(obj, "__func__"):
-                            object_function = obj.__func__
-                        if not object_function:
-                            if hasattr(obj, "__code__"):
-                                object_function = obj
-                        if object_function:
-                            signature = inspect.signature(object_function)
-                            dump_code_object(object_type, "routine", object_function.__code__, current_path, name, is_builtin, signature)
-                    
-                if obj_to_recurse and d < max_d:
-                    if obj_path not in iterated_objects:
-                        iterated_objects.append(obj_path)
-                        iteratively_dump_object(recurse_obj_type, name, obj, obj_path, d+1, max_d, export_builtins)
+                        signature = None
+                        try:
+                            signature = inspect.signature(obj)
+                        except BaseException as e:
+                            #print("Error getting signature of {} in {}: {}".format(name, current_path, e))
+                            signature = "(<unknown>)"
+                        dump_code_object(object_type, "function", obj.__code__, current_path, name, is_builtin, signature)
+                        got_code_object = True
+                    if not got_code_object:
+                        if inspect.isroutine(obj):
+                            member_routines.append(name)
+                            #print("Routine: {}".format(name))
+                            #print_members(obj)
+                            object_function = None
+                            if hasattr(obj, "__func__"):
+                                object_function = obj.__func__
+                            if not object_function:
+                                if hasattr(obj, "__code__"):
+                                    object_function = obj
+                            if object_function:
+                                signature = None
+                                try:
+                                    signature = inspect.signature(object_function)
+                                except BaseException as e:
+                                    #print("Error getting signature of {} in {}: {}".format(name, current_path, e))
+                                    signature = "(<unknown>)"
+                                dump_code_object(object_type, "routine", object_function.__code__, current_path, name, is_builtin, signature)
+                        
+                    if obj_to_recurse and d < max_d:
+                        if obj_path not in iterated_objects:
+                            iterated_objects.append(obj_path)
+                            try:
+                                iteratively_dump_object(recurse_obj_type, name, obj, obj_path, d+1, max_d, export_builtins)
+                            except BaseException as e:
+                                print("Error recursing into member object {} for {}: {}".format(name, current_path, e))
+            except BaseException as e:
+                print("Error getting member {} for {}: {}".format(name, current_path, e))
         attribute_list = get_user_attributes(o)
         for att in attribute_list:
-            member_attributes[att] = getattr(o, att)
-    except Exception as e:
-        print(f"Error getting members for {current_path}: {e}")
+            try:
+                member_attributes[att] = getattr(o, att)
+            except BaseException as e:
+                print("Error getting value for attribute {}: {}".format(att, e))
+    except BaseException as e:
+        print("Error getting members for {}: {}".format(current_path, e))
     object_metadata["member_metadata"] = member_metadata
     object_metadata["member_attributes"] = member_attributes
     object_metadata["imported_modules"] = member_imports
@@ -233,11 +352,29 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
     object_metadata["functions"] = member_functions
     object_metadata["methods"] = member_methods
     object_metadata["routines"] = member_routines
+    # try:
+        # with open(out_name_json, "w", encoding=MARSHAL_TEXT_FILE_ENCODING) as json_file:
+            # json_file.write(json_dump_string(object_metadata, 0, MAX_JSON_RECURSION))
+    # except BaseException as e:
+        # print("Error writing JSON to {}: {}".format(out_name_json, e))
+    json_string = ""
     try:
-        with open(out_name_json, "w") as json_file:
-            json_file.write(json_dump_string(object_metadata))
-    except Exception as e:
-        print(f"Error writing JSON to {out_name_json}: {e}")
+        json_string = json_dump_string(object_metadata, 0, MAX_JSON_RECURSION)
+    except BaseException as e:
+        err_message = "Error converting metadata for object {} to JSON format: {}".format(current_path, e)
+        print(err_message)
+        json_string = '{"error_message":"' + err_message + '"}'
+    json_file = None
+    try:
+        json_file = open(out_name_json, "w", encoding=MARSHAL_TEXT_FILE_ENCODING)
+    except BaseException as e:
+        print("Couldn't open output JSON file '{}': {}".format(out_name_json, e))
+        json_file = None
+    if json_file:
+        try:
+            json_file.write(json_string)
+        except BaseException as e:
+            print("Couldn't write JSON data for object {} to '{}': {}".format(current_path, out_name_json, e))
 
 # avoid dictionary length from changing during iteration errors
 mod_list = []
@@ -246,7 +383,7 @@ for sys_module in sys.modules:
 
 #for sys_module in sys.modules:
 for sys_module in mod_list:
-    if sys_module not in iterated_objects:
-        #print(f"Module: {sys_module}")
+    if not is_iterated_module(sys_module):
+        #print("Module: {}".format(sys_module))
         iterated_objects.append(sys_module)
         iteratively_dump_object("module", sys_module, sys.modules.get(sys_module), sys_module, 0, 10, True)

@@ -8,8 +8,8 @@ import subprocess
 import sys
 
 BANNER = r"""reconstruct_source.py
-v0.3
-Ben Lincoln, Bishop Fox, 2022-09-19
+v0.4
+Ben Lincoln, Bishop Fox, 2022-09-22
 https://github.com/BishopFox/asminject
 """
 
@@ -281,13 +281,16 @@ def get_member_attribute_reconstruction(params, object_metadata_json, indent = "
     result = ""
     if "member_attributes" in object_metadata_json.keys():
         ma = object_metadata_json["member_attributes"]
-        for att in ma.keys():
-            result += indent 
-            result += att
-            result += " = " 
-            result += get_string_representation(params, ma[att])
+        if hasattr(ma, "keys"):
+            for att in ma.keys():
+                result += indent 
+                result += att
+                result += " = " 
+                result += get_string_representation(params, ma[att])
+                result += "\n"
             result += "\n"
-        result += "\n"
+        else:
+            print("Error prcessing object: no member attributes")
     return result
 
 def process_code_object(params, output_file_content, module_output_file_path, code_object_json_path, indent = ""):

@@ -72,7 +72,9 @@ def json_dump_string(o, d, max_d):
                     for k in o.keys():
                         key_str = ""
                         try:
-                            key_str = "{}".format(json_dump_string(k, d + 1, max_d))
+                            #key_str = "{}".format(json_dump_string(k, d + 1, max_d))
+                            # JSON parsers can't handle keys that aren't strings
+                            key_str = '"{}"'.format(escape_json_value(str(k)))
                         except BaseException as e:
                             #print("Error getting representation of key for sub-value: {}".format(e))
                             failed_to_convert = True 
@@ -126,12 +128,8 @@ def json_dump_string(o, d, max_d):
     try:
         if isinstance(o, (int, float)):
             quote_value = False
-        # if isinstance(o, (bool, complex)):
-            # quote_value = True
-        if isinstance(o, (complex)):
+        if isinstance(o, (bool, complex)):
             quote_value = True
-        if isinstance(o, (bool)):
-            quote_value = False
     except BaseException as e:
         quote_value = True
     if quote_value:
@@ -152,7 +150,11 @@ def json_dump_string(o, d, max_d):
 def dump_code_object(parent_object_type, object_type, code_object, current_path, name, is_builtin, signature):
     try:
         out_name_base = os.path.join(recursive_marshal_base_dir, current_path, name)
-        os.makedirs(os.path.dirname(out_name_base), exist_ok=True)
+        # for Python 2 compatibility
+        try:
+            os.makedirs(os.path.dirname(out_name_base))
+        except BaseException as e:
+            pass
         out_name_src = ""
         out_name_bin = ""
         try:
@@ -162,7 +164,7 @@ def dump_code_object(parent_object_type, object_type, code_object, current_path,
                 source_file.write(co_source)
                 print("Wrote source code for {} {}/{} to {}".format(object_type, current_path, name, out_name_src))
         except BaseException as e:
-            #print("Couldn't get source code for {} {}".format(object_type, current_path))
+            #print("Couldn't get source code for {} {}: {}".format(object_type, current_path, e))
             out_name_src = ""
         try:
             out_name_bin = "{}.bin".format(out_name_base)
@@ -224,12 +226,69 @@ def get_user_attributes(c):
             print("Error enumerating attributes: {}".format(e))
     return result
 
+# For Python 2 compatibility
+# BEGIN: https://stackoverflow.com/questions/2677185/how-can-i-read-a-functions-signature-including-default-argument-values
+from collections import namedtuple
+
+DefaultArgSpec = namedtuple('DefaultArgSpec', 'has_default default_value')
+
+def _get_default_arg(args, defaults, arg_index):
+    if not defaults:
+        return DefaultArgSpec(False, None)
+
+    args_with_no_defaults = len(args) - len(defaults)
+
+    if arg_index < args_with_no_defaults:
+        return DefaultArgSpec(False, None)
+    else:
+        value = defaults[arg_index - args_with_no_defaults]
+        if (type(value) is str):
+            value = '"%s"' % value
+        return DefaultArgSpec(True, value)
+
+def get_method_sig(method):
+    argspec = inspect.getargspec(method)
+    arg_index=0
+    args = []
+
+    for arg in argspec.args:
+        default_arg = _get_default_arg(argspec.args, argspec.defaults, arg_index)
+        if default_arg.has_default:
+            args.append("%s=%s" % (arg, default_arg.default_value))
+        else:
+            args.append(arg)
+        arg_index += 1
+    return "(%s)" % (", ".join(args))
+# END: https://stackoverflow.com/questions/2677185/how-can-i-read-a-functions-signature-including-default-argument-values
+
+def get_signature_via_inspect(name, obj):
+    result = None
+    if sys.version_info[0] >= 3:
+        try:
+            result = inspect.signature(obj)
+            return result
+        except BaseException as e:
+            print("Error getting signature for {} using Python 3 syntax: {}".format(name, e))
+    if sys.version_info[0] < 3:
+        try:
+            result = get_method_sig(obj)
+            return result
+        except BaseException as e:
+            print("Error getting signature for {} using Python 2 syntax: {}".format(name, e))
+    result = "(<unknown>)"
+    return result
+    
+
 def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d, export_builtins):
     global obj_counter
     global iterated_objects
     object_metadata = { "name": object_name, "path": current_path, "object_type": object_type }
     out_name_json = os.path.join(recursive_marshal_base_dir, current_path, "___exported_object_metadata___.json")
-    os.makedirs(os.path.dirname(out_name_json), exist_ok=True)
+    # for Python 2 compatibility
+    try:
+        os.makedirs(os.path.dirname(out_name_json))
+    except BaseException as e:
+        pass
    
     out_name_src = os.path.join(recursive_marshal_base_dir, current_path, "___exported_object_source___.py")
     try:
@@ -282,29 +341,27 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
                             obj_to_recurse = obj.__dict__
                             recurse_obj_type = "class"
                     got_code_object = False
-                    if inspect.ismethod(obj):
+                    if inspect.ismethod(obj) and hasattr(obj, "__code__"):
                         member_methods.append(name)
                         #print("Method: {}".format(name))
                         #print_members(obj)
-                        signature = None
-                        try:
-                            signature = inspect.signature(obj.__func__)
-                        except BaseException as e:
-                            #print("Error getting signature of {} in {}: {}".format(name, current_path, e))
-                            signature = "(<unknown>)"
+                        signature = get_signature_via_inspect(name, obj)
+                        dump_code_object(object_type, "method", obj.__code__, current_path, name, is_builtin, signature)
+                        #dump_code_object(obj, current_path, name)
+                        got_code_object = True
+                    if inspect.ismethod(obj) and hasattr(obj, "__func__") and hasattr(obj.__func__, "__code__"):
+                        member_methods.append(name)
+                        #print("Method: {}".format(name))
+                        #print_members(obj)
+                        signature = get_signature_via_inspect(name, obj.__func__)
                         dump_code_object(object_type, "method", obj.__func__.__code__, current_path, name, is_builtin, signature)
                         #dump_code_object(obj, current_path, name)
                         got_code_object = True
-                    if inspect.isfunction(obj):
+                    if inspect.isfunction(obj) and hasattr(obj, "__code__"):
                         member_functions.append(name)
                         #print("Function: {}".format(name))
                         #print_members(obj)
-                        signature = None
-                        try:
-                            signature = inspect.signature(obj)
-                        except BaseException as e:
-                            #print("Error getting signature of {} in {}: {}".format(name, current_path, e))
-                            signature = "(<unknown>)"
+                        signature = get_signature_via_inspect(name, obj)
                         dump_code_object(object_type, "function", obj.__code__, current_path, name, is_builtin, signature)
                         got_code_object = True
                     if not got_code_object:
@@ -313,18 +370,13 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
                             #print("Routine: {}".format(name))
                             #print_members(obj)
                             object_function = None
-                            if hasattr(obj, "__func__"):
+                            if hasattr(obj, "__func__") and hasattr(obj.__func__, "__code__"):
                                 object_function = obj.__func__
                             if not object_function:
                                 if hasattr(obj, "__code__"):
                                     object_function = obj
                             if object_function:
-                                signature = None
-                                try:
-                                    signature = inspect.signature(object_function)
-                                except BaseException as e:
-                                    #print("Error getting signature of {} in {}: {}".format(name, current_path, e))
-                                    signature = "(<unknown>)"
+                                signature = get_signature_via_inspect(name, object_function)
                                 dump_code_object(object_type, "routine", object_function.__code__, current_path, name, is_builtin, signature)
                         
                     if obj_to_recurse and d < max_d:

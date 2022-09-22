@@ -12,7 +12,7 @@
 
 Often, using a standard Python decompilation tool such as [Decompyle++](https://github.com/zrax/pycdc), [Uncompyle6](https://github.com/rocky/python-uncompyle6), or [Decompyle3](https://github.com/rocky/python-decompile3) against files on disk (e.g. `.pyc` files) will meet your needs. If so, you should probably go ahead and do that. But sometimes those tools can't parse the files you have access to, or the content no longer exists on disk and is only present in memory.
 
-The `tools/python` directory of the `asminject.py` repository contains a Python script named `recursive_marshal.py` that will attempt to dump just about everything it can about a Python (including PyInstaller-generated binary) process. It is hardcoded to write output to a directory tree beginning with `/tmp/marshalled`, so edit the `recursive_marshal_base_dir` variable if you'd like it to go somewhere else. For legacy Python 2 processes, you should use `recursive_marshal-27.py` instead, but it may require modifications to work with Python versions prior to 2.7.
+The `tools/python` directory of the `asminject.py` repository contains a Python script named `recursive_marshal.py` that will attempt to dump just about everything it can about a Python (including PyInstaller-generated binary) process. It is hardcoded to write output to a directory tree beginning with `/tmp/marshalled`, so edit the `recursive_marshal_base_dir` variable if you'd like it to go somewhere else. It should work with both Python 2 and 3, although it may require modifications for older minor releases.
 
 Transform the script into a giant one-liner and then pass it to `asminject.py`, e.g.:
 
@@ -215,7 +215,7 @@ The combination of data output by the marshalling script and Decompyle++ can be 
 
 Note: until the upstream package maintainer merges in my recursion-limiting code, you should use [my customized fork of Decompyle++](https://github.com/blincoln-bf/pycdc) to avoid the process running out of memory and locking up when it encounters problematic code.
 
-If the data extracted by the script includes embedded source code, `reconstruct_source.py` will prefer that, as it's generally identical to the original. It's also much more straightforward to retrieve the entire source for a given module all at once. For example, using the output of the `recursive_marshal-27.py` script for `python_loop-with_library.py` running in Python 2.7, the source code is identical :
+If the data extracted by the script includes embedded source code, `reconstruct_source.py` will prefer that, as it's generally identical to the original. It's also much more straightforward to retrieve the entire source for a given module all at once. For example, using the output of the `recursive_marshal.py` script for `python_loop-with_library.py` running in Python 2.7, the source code is identical :
 
 ```
 % python3 tools/python/reconstruct_source.py --input-dir /tmp/marshalled \
@@ -432,11 +432,19 @@ To inject code like `asminject.py` does, that means that the following signature
 
 If you don't care about keeping the target process more or less stable, you can omit the third one.
 
-`PyGILState_Ensure()` is easy, because you just need a function that has no parameters and returns an integer. I used `VCRUNTIME140!_GetImageBase`.
+When examining a basic PyInstaller binary built using Python 3.9 and the `python_loop-with_library.py` script included in this repo, I used the following prototype functions:
 
-`PyRun_SimpleString(char * command)` was a little harder. I didn't find any functions with signatures in any of the loaded libraries that accepted a single `char *` parameter. Fortunately, all that really matters it that it accepts a single pointer parameter, so I used `VCRUNTIME140!__GetPlatformExceptionInfo`, which has a single `int *` parameter.
+* For `PyGILState_Ensure()`, I used `VCRUNTIME140!_GetImageBase`.
+* For `PyRun_SimpleString(char * command)`, I didn't find any functions with signatures in any of the loaded libraries that accepted a single `char *` parameter. Fortunately, all that really mattered was that it accepted a single pointer parameter, so I used `VCRUNTIME140!__GetPlatformExceptionInfo`, which has a single `int *` parameter.
+* For `PyGILState_Release(int handle)`, the closest match I found was `VCRUNTIME140!UnDecorator::getFloatingPoint`, which accepts a single integer parameter, but returns a complex structure. This meant that WinDbg would output a nonsense parsing of the return value, but that was a harmless side-effect.
 
-For `PyGILState_Release(int handle)`, the closest match I found was `VCRUNTIME140!UnDecorator::getFloatingPoint`, which accepts a single integer parameter, but returns a complex structure. This means that WinDbg will output a nonsense parsing of the return value.
+When repeating this process with a completely different Python 3.9 PyInstaller package from a third-party product, almost none of the libraries it had loaded were the same (most likely because it was built using a 32-bit x86 version of Python 3.9 instead of x86-64). For that one, I used the following prototypes:
+
+* For `PyGILState_Ensure()`, I used `mfc140u!GetCmdMgr`.
+* For `PyRun_SimpleString(char * command)`, I used `ole32!MakeGlobal`.
+* For `PyGILState_Release(int handle)`, I used `mfc140u!CWnd::CancelToolTips`.
+
+If you need to find prototypes yourself, the easiest approach I've found is to have WinDbg log to a file (`Edit` => `Open/Close Log File`), run the `x *!*` WinDbg command, then grep through the log file for `(void)`, `(char *)` (and, if necessary, `(int *)`, `(long *)`, and so on), and `(int)`.
 
 The other requirement is a location in memory to write the injected Python code. `asminject.py` does this dynamically. For this WinDbg process, you'll need about 300 bytes of data that can be safely overwritten. If you are able to launch a new instance of the target binary using WinDbg, this is easily achieved by starting it with an additional command line argument consisting of 300 Xs. If you need to attach to an existing process instead, you'll have to get more creative. Maybe use another tool to inject a DLL that you won't actually use, and overwrite part of it? The remainder of this section assumes that you're launching the process from WinDbg, and including the placeholder command line argument.
 
@@ -448,13 +456,14 @@ Here are 300 Xs ready to go:
 
 ```
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
 ```
 
 Open the binary. From the `Debug` menu, select `Go`.
 
 Wait for the target process to reach a state where all code of interest has been loaded. Then go to the `Debug` menu and choose `Break`.
 
-Run the following two commands in WinDbg to load symbols for the system libraries:
+Run the following two commands in WinDbg to load symbols for libraries:
 
 ```
 .symfix+ c:\symbols
@@ -485,6 +494,24 @@ Use the WinDbg search-in-memory functionality to find the beginning of the 300 X
 ```
 
 In this example, the string of Xs starts at `0x000002a8165f489f`, but that will also change every time the binary is executed.
+
+If you don't get any results, or the results are outside of accessible memory for the target process, try searching using UTF-16 instead, e.g. for a 32-bit x86 PyInstaller process:
+
+```
+0:008> !peb
+
+PEB at 01138000
+...omitted for brevity...
+    ProcessParameters: 014521b0
+...omitted for brevity...
+    CommandLine:  '"C:\Program Files (x86)\Druva\inSync\7.2.1\inSync.exe" XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+...omitted for brevity...
+
+0:000> s -u 014521b0 L?100000 XXXXXXX
+01452750  0058 0058 0058 0058 0058 0058 0058 0058  X.X.X.X.X.X.X.X.
+01452752  0058 0058 0058 0058 0058 0058 0058 0058  X.X.X.X.X.X.X.X.
+...omitted for brevity...
+```
 
 Modify the following string to replace `<ASMINJECT_REPO_PATH>` with the location of your copy of the `asminject.py` GitHub repo. Make sure every backslash you include is replaced with four backslashes, like the existing ones:
 
@@ -521,7 +548,16 @@ Edit the `recursive_marshal.py` script referenced in the string above to give it
 recursive_marshal_base_dir = "C:\\Users\\blincoln\\AppData\\Local\\Temp\\marshalled"
 ```
 
-Use the `.call` WinDbg command and `g` confirmation to execute the three functions. First, `PyGILState_Ensure()`:
+Optionally, set up a breakpoint or two so that you can perform the rest of this work while the code is in a state that probably won't crash the target process, e.g:
+
+```
+bm /1 python39!PyEval_GetLocals
+bm /1 python39!PyEval_GetGlobals
+```
+
+If you choose to use the breakpoint approach, go to the `Debug` menu and select `Go` at this point, then wait for one of the breakpoints to be triggered before proceeding. If you're forging ahead and don't care if the process crashes, just keep going with the rest of the steps.
+
+Use the `.call` WinDbg command and `g` confirmation to execute the three functions, substituting your own prototype references if necessary. First, `PyGILState_Ensure()`:
 
 ```
 0:004> .call /s VCRUNTIME140!_GetImageBase python39!PyGILState_Ensure()
@@ -590,7 +626,7 @@ The files can be copied from the output directory (`C:\Users\blincoln\AppData\Lo
 	--output-dir /home/user/reconstructed-win-03 \
 	--pycdc-path /mnt/hgfs/c/Users/blincoln/Documents/GitHub/pycdc-custom/build/pycdc \
 	--input-path-replacement 'C:\\Users\\blincoln\\AppData\\Local\\Temp\\marshalled' \
-	'/mnt/hgfs/c/Users/blincoln/Documents/marshalled-win-03 \
+	'/mnt/hgfs/c/Users/blincoln/Documents/marshalled-win-03' \
 	--input-path-replacement 'C:' 'C' \
 	--input-path-replacement '\\' '/'
 ```

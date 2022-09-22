@@ -87,7 +87,7 @@ def json_dump_string(o, d, max_d):
                                 #print("Error getting representation of sub-value: {}".format(e))
                                 failed_to_convert = True
                                 break
-                        result += f'{key_str}:{val_str},'
+                        result += '{}:{},'.format(key_str, val_str)
                         n += 1
                     if not failed_to_convert:
                         if n > 0:
@@ -160,9 +160,15 @@ def dump_code_object(parent_object_type, object_type, code_object, current_path,
         try:
             co_source = inspect.getsource(code_object)
             out_name_src = "{}.py".format(out_name_base)
-            with open(out_name_src, "w", encoding=MARSHAL_TEXT_FILE_ENCODING) as source_file:
+            source_file = None
+            if sys.version_info[0] >= 3:
+                source_file = open(out_name_src, "w", encoding=MARSHAL_TEXT_FILE_ENCODING)
+            else:
+                source_file = open(out_name_src, "w")
+            if source_file:
                 source_file.write(co_source)
                 print("Wrote source code for {} {}/{} to {}".format(object_type, current_path, name, out_name_src))
+                source_file.close()
         except BaseException as e:
             #print("Couldn't get source code for {} {}: {}".format(object_type, current_path, e))
             out_name_src = ""
@@ -191,13 +197,17 @@ def dump_code_object(parent_object_type, object_type, code_object, current_path,
             json_string = '{"error_message":"' + err_message + '"}'
         json_file = None
         try:
-            json_file = open(out_name_json, "w", encoding=MARSHAL_TEXT_FILE_ENCODING)
+            if sys.version_info[0] >= 3:
+                json_file = open(out_name_json, "w", encoding=MARSHAL_TEXT_FILE_ENCODING)
+            else:
+                json_file = open(out_name_json, "w")                
         except BaseException as e:
             print("Couldn't open output JSON file '{}': {}".format(out_name_json, e))
             json_file = None
         if json_file:
             try:
                 json_file.write(json_string)
+                json_file.close()
             except BaseException as e:
                 print("Couldn't write JSON data for {} {} to '{}': {}".format(object_type, current_path, out_name_json, e))
     except BaseException as e:
@@ -292,10 +302,16 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
    
     out_name_src = os.path.join(recursive_marshal_base_dir, current_path, "___exported_object_source___.py")
     try:
-        object_source = inspect.getsource(o)        
-        with open(out_name_src, "w", encoding=MARSHAL_TEXT_FILE_ENCODING) as source_file:
+        object_source = inspect.getsource(o)
+        source_file = None
+        if sys.version_info[0] >= 3:
+            source_file = open(out_name_src, "w", encoding=MARSHAL_TEXT_FILE_ENCODING)
+        else:
+            source_file = open(out_name_src, "w")
+        if source_file:
             source_file.write(object_source)
             print("Wrote entire source code for object {} to {}".format(current_path, out_name_src))
+            source_file.close()
     except BaseException as e:
         #print("Couldn't get source code for {}: {}".format(current_path, e))
         out_name_src = ""
@@ -404,11 +420,6 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
     object_metadata["functions"] = member_functions
     object_metadata["methods"] = member_methods
     object_metadata["routines"] = member_routines
-    # try:
-        # with open(out_name_json, "w", encoding=MARSHAL_TEXT_FILE_ENCODING) as json_file:
-            # json_file.write(json_dump_string(object_metadata, 0, MAX_JSON_RECURSION))
-    # except BaseException as e:
-        # print("Error writing JSON to {}: {}".format(out_name_json, e))
     json_string = ""
     try:
         json_string = json_dump_string(object_metadata, 0, MAX_JSON_RECURSION)
@@ -418,13 +429,17 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
         json_string = '{"error_message":"' + err_message + '"}'
     json_file = None
     try:
-        json_file = open(out_name_json, "w", encoding=MARSHAL_TEXT_FILE_ENCODING)
+        if sys.version_info[0] >= 3:
+            json_file = open(out_name_json, "w", encoding=MARSHAL_TEXT_FILE_ENCODING)
+        else:
+            json_file = open(out_name_json, "w")
     except BaseException as e:
         print("Couldn't open output JSON file '{}': {}".format(out_name_json, e))
         json_file = None
     if json_file:
         try:
             json_file.write(json_string)
+            json_file.close()
         except BaseException as e:
             print("Couldn't write JSON data for object {} to '{}': {}".format(current_path, out_name_json, e))
 

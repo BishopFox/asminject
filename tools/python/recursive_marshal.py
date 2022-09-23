@@ -157,29 +157,30 @@ def dump_code_object(parent_object_type, object_type, code_object, current_path,
             pass
         out_name_src = ""
         out_name_bin = ""
-        try:
-            co_source = inspect.getsource(code_object)
-            out_name_src = "{}.py".format(out_name_base)
-            source_file = None
-            if sys.version_info[0] >= 3:
-                source_file = open(out_name_src, "w", encoding=MARSHAL_TEXT_FILE_ENCODING)
-            else:
-                source_file = open(out_name_src, "w")
-            if source_file:
-                source_file.write(co_source)
-                print("Wrote source code for {} {}/{} to {}".format(object_type, current_path, name, out_name_src))
-                source_file.close()
-        except BaseException as e:
-            #print("Couldn't get source code for {} {}: {}".format(object_type, current_path, e))
-            out_name_src = ""
-        try:
-            out_name_bin = "{}.bin".format(out_name_base)
-            print("Writing {} code to {}".format(object_type, out_name_bin))
-            with open(out_name_bin, "wb") as marshal_file:
-                marshal.dump(code_object, marshal_file)
-        except BaseException as e:
-            print("Couldn't write marshalled {} code object for {}: {}".format(object_type, current_path, e))
-            out_name_bin = ""
+        if code_object:
+            try:
+                co_source = inspect.getsource(code_object)
+                out_name_src = "{}.py".format(out_name_base)
+                source_file = None
+                if sys.version_info[0] >= 3:
+                    source_file = open(out_name_src, "w", encoding=MARSHAL_TEXT_FILE_ENCODING)
+                else:
+                    source_file = open(out_name_src, "w")
+                if source_file:
+                    source_file.write(co_source)
+                    print("Wrote source code for {} {}/{} to {}".format(object_type, current_path, name, out_name_src))
+                    source_file.close()
+            except BaseException as e:
+                #print("Couldn't get source code for {} {}: {}".format(object_type, current_path, e))
+                out_name_src = ""
+            try:
+                out_name_bin = "{}.bin".format(out_name_base)
+                print("Writing {} code to {}".format(object_type, out_name_bin))
+                with open(out_name_bin, "wb") as marshal_file:
+                    marshal.dump(code_object, marshal_file)
+            except BaseException as e:
+                print("Couldn't write marshalled {} code object for {}: {}".format(object_type, current_path, e))
+                out_name_bin = ""
         co_metadata = { "parent_type": parent_object_type, "object_type": object_type, "is_builtin": is_builtin, "object_name": name, "path": current_path, "python_version": sys.version_info }
         if out_name_src != "":
             co_metadata["source_code_file"] = out_name_src
@@ -213,7 +214,7 @@ def dump_code_object(parent_object_type, object_type, code_object, current_path,
     except BaseException as e:
         print("Couldn't export {} code object {}: {}".format(object_type, current_path, e))
 
-def get_user_attributes(c):
+def get_user_attributes_old(c):
     class_attributes = dir(c)
     result = []
     for att in class_attributes:
@@ -234,6 +235,34 @@ def get_user_attributes(c):
             result.append(att)
         except BaseException as e:
             print("Error enumerating attributes: {}".format(e))
+    return result
+
+def get_user_attributes(c):
+    class_attributes = dir(c)
+    result = []
+    attribute_names = []
+    try:
+        if hasattr(c, "__dict__"):
+            for k in c.__dict__.keys():
+                attribute_names.append(k)
+        else:
+            attribute_names = dir(c)
+    except BaseException as e:
+        print("Error enumerating attributes: {}".format(e))        
+    for att in attribute_names:
+        if att in [ "__annotations__", "__builtins__", "__cached__", "__file__", "__loader__", "__name__", "__package__", "__spec__", "iterated_objects", "sys_module" ]:
+            continue
+        try:
+            attv = getattr(c, att)
+            if base_class_attributes.count(att):
+                continue
+            if callable(attv):
+                continue
+            if inspect.ismodule(attv):
+                continue
+            result.append(att)
+        except BaseException as e:
+            print("Error iterating through attributes: {}".format(e))
     return result
 
 # For Python 2 compatibility
@@ -273,18 +302,19 @@ def get_method_sig(method):
 
 def get_signature_via_inspect(name, obj):
     result = None
-    if sys.version_info[0] >= 3:
-        try:
-            result = inspect.signature(obj)
-            return result
-        except BaseException as e:
-            print("Error getting signature for {} using Python 3 syntax: {}".format(name, e))
-    if sys.version_info[0] < 3:
-        try:
-            result = get_method_sig(obj)
-            return result
-        except BaseException as e:
-            print("Error getting signature for {} using Python 2 syntax: {}".format(name, e))
+    if obj:
+        if sys.version_info[0] >= 3:
+            try:
+                result = inspect.signature(obj)
+                return result
+            except BaseException as e:
+                print("Error getting signature for {} using Python 3 syntax: {}".format(name, e))
+        if sys.version_info[0] < 3:
+            try:
+                result = get_method_sig(obj)
+                return result
+            except BaseException as e:
+                print("Error getting signature for {} using Python 2 syntax: {}".format(name, e))
     result = "(<unknown>)"
     return result
     
@@ -318,6 +348,28 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
     
     if out_name_src != "":
         object_metadata["source_code_file"] = out_name_src
+
+    try:
+        if hasattr(o, "__bases__"):
+            object_metadata["__bases__"] = []
+            for bo_num in range(0, len(o.__bases__)):
+                bo_name = None
+                if o.__bases__[bo_num]:
+                    try:
+                        bo_name = str(o.__bases__[bo_num])
+                    except BaseException as e:
+                        print("Couldn't get string representation of a base class entry for {}: {}".format(current_path, e))
+                    try:
+                        if hasattr(o.__bases__[bo_num], "__name__"):
+                            bo_name_prop = str(o.__bases__[bo_num].__name__)
+                            bo_name = bo_name_prop
+                    except BaseException as e:
+                        print("Couldn't get string representation of a base class entry's __name__ property for {}: {}".format(current_path, e))
+                    if bo_name:
+                        object_metadata["__bases__"].append(bo_name)
+    except BaseException as e:
+        print("Couldn't get base classes for {}: {}".format(current_path, e))
+        out_name_src = ""
     
     member_metadata = {}
     member_imports = []
@@ -329,7 +381,14 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
     member_routines = []
     
     try:
-        for name, obj in inspect.getmembers(o):
+        name_obj_list = []
+        if hasattr(o, "__dict__"):
+            for k in o.__dict__.keys():
+                name_obj_list.append((k, o.__dict__[k]))
+        else:
+            for name, obj in inspect.getmembers(o):
+                name_obj_list.append((name, obj))
+        for name, obj in name_obj_list:
             try:
                 member_metadata[name] = obj
                 obj_path = os.path.join(current_path, name)
@@ -386,14 +445,16 @@ def iteratively_dump_object(object_type, object_name, o, current_path, d, max_d,
                             #print("Routine: {}".format(name))
                             #print_members(obj)
                             object_function = None
+                            object_function_code = None
                             if hasattr(obj, "__func__") and hasattr(obj.__func__, "__code__"):
                                 object_function = obj.__func__
+                                object_function_code = obj.__func__.__code__
                             if not object_function:
                                 if hasattr(obj, "__code__"):
                                     object_function = obj
-                            if object_function:
-                                signature = get_signature_via_inspect(name, object_function)
-                                dump_code_object(object_type, "routine", object_function.__code__, current_path, name, is_builtin, signature)
+                                    object_function_code = obj.__code__
+                            signature = get_signature_via_inspect(name, object_function)
+                            dump_code_object(object_type, "routine", object_function_code, current_path, name, is_builtin, signature)
                         
                     if obj_to_recurse and d < max_d:
                         if obj_path not in iterated_objects:

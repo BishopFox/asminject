@@ -8,8 +8,8 @@ import subprocess
 import sys
 
 BANNER = r"""reconstruct_source.py
-v0.4
-Ben Lincoln, Bishop Fox, 2022-09-22
+v0.5
+Ben Lincoln, Bishop Fox, 2022-09-23
 https://github.com/BishopFox/asminject
 """
 
@@ -434,15 +434,27 @@ def process_function(params, function_type, output_file_content, module_output_f
         reconstructed_function_source += f"{indent}def {function_name}{function_signature}:\n"
         if function_doc:
             reconstructed_function_source += get_indented_doc_string(function_doc, indent)
+        got_source_reconstruction = False
+        source_reconstruction_lines = []
         if function_marshalled_file:
             decompiled = get_decompiled_code_object(params, function_python_version, function_marshalled_file)
             if decompiled:
-                for l in decompiled.splitlines():
-                    # add indent to each line
-                    reconstructed_function_source += indent
-                    reconstructed_function_source += "    "
-                    reconstructed_function_source += l
-                    reconstructed_function_source += "\n"
+                source_reconstruction_lines = decompiled.splitlines()
+                if len(source_reconstruction_lines) > 0:
+                    got_source_reconstruction = True
+        if not got_source_reconstruction:
+            source_reconstruction_lines = []
+            source_reconstruction_lines.append(f"# Unable to reconstruct the source code for this {function_type}")
+            if function_type == "routine":
+                source_reconstruction_lines.append("# It may be a reference to native code, instead of Python script code")
+            source_reconstruction_lines.append("pass")
+        for l in source_reconstruction_lines:
+            # add indent to each line
+            reconstructed_function_source += indent
+            reconstructed_function_source += "    "
+            reconstructed_function_source += l
+            reconstructed_function_source += "\n"
+               
         output_file_content = append_content_to_reconstructed_source(params, output_file_content, "reconstructed {function_type} source code", function_marshalled_file, module_output_file_path, reconstructed_function_source)
     
     return output_file_content
@@ -457,6 +469,7 @@ def process_class(params, output_file_content, module_output_file_path, class_di
     routines_to_process = []
     is_class = True
     class_name = None
+    parent_class_name = None
     class_doc = None
     class_data = {}
     if os.path.isfile(class_metadata_file_path):
@@ -477,6 +490,10 @@ def process_class(params, output_file_content, module_output_file_path, class_di
     
     if "name" in class_data.keys():
         class_name = class_data["name"]
+        
+    if "__bases__" in class_data.keys():
+        if len(class_data["__bases__"]) > 0:
+            parent_class_name = class_data["__bases__"][0]
     
     if "__doc__" in class_data.keys():
         class_doc = class_data["__doc__"]
@@ -497,7 +514,10 @@ def process_class(params, output_file_content, module_output_file_path, class_di
     
     # Only attempt to decompile code objects if no embedded source was retrieved
     if not got_class_source:
-        reconstructed_class_source = f"{indent}class {class_name}:\n"
+        parent_class_string = ""
+        if parent_class_name:
+            parent_class_string = f" ({parent_class_name})"
+        reconstructed_class_source = f"{indent}class {class_name}{parent_class_string}:\n"
         if class_doc:
             reconstructed_class_source += get_indented_doc_string(class_doc, indent)
         #for co in code_objects:
@@ -515,7 +535,7 @@ def process_class(params, output_file_content, module_output_file_path, class_di
         
         for r in routines_to_process:
             output_file_content = process_function(params, "routine", output_file_content, module_output_file_path, os.path.join(class_directory_path, f"{r}.json"), indent = next_level_indent)
-    
+            
     return output_file_content
 
 def get_subobject_path(base_value, path_prefix):

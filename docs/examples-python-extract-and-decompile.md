@@ -307,6 +307,52 @@ def it_static_print_itsv():
     print("A very secret value that is only defined in example_python_library/important_thing.py's static method it_static_print_itsv")
 ```
 
+### Known limitations
+
+There are some limitations in the current version of the script:
+
+#### Code injection artifacts
+
+The reconstructed version of the main script will contain the full content of the recursive-marshalling script. A future version may automatically remove it.
+
+#### Circular references
+
+If a circular reference exists somewhere in the description of an object, Python will throw an exception along the lines of:
+
+```
+maximum recursion depth exceeded while getting the repr of an object
+```
+
+...or...
+
+```
+maximum recursion depth exceeded while getting the str of an object
+```
+
+...when trying to generate the string/numeric representation of the object that the marshalling script uses to build its JSON output.
+
+This will cause function/method signatures to appear as `(<unknown>)`, and other values to appear as `"Unable to represent this value as a string"`.
+
+I'm not aware of a good workaround for this, but would be happy to hear about any.
+
+#### Object representation
+
+If an object is instantiated directly in a module or class (as opposed to in a function or method), *and* the code is being reconstructed from marshalled binary data, this process will currently reconstruct the statement incorrectly. For example, from the Python `pathlib.py` module's source code:
+
+```
+_windows_flavour = _WindowsFlavour()
+_posix_flavour = _PosixFlavour()
+```
+
+The scripts will reconstruct these two statements as:
+
+```
+_windows_flavour = "<pathlib._WindowsFlavour object at 0x7f4fff561ba0>"
+_posix_flavour = "<pathlib._PosixFlavour object at 0x7f4fff3ce800>"
+```
+
+This is because right now, I don't actually know where the code objects associated with those statements are stored in memory, and so the scripts are reconstructing the statements from the presence of the objects in the attributes for the class or module. I'm sure the code objects are in there somewhere, I just haven't found them yet.
+
 ## Stripped PyInstaller binaries
 
 Does including the `-s` / `--strip` option when building with PyInstaller prevent injecting new Python code into the process?

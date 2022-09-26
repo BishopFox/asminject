@@ -8,8 +8,8 @@ import subprocess
 import sys
 
 BANNER = r"""reconstruct_source.py
-v0.5
-Ben Lincoln, Bishop Fox, 2022-09-23
+v0.6
+Ben Lincoln, Bishop Fox, 2022-09-26
 https://github.com/BishopFox/asminject
 """
 
@@ -376,34 +376,37 @@ def process_function(params, function_type, output_file_content, module_output_f
     function_doc = None
     function_parent_type = "function"
     
-    if "object_name" in function_data.keys():
-        function_name = function_data["object_name"]
+    if hasattr(function_data, "keys"):
+        if "object_name" in function_data.keys():
+            function_name = function_data["object_name"]
+        else:
+            print(f"Error: could not find object_name key in {function_json_path}")
+        
+        if "__doc__" in function_data.keys():
+            function_doc = function_data["__doc__"]
+        
+        if "parent_type" in function_data.keys():
+            function_parent_type = function_data["parent_type"]
+        
+        if "signature" in function_data.keys():
+            function_signature = function_data["signature"]
+        else:
+            print(f"Error: could not find signature key in {function_json_path}")
+        
+        if "python_version" in function_data.keys():
+            pv = function_data["python_version"]
+            function_python_version = get_code_version(pv)
+        else:
+            print(f"Error: could not find python_version key in {function_json_path}")
+        
+        if "source_code_file" in function_data.keys():
+            function_source_code_file = replace_path_elements(params, function_data["source_code_file"])
+        
+        if "marshalled_file" in function_data.keys():
+            function_marshalled_file = replace_path_elements(params, function_data["marshalled_file"])
     else:
-        print(f"Error: could not find object_name key in {function_json_path}")
-    
-    if "__doc__" in function_data.keys():
-        function_doc = function_data["__doc__"]
-    
-    if "parent_type" in function_data.keys():
-        function_parent_type = function_data["parent_type"]
-    
-    if "signature" in function_data.keys():
-        function_signature = function_data["signature"]
-    else:
-        print(f"Error: could not find signature key in {function_json_path}")
-    
-    if "python_version" in function_data.keys():
-        pv = function_data["python_version"]
-        function_python_version = get_code_version(pv)
-    else:
-        print(f"Error: could not find python_version key in {function_json_path}")
-    
-    if "source_code_file" in function_data.keys():
-        function_source_code_file = replace_path_elements(params, function_data["source_code_file"])
-    
-    if "marshalled_file" in function_data.keys():
-        function_marshalled_file = replace_path_elements(params, function_data["marshalled_file"])
-    
+        print(f"Error: retrieve function data from {function_json_path}")
+        
     got_function_source = False
     reconstructed_function_source = None
 
@@ -427,7 +430,7 @@ def process_function(params, function_type, output_file_content, module_output_f
                 reconstructed_function_source += indent
                 reconstructed_function_source += "@staticmethod\n"
         else:
-            if len(function_python_version) > 0 and function_python_version[0] == "2":
+            if function_python_version and len(function_python_version) > 0 and function_python_version[0] == "2":
                 if function_type == "function":
                     reconstructed_function_source += indent
                     reconstructed_function_source += "@staticmethod\n"

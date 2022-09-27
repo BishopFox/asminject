@@ -144,7 +144,8 @@ def append_content_to_reconstructed_source(params, output_file_content, reconstr
             #print(f"Debug: added the following content for {output_path}: {output_content}")
         #else:
             #print(f"Debug: skipped the following duplicate content for {output_path}: {output_content}")
-    except IOException as e:
+    #except IOException as e:
+    except Exception as e:
         print(f"Error appending content to potential output for {output_path}: {e}")
     return output_file_content
 
@@ -697,7 +698,8 @@ def process_module(params, output_file_content, directory_path):
         for submodule in submodules_to_process:
             output_file_content = process_module(params, output_file_content, os.path.join(directory_path, submodule))
         
-    except IOException as e:
+    #except IOException as e:
+    except Exception as e:
         print(f"Error processing module at path {directory_path}: {e}")
     
     return output_file_content
@@ -849,6 +851,7 @@ if __name__ == "__main__":
             with open(output_file_path, "w") as output_file:
                 for output_entry in output_file_content[output_file_path]:
                     output_file.write(output_entry)
-        except IOException as e:
+        #except IOException as e:
+        except Exception as e:
             print(f"Error writing content to {output_file_path}: {e}")
     

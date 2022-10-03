@@ -14,12 +14,10 @@ Often, using a standard Python decompilation tool such as [Decompyle++](https://
 
 The `tools/python` directory of the `asminject.py` repository contains a Python script named `recursive_marshal.py` that will attempt to dump just about everything it can about a Python (including PyInstaller-generated binary) process. It is hardcoded to write output to a directory tree beginning with `/tmp/marshalled`, so edit the `recursive_marshal_base_dir` variable if you'd like it to go somewhere else. It should work with both Python 2 and 3, although it may require modifications for older minor releases.
 
-Transform the script into a giant one-liner and then pass it to `asminject.py`, e.g.:
+Pass the entire script to `asminject.py` using the `--var-from-file` option, e.g.:
 
 ```
-# export PYTHONSCRIPT="`cat tools/python/recursive_marshal.py | sed -z 's/\n/\\\\n/g' | sed 's.".\\\\".g'`"
-
-# python3 ./asminject.py 237465 execute_python_code.s --relative-offsets-from-binaries --var pythoncode "${PYTHONSCRIPT}"
+# python3 ./asminject.py 237465 execute_python_code.s --relative-offsets-from-binaries --var-from-file pythoncode tools/python/recursive_marshal.py
 ```
 
 If the target process is a regular Python script running in a Python interpreter, the output should include the original source code for any loaded modules. For example, consider the following output when the script was injected into used against the `practice/python_loop-with_library.py` script:
@@ -78,12 +76,10 @@ Launch the resulting `dist/python_loop-with_library/python_loop-with_library` bi
 user      237465  [...] practice/dist/python_loop-with_library/python_loop-with_library
 ```
 
-The process is virtually identical to extracting content from a regular Python process. Transform the `recursive_marshal.py` script (or `recursive_marshal.py`, for Python into a giant one-liner and then pass it to `asminject.py`, e.g.:
+The process is virtually identical to extracting content from a regular Python process, e.g.:
 
 ```
-# export PYTHONSCRIPT="`cat tools/python/recursive_marshal.py | sed -z 's/\n/\\\\n/g' | sed 's.".\\\\".g'`"
-
-# python3 ./asminject.py  237465 execute_python_code.s --relative-offsets-from-binaries --var pythoncode "${PYTHONSCRIPT}"
+# python3 ./asminject.py  237465 execute_python_code.s --relative-offsets-from-binaries --var-from-file pythoncode tools/python/recursive_marshal.py
 ```
 
 For PyInstaller binaries, the source code will most likely not be present, and so the output will look like this:
@@ -329,7 +325,11 @@ maximum recursion depth exceeded while getting the repr of an object
 maximum recursion depth exceeded while getting the str of an object
 ```
 
-...when trying to generate the string/numeric representation of the object that the marshalling script uses to build its JSON output.
+...when tryinvour()
+```
+
+The scripts will reconstruct these two statements as:
+g to generate the string/numeric representation of the object that the marshalling script uses to build its JSON output.
 
 This will cause function/method signatures to appear as `(<unknown>)`, and other values to appear as `"Unable to represent this value as a string"`.
 
@@ -341,11 +341,7 @@ If an object is instantiated directly in a module or class (as opposed to in a f
 
 ```
 _windows_flavour = _WindowsFlavour()
-_posix_flavour = _PosixFlavour()
-```
-
-The scripts will reconstruct these two statements as:
-
+_posix_flavour = _PosixFla
 ```
 _windows_flavour = "<pathlib._WindowsFlavour object at 0x7f4fff561ba0>"
 _posix_flavour = "<pathlib._PosixFlavour object at 0x7f4fff3ce800>"
@@ -386,14 +382,12 @@ Looks like the symbols `asminject.py` needs are still there, but does injecting 
 ```
 
 ```
-# export PYTHONSCRIPT="`cat tools/python/recursive_marshal.py| sed -z 's/\n/\\\\n/g' | sed 's.".\\\\".g'`"
-
 # ps auxww | grep python_loop 
 
 user      945132  [...] practice/dist-linux/python_loop-with_library/python_loop-with_library
 
 # python3 ./asminject.py 945132 execute_python_code.s \
-	--relative-offsets-from-binaries --var pythoncode "${PYTHONSCRIPT}"
+	--relative-offsets-from-binaries --var-from-file pythoncode tools/python/recursive_marshal.py
 ...omitted for brevity...
 ```
 

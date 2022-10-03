@@ -12,8 +12,8 @@ BANNER = r"""
         \/                   \/\______|    \/     \/     \/|__|   \/
 
 asminject.py
-v0.40
-Ben Lincoln, Bishop Fox, 2022-08-05
+v0.41
+Ben Lincoln, Bishop Fox, 2022-10-03
 https://github.com/BishopFox/asminject
 based on dlinject, which is Copyright (c) 2019 David Buchanan
 dlinject source: https://github.com/DavidBuchanan314/dlinject
@@ -151,6 +151,24 @@ class asminject_state_codes:
         self.message_type_map["pointer_to_string_data"] = self.state_map["switch_to_new_communication_address"] * 104
 
 class asminject_parameters:
+    @staticmethod
+    def get_file_as_cstring(file_path):
+        result = ""
+        try:
+            with open(file_path, "rb") as input_file:
+                try:
+                    current_byte = input_file.read(1)
+                    while current_byte != b"":
+                        result = result + "\\x" + '{0:0{1}x}'.format(int.from_bytes(current_byte, "little"), 2)
+                        current_byte = input_file.read(1)
+                except Exception as e:
+                    log_error(f"Couldn't read binary data from file '{file_path}': {e}", ansi=injection_params.ansi)
+                    sys.exit(1)
+        except FileNotFoundError as e:
+            log_error(f"Couldn't open file '{file_path}': {e}", ansi=injection_params.ansi)
+            sys.exit(1)
+        return result
+
     # because random.shuffle with a random function is deprecrated in Python 3.9
     @staticmethod
     def get_securely_shuffled_array(arr):
@@ -377,6 +395,11 @@ class asminject_parameters:
         # each tuple should contain a single equivalent backup/restore instruction pair, since the order is reverse during restoration
         self.state_backup_restore_instruction_list = []
         self.randomized_backup_restore_instruction_list = []
+        
+        # ARM-specific options that are (more or less) independent of the overall architecture
+        self.arm_backup_s0_to_s31 = False
+        self.arm_backup_d16_to_d31 = False
+        
         
         # 512 is the minimum for the x86-64 fxsave instruction
         #self.cpu_state_size = 1024
@@ -612,6 +635,10 @@ class asminject_parameters:
             self.stack_pointer_register_name = "sp"
             self.general_purpose_register_list = ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11"]
             self.state_backup_restore_instruction_list = [ ("stmdb sp!,{r0-r11}", "ldmia sp!, {r0-r11}")   ]
+            if self.arm_backup_s0_to_s31:
+                self.state_backup_restore_instruction_list.append(("stmdb sp!,{s0-s31}", "ldmia sp!, {s0-s31}"))
+            if self.arm_backup_d16_to_d31:
+                self.state_backup_restore_instruction_list.append(("stmdb sp!,{d16-d31}", "ldmia sp!, {d16-d31}"))
             self.flag_setting_instructions = [ "cmp", "cmn", "tst", "teq" ]
             self.no_obfuscation_after_instructions = [ "ldr", "b", "bx", "bl", "blx"]
         self.populate_randomized_state_backup_restore_list()
@@ -2027,7 +2054,7 @@ def asminject(injection_params):
             time.sleep(0.1)
         log("Process is frozen", ansi=injection_params.ansi)
     elif injection_params.stop_method == "slow":
-        log("Switching to super slow motion, like every late 1990s/early 2000s action film director did after seeing _The Matrix_...", ansi=injection_params.ansi)
+        log("Dilating time relative to the target process...", ansi=injection_params.ansi)
         try:
             injection_params.set_dynamic_process_info_vars()
             
@@ -2172,7 +2199,7 @@ def asminject(injection_params):
             # cleanup
             os.rmdir(injection_params.freeze_dir)
         elif injection_params.stop_method == "slow":
-            log("Returning to normal time", ansi=injection_params.ansi)
+            log("Un-dilating time relative to the target process", ansi=injection_params.ansi)
             try:
                 injection_params.set_dynamic_process_info_vars()
                 output_process_priority_and_affinity(injection_params, "Post-injection")
@@ -2462,6 +2489,9 @@ if __name__ == "__main__":
             
     parser.add_argument("--var",action='append',nargs=2, type=str,
         help="Specify a custom variable for use by the stage 2 code, e.g. --var pythoncode \"print('OK')\". May be specified multiple times for different variables.")
+
+    parser.add_argument("--var-from-file",action='append',nargs=2, type=str,
+        help="Read the content of a file into a C-escaped string for use as a variable in the stage 2 code, e.g. --var-from-file pythoncode '/home/user/exploit_script.py'. May be specified multiple times for different variables.")
     
     parser.add_argument("--plaintext", type=str2bool, nargs='?',
         const=True, default=False,
@@ -2543,6 +2573,13 @@ if __name__ == "__main__":
     parser.add_argument("--use-stage-2-source", type=str, 
         help="Debugging option for issue reproduction. Path to a pre-existing stage 2 assembly source code file, e.g. the result of adding --write-assembly-source-to-disk and --preserve-temp-files to a previous run of asminject.py. Note that you *must* use the '-post-obfuscation-pre-replacement.s' version of the file or injection will fail.")
 
+    parser.add_argument("--arm-backup-fpr-1", type=str2bool, nargs='?',
+        const=True, default=False,
+        help="For ARM processors specifically, back up the s0-s31 floating-point registers before executing the payload, and restore them afterward. Will cause an assembly failure if the registers don't exist on the target hardware.")
+
+    parser.add_argument("--arm-backup-fpr-2", type=str2bool, nargs='?',
+        const=True, default=False,
+        help="For ARM processors specifically, back up the d16-d31 floating-point registers before executing the payload, and restore them afterward. Will cause an assembly failure if the registers don't exist on the target hardware.")
         
     args = parser.parse_args()
     
@@ -2552,6 +2589,12 @@ if __name__ == "__main__":
         for var_set in args.var:
             injection_params.custom_replacements[f"[VARIABLE:{var_set[0]}:VARIABLE]"] = var_set[1]
             injection_params.custom_replacements[f"[VARIABLE:{var_set[0]}.length:VARIABLE]"] = str(len(var_set[1]))
+
+    if args.var_from_file:
+        for var_set in args.var_from_file:
+            file_content_escaped = asminject_parameters.get_file_as_cstring(var_set[1])
+            injection_params.custom_replacements[f"[VARIABLE:{var_set[0]}:VARIABLE]"] = file_content_escaped
+            injection_params.custom_replacements[f"[VARIABLE:{var_set[0]}.length:VARIABLE]"] = str(len(file_content_escaped))
     
     # attempt to autodetermine architecture unless explicitly specified
     architecture_string = ""
@@ -2569,6 +2612,12 @@ if __name__ == "__main__":
             sys.exit(1)
 
     log(f"Using {autodetection_string}processor architecture '{architecture_string}'")
+
+    if args.arm_backup_fpr_1:
+        injection_params.arm_backup_s0_to_s31 = True
+
+    if args.arm_backup_fpr_2:
+        injection_params.arm_backup_d16_to_d31 = True
 
     injection_params.base_script_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
     injection_params.pid = args.pid

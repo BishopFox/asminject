@@ -1,5 +1,11 @@
 ## asminject.py - Version history
 
+### 0.41 (2022-10-03)
+
+* First public release (scheduled for 2022-10-11)
+* Added `--var-from-file` command-line option to make using very large variables (like entire scripts) easier
+* Added `--arm-backup-fpr-1` and `--arm-backup-fpr-2` options to back up and restore ARM floating-point registers on supported architectures
+
 ### 0.40 (2022-08-05)
 
 * Fixed a bug related to restoring the original target process priority

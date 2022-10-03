@@ -229,6 +229,8 @@ push rdx
 push rdi
 ```
 
+When stage two performs its cleanup, the equivalent `pop` operations are performed in reverse order from however they were randomized earlier.
+
 Where possible, other length and location values are randomized on each run of the script. For example, the location in stack memory used as the initial communications address changes with each run.
 
 ### Optional obfuscation

@@ -10,6 +10,7 @@ In this document:
 
 Separate, more detailed documentation:
 
+* <a href="docs/how_asminject_works.md">How asminject.py works</a> - a higher-level architectural discussion with deep dives into some technical specifics, especially for readers who haven't worked with memory injection tools before
 * <a href="docs/getting_started.md">Getting started</a>
 * <a href="docs/differences_from_dlinject.md">Differences from dlinject.py</a>
 * <a href="docs/specialized_options.md">Specialized options</a>

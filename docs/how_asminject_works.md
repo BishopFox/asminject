@@ -149,14 +149,88 @@ For all supported architectures, the most important step is pushing nearly all o
 
 The x86 and x86-64 architectures support some very powerful state backup/restore instructions. `asminject.py` uses the `pushfq` and `popfq` instructions on x86-64, and the `pushf`/`popf` instructions on x86 to backup and restore the state of the `EFLAGS` register. It also uses the `fxsave` and `fxrstor` instructions to backup and restore the states of the registers related to the x87 floating-point unit, MMX, and SSE/SSE2 instructions. This should result in a very complete backup/restore of the parts of the CPU state that would otherwise cause unwanted side effects after the injected code finished.
 
+ARM CPUs don't have "backup everything at once" instructions, and don't seem to support restoring the state of the flags related to instructions that test values. Backing up and restoring the general-purpose registers worked on the Raspberry Pi where I tested the ARM32 functionality. `asminject.py` also supports two optional flags for ARM architecture: `--arm-backup-fpr-1` will backup and restore the `s0-s31`/`d0-d15` floating-point registers that should be present on any ARM CPU that supports floating point, and `--arm-backup-fpr-2` will backup and restore the `d16-d31` registers that may be present depending on the specific implementation. Some additional flags may be added once ARM64/Aarch64 is supported by `asminject.py`.
 
+The ARM limitations shouldn't be an issue when execution is hijacked at the beginning of a function, which is how `asminject.py` works today. It may impact trying to hijack execution in the middle of a function, and it does limit the locations where certain types of obfuscation code can be used. 
 
 ## Communicating with the target process
 
+`dlinject` uses a sort of "fire and forget" approach where the stages and payload are pre-loaded with all of the information they'll need to accomplish the goal. One of the changes I introduced for `asminject.py` was to establish a basic two-way communication channel between the script and the assembly code that's injected into the target process. The channel consists of ten words of data (4 bytes each on 32-bit architectures, 8 bytes each on 64-bit architectures). Only the first four are currently used:
+
+* The stager/payload's current state
+* The script's current state
+* The address of the read/execute block of memory used by the payload
+* The address of the read/write block of memory used by the payload
+
+For future extension purposes, the channel also includes the following six words:
+
+* A payload-to-script message data type
+* Two words to store the payload-to-script message data
+* A script-to-payload message data type
+* Two words to store the script-to-payload message data
+
+These last six bytes are to enable payloads such as a persistent loop that will ask the script for additional information before proceeding. For example, the script might prompt the operator for a piece of Python script code, execute it in the injected code, return the result, and then wait for the next piece of code, all without the overhead of loading and unloading the injected code over and over. Or there might be some tasks where it's significantly easier to have the script collect information and pass it to the payload than for the payload to collect the data itself.
+
+When the first stage is executed, `asminject.py` uses a randomly-selected location in the process' stack memory, backing it up before tampering with it. Once the first stage has allocated its own additional block of read/write memory, the first stage tells `asminject.py` to use a location in that new block of memory instead of the original location, and `asminject.py` restores the original contents of the randomly-selected location.
+
 ## Performing complex tasks inside the target process
+
+Writing complex exploit code in pure assembly can be very tedious. `asminject.py`'s stager code and some of the basic payloads are written this way, but where possible, the payloads call functions in libraries that the target process already has loaded. You can browse through the `asm/` section of the source code to see how this works.
 
 ## Cleaning up
 
+As discussed in the previous sections, `asminject.py` restores as much of the previous CPU state as it can before it returns to the original code that the target process was trying to execute.
+
+Additionally, by default it will un-map the block of read/write memory that the first stage allocated. I couldn't think of a good way for it to un-map the read/execute block, because that's where the injected code is stored. However, if the operator plans to inject into the same process more than once, they can specify the `--do-not-deallocate` flag, and neither block will be un-mapped. During the next injection, the operator can specify the locations and sizes of the read/execute and read/write blocks allocated by the previous run of the script, and `asminject.py` will customize the stagers and payload to use those instead of allocating new blocks. This minimizes the number of additional blocks of memory the process accrues over time, which hopefully means less chance of alerting any monitoring software or suspicious system administrators.
+
 ## Obfuscation and anti-detection
 
+`asminject.py` performs some obfuscation by default, and also incorporates an optional source-code-level obfuscation engine.
 
+### Default obfuscation
+
+The order of certain operations in the stager code is randomized. For example, when pushing general-purpose x86 and x86-64 registers onto the stack at the beginning of the first stage code, the order is randomized. The code might look like this during one execution of `asminject.py`:
+
+```
+push rdx
+push r12
+push r13
+push r15
+push rbp
+push rbx
+push rdi
+push r8
+push rsi
+push r14
+push r9
+push rcx
+push r11
+push rax
+push r10
+```
+
+...but then look like this the next time:
+
+```
+push r15
+push r8
+push rbp
+push r12
+push rcx
+push r13
+push r14
+push rbx
+push rsi
+push rax
+push r10
+push r9
+push r11
+push rdx
+push rdi
+```
+
+Where possible, other length and location values are randomized on each run of the script. For example, the location in stack memory used as the initial communications address changes with each run.
+
+### Optional obfuscation
+
+`asminject.py` includes a `--obfuscate` command-line option that enables source-code-level obfuscation by randomly adding randomized code fragments to the stager and payload code before they are assembled. The fragments perform operations that either have no real effect (such as a `NOP` instruction) or cancel each other out (such as swapping two values in memory, then swapping them back). The fragments typically use randomized lists of registers, making them more difficult to detect, but more importantly, `asminject.py` also supports an `--obfuscation-iterations` command-line option that can be used to repeat the obfuscation process. It's probably not that hard for security software to detect all possible variations of the "double word swap" technique, but when it becomes a multi-layer shell game with other operations mixed in, the challenge should increase significantly.

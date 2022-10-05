@@ -1,5 +1,5 @@
 # asminject.py
-`asminject.py` is a heavily-modified fork of [David Buchanan's dlinject project](https://github.com/DavidBuchanan314/dlinject). Injects arbitrary assembly (or precompiled binary) payloads directly into x86-64, x86, and ARM32 Linux processes by accessing `/proc/<pid>/mem` instead of attaching via the debugger interface. Useful for tampering with trusted processes, certain post-exploitation scenarios, recovering content from process memory when the debugger interface is not available, and bypassing some security controls. Can inject into containerized processes from outside of the container, as long as you have root access on the host.
+`asminject.py` is a heavily-modified fork of [David Buchanan's dlinject project](https://github.com/DavidBuchanan314/dlinject). Injects arbitrary assembly (or precompiled binary) payloads directly into x86-64, x86, and ARM32 Linux processes by accessing `/proc/<pid>/mem` instead of attaching via `ptrace`. Useful for tampering with trusted processes, certain post-exploitation scenarios, recovering content from process memory, and bypassing some security controls. Can inject into containerized processes from outside of the container, as long as you have root access on the host.
 
 In this document:
 

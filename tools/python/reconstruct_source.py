@@ -741,7 +741,7 @@ if __name__ == "__main__":
         help="Ignore (do not attempt to reconstruct) module(s) with the following name. May be specified multiple times, e.g. --ignore-module os --ignore-module sys --ignore-module json. IMPORTANT: applies to modules with the specified name at any point in the tree. For example, --ignore-module sys will ignore the top-level Python 'sys' library, but also a nonstandard 'custom_module.sys'.")
     
     parser.add_argument("--pycdc-path", type=str, 
-        help="Path to the Decompyle++ 'pycdc' binary, e.g. /home/user/pycdc/pycdc. Required for decompiling code objects.")
+        help="Path to the Decompyle++ 'pycdc' binary, e.g. /home/user/pycdc/pycdc. Required for decompiling code objects. Important: this script currently depends upon using the customized fork of Decompyle++ available at https://github.com/blincoln-bf/pycdc")
 
     parser.add_argument("--only-embedded-source", type=str2bool, nargs='?',
         const=True, default=False,

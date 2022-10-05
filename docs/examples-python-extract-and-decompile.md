@@ -209,7 +209,7 @@ for i in range(0, 1000000):
 
 The combination of data output by the marshalling script and Decompyle++ can be used to reconstruct an approximation of the original source code tree in the style of [This Dust Remembers What It Once Was](https://www.beneaththewaves.net/Software/This_Dust_Remembers_What_It_Once_Was.html), via the `tools/python/reconstruct_source.py` script include in this repository. Please note that `reconstruct_source.py` is currently an alpha-quality prototype, but it does produce very useful output.
 
-Note: until the upstream package maintainer merges in my recursion-limiting code, you should use [my customized fork of Decompyle++](https://github.com/blincoln-bf/pycdc) to avoid the process running out of memory and locking up when it encounters problematic code.
+Important: as of this writing, you'll need to use [my customized fork of Decompyle++](https://github.com/blincoln-bf/pycdc) that implements recursion depth limiting to avoid the process running out of memory and locking up when it encounters problematic code. Hopefully someday the folks who maintain the mainline version will add an equivalent feature.
 
 If the data extracted by the script includes embedded source code, `reconstruct_source.py` will prefer that, as it's generally identical to the original. It's also much more straightforward to retrieve the entire source for a given module all at once. For example, using the output of the `recursive_marshal.py` script for `python_loop-with_library.py` running in Python 2.7, the source code is identical :
 

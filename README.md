@@ -3,6 +3,7 @@
 
 In this document:
 
+* [Elevator pitches or TLDR](#elevator-pitches-or-tldr)
 * [Origins](#origins)
 * [Examples](#examples)
 * [But what about Yama's ptrace_scope restrictions?](#but-what-about-yamas-ptrace_scope-restrictions)
@@ -16,6 +17,11 @@ Separate, more detailed documentation:
 * <a href="docs/specialized_options.md">Specialized options</a>
 * <a href="docs/troubleshooting.md">Troubleshooting</a>
 * <a href="docs/version_history.md">Version history</a>
+
+## Elevator pitches or TLDR
+
+* "`asminject.py` is like `dlinject`, except it lets you inject any payload you want instead of just loading a library, and it works on multiple architectures."
+* "`asminject.py` is vaguely like Frida, except that it doesn't attach via the `ptrace` interface, so processes can't block it by ptracing themselves."
 
 ## Origins
 
@@ -68,7 +74,6 @@ Values of 3 or higher cannot be unset without a reboot. However, if you are an a
 * Investigate using [Keystone](https://www.keystone-engine.org/) for shellcode assembly instead of calling the OS-level `gcc` command.
 * For Python and other script interpreters with APIs for passing in compiled bytecode for execution (versus `eval`-style execution of human-readable script code), provide payloads to take advantage of this ability for even more stealth.
 * If feasible, inject Java code into Java processes via the JNI.
-* Add alternative shared library injection methods for various scenarios.
 * Add options to hook a specific method (or address, etc.) as an alternative to the current "hook the next syscall" technique that was inherited from `dlinject.py`.
 * Provide a way to use the tool for quasi-debugging, e.g. hook a function and output the arguments passed to it every time it's called.
   * It might make more sense to find a way to inject Frida using `asminject.py` - more research is required.
